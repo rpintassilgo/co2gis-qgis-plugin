@@ -18,10 +18,10 @@ class LeastCostPipelineDialog(QDialog):
         self.run_button.clicked.connect(self.run_analysis)
         self.clear_log_button.clicked.connect(self.clear_logs)
         self.populate_layer_dropdowns()
-        self.terrainComboBox.currentIndexChanged.connect(self.load_classes_from_terrain)
-        self.terrainComboBox.view().pressed.connect(lambda: self.refresh_layer_dropdown(self.terrainComboBox, QgsRasterLayer))
-        self.demComboBox.view().pressed.connect(lambda: self.refresh_layer_dropdown(self.demComboBox, QgsRasterLayer))
-        self.pointsComboBox.view().pressed.connect(lambda: self.refresh_layer_dropdown(self.pointsComboBox, QgsVectorLayer))
+        
+        self.terrainComboBox.currentIndexChanged.connect(lambda: self.refresh_layer_dropdown(self.terrainComboBox, QgsRasterLayer))
+        self.demComboBox.currentIndexChanged.connect(lambda: self.refresh_layer_dropdown(self.demComboBox, QgsRasterLayer))
+        self.pointsComboBox.currentIndexChanged.connect(lambda: self.refresh_layer_dropdown(self.pointsComboBox, QgsVectorLayer))
 
     def classify_terrain_layer(self):
         """Classify the raster layer using a Paletted/Unique Values renderer."""
@@ -65,27 +65,6 @@ class LeastCostPipelineDialog(QDialog):
     def clear_logs(self):
         """Clear the log output."""
         self.log_output.clear()
-            
-    def load_classes_from_terrain(self):
-        """Load classes from the selected terrain layer into the table."""
-        self.classTable.setRowCount(0)
-        layer_id = self.terrainComboBox.currentData()
-        layer = QgsProject.instance().mapLayer(layer_id)
-        if not isinstance(layer, QgsRasterLayer):
-            return
-        provider = layer.dataProvider()
-        unique_values = provider.uniqueValues(1)
-        self.classTable.setRowCount(len(unique_values))
-        for row, value in enumerate(unique_values):
-            class_id_item = QTableWidgetItem(str(value))
-            class_id_item.setFlags(class_id_item.flags() ^ Qt.ItemIsEditable)
-            self.classTable.setItem(row, 0, class_id_item)
-            class_name_item = QTableWidgetItem(f"Class {value}")
-            class_name_item.setFlags(class_name_item.flags() ^ Qt.ItemIsEditable)
-            self.classTable.setItem(row, 1, class_name_item)
-            cost_item = QTableWidgetItem()
-            cost_item.setFlags(cost_item.flags() | Qt.ItemIsEditable)
-            self.classTable.setItem(row, 2, cost_item)
             
 
     def run_analysis(self):
@@ -137,8 +116,9 @@ class LeastCostPipelineDialog(QDialog):
         """Log messages to the log output."""
         self.log_output.append(message)
 
-    def refresh_layer_dropdown(combo_box, layer_type):
+    def refresh_layer_dropdown(self, combo_box, layer_type):
         """Refresh the given combo_box with all layers of the specified type in the QGIS project."""
+        combo_box.blockSignals(True)  # Block signals to avoid recursion
         combo_box.clear()
         layers = QgsProject.instance().mapLayers().values()
         for layer in layers:
