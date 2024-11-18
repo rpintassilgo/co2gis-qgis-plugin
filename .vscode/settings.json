@@ -3,5 +3,9 @@
     "python.autoComplete.extraPaths": [
         "/Applications/QGIS-LTR.app/Contents/Resources/python",
         "/Applications/QGIS-LTR.app/Contents/Resources/python/plugins"
+    ],
+    "python.analysis.extraPaths": [
+        "/Applications/QGIS-LTR.app/Contents/Resources/python",
+        "/Applications/QGIS-LTR.app/Contents/Resources/python/plugins"
     ]
 }
