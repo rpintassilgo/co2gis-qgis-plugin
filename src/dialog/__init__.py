@@ -9,7 +9,7 @@ from ..analysis import run_analysis
 from .ui import setup_ui
 from .dropdowns import populate_layer_dropdowns
 from .dropdowns import refresh_layer_dropdown
-from ..layers.land_use import populate_land_use_classes_table
+from .land_use import populate_land_use_classes_table
 
 class Dialog(QDialog):
     def __init__(self, parent=None):
