@@ -1,11 +1,11 @@
 {
-    "python.defaultInterpreterPath": "/Applications/QGIS-LTR.app/Contents/MacOS/bin/python3",
+    "python.defaultInterpreterPath": "/Applications/QGIS.app/Contents/MacOS/bin/python3",
     "python.autoComplete.extraPaths": [
-        "/Applications/QGIS-LTR.app/Contents/Resources/python",
-        "/Applications/QGIS-LTR.app/Contents/Resources/python/plugins"
+        "/Applications/QGIS.app/Contents/Resources/python",
+        "/Applications/QGIS.app/Contents/Resources/python/plugins"
     ],
     "python.analysis.extraPaths": [
-        "/Applications/QGIS-LTR.app/Contents/Resources/python",
-        "/Applications/QGIS-LTR.app/Contents/Resources/python/plugins"
+        "/Applications/QGIS.app/Contents/Resources/python",
+        "/Applications/QGIS.app/Contents/Resources/python/plugins"
     ]
 }
