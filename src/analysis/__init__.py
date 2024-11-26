@@ -6,12 +6,13 @@ from PyQt5.QtWidgets import (
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QMessageBox
 )
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsPalettedRasterRenderer, QgsApplication
-from .cost import run_r_cost
+from .cost import run_r_cost, combine_rasters_with_weights
 from .drain import run_r_drain
 from ..dialog.land_use import get_land_use_class_costs
 from qgis.core import QgsTask, QgsMessageLog, Qgis
 from .path import get_plugin_output_path
 from .land_use import get_land_use_costs_raster
+from .dem import create_slope_layer_from_dem
 
 if TYPE_CHECKING:
     from ..dialog import Dialog
@@ -46,11 +47,67 @@ class MinimalTask(QgsTask):
         else:
             self.dialog.log_message("Minimal Task failed.")
 
+class DebugTask(QgsTask):
+    def __init__(self, dialog, description="Run Analysis"):
+        super().__init__(description, QgsTask.CanCancel)
+        self.dialog: 'Dialog' = dialog
+        self.class_costs = None
+
+    def run(self):
+        try:
+            self.dialog.log_message("Starting debug...")
+            
+            _, _, points_layer = self.dialog.get_layers()
+            
+            class_costs_raster = "/Volumes/rodrigo/ficheiros/least_cost_path/land_use_costs_raster.tif"
+            dem_slope = "/Volumes/rodrigo/ficheiros/least_cost_path/land_use_costs_raster.tif"
+            
+            # raster calculator with defined weights
+            combined_raster_path = get_plugin_output_path("combined_raster.tif")
+            combined_raster = combine_rasters_with_weights(
+                self.dialog, 
+                class_costs_raster, 
+                dem_slope, 
+                self.dialog.demWeightInput,
+                self.dialog.occupancyWeightInput,
+                combined_raster_path
+            )
+            
+            # use output on r.cost
+            self.dialog.log_message("Running r.cost...")
+            cost_result = run_r_cost(combined_raster, points_layer)
+            self.dialog.log_message("r.cost completed.")
+            print(f"r.cost output: {cost_result['output']}")
+            
+            self.dialog.log_message("Running r.drain...")
+            drain_result = run_r_drain(cost_result, points_layer)
+            self.dialog.log_message("r.drain completed.")
+            print(f"r.drain output: {drain_result['output']}")
+
+            # add result to map
+            #QgsProject.instance().addMapLayer(drain_result['output'])
+            self.dialog.log_message("Least-cost path added to map.")
+            return True
+        except Exception as e:
+            self.dialog.log_message(f"Error: {str(e)}")
+            return False
+
+    def finished(self, result):
+        print("ENTROU NO FINISHED")
+        if result:
+            self.dialog.log_message("Analysis completed successfully.")
+        else:
+            self.dialog.log_message("Analysis failed.")
+
+    def cancel(self):
+        self.dialog.log_message("Task canceled.")
+        super().cancel()
+
 
 class RunAnalysisTask(QgsTask):
     def __init__(self, dialog, description="Run Analysis"):
         super().__init__(description, QgsTask.CanCancel)
-        self.dialog = dialog
+        self.dialog: 'Dialog' = dialog
         self.class_costs = None
 
     def run(self):
@@ -63,23 +120,33 @@ class RunAnalysisTask(QgsTask):
             self.class_costs = get_land_use_class_costs(self.dialog)
             
             # raster calculator on land user layer
+            # todo: maybe pass logs inside get land use costs raster function
+            # like i did with create_slope_layer_from_dem to make the code more readable
             self.dialog.log_message("Building land use raster with costs...")
-            class_costs_raster_path = get_plugin_output_path("class_costs_raster.tif")
+            class_costs_raster_path = get_plugin_output_path("land_use_costs_raster.tif")
             class_costs_raster = get_land_use_costs_raster(land_use_layer, self.class_costs, class_costs_raster_path)
-            self.dialog.log_message(f"Class costs raster created: {class_costs_raster}")
-            return True
+            self.dialog.log_message(f"Land use raster with costs created in path: {class_costs_raster}")
             
             # create slope based on dem
+            dem_slope_path = get_plugin_output_path("dem_slope.tif")
+            dem_slope = create_slope_layer_from_dem(self.dialog, dem_layer, dem_slope_path)
             
             # raster calculator with defined weights
+            combined_raster_path = get_plugin_output_path("combined_raster.tif")
+            combined_raster = combine_rasters_with_weights(
+                self.dialog, 
+                class_costs_raster, 
+                dem_slope, 
+                self.dialog.demWeightInput,
+                self.dialog.occupancyWeightInput,
+                combined_raster_path
+            )
             
             # use output on r.cost
-
             self.dialog.log_message("Running r.cost...")
-            cost_result = run_r_cost(land_use_layer, points_layer)
+            cost_result = run_r_cost(combined_raster, points_layer)
             self.dialog.log_message("r.cost completed.")
             print(f"r.cost output: {cost_result['output']}")
-            return True
             
             self.dialog.log_message("Running r.drain...")
             drain_result = run_r_drain(cost_result, points_layer)
@@ -87,8 +154,8 @@ class RunAnalysisTask(QgsTask):
             print(f"r.drain output: {drain_result['output']}")
 
             # add result to map
-            ##QgsProject.instance().addMapLayer(drain_result['output'])
-            ##self.dialog.log_message("Least-cost path added to map.")
+            #QgsProject.instance().addMapLayer(drain_result['output'])
+            self.dialog.log_message("Least-cost path added to map.")
             return True
         except Exception as e:
             self.dialog.log_message(f"Error: {str(e)}")
