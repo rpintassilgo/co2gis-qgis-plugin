@@ -15,6 +15,13 @@ class Dialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         
+        # TODO: Check if theres a way to use debugger and change the code in real time
+        # while running on QGIS. since it would help me develop the plugin faster.
+        # this way after changing files i need to reinstall plugin and run it all again
+        # and it depends on logging on log dialog from plugin and python console
+        # however since this isnt a standalone app, its unlikely thats possible
+        # but i will search more on that as well
+        
         # TODO: eventually add a option to say the resolution of the raster in meters
         
         # explicitly declare attributes for typing
