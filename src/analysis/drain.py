@@ -10,7 +10,6 @@ def run_r_drain(cost_result, points_layer):
     try:
         result = processing.run("grass7:r.drain", params_r_drain)
         
-        # Validate the result
         if 'output' not in result or not result['output']:
             print("RESULTDO DO R.DRAIN INVALIDO")
         
