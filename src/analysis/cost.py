@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 from qgis import processing
 from .path import get_plugin_output_path
 import os
+from qgis.core import ( QgsProcessingFeedback )
 
 if TYPE_CHECKING:
     from ..dialog import Dialog
@@ -16,6 +17,7 @@ from osgeo import gdal
 
 from osgeo import gdal
 
+# ------------ ------ ------------- ------ ---- GDAL --------- ------ ------------- ------ ------------- ------ ----
 def resample_raster_by_resolution(dialog, input_raster_path, reference_raster_path, output_raster_path, resample_alg="bilinear"):
     """
     Resamples an input raster to match the resolution of a reference raster.
@@ -136,6 +138,30 @@ def combine_rasters_with_weights_gdal_api(dialog: 'Dialog', costs_raster_path, s
         dialog.log_message(f"Error combining rasters using GDAL API: {str(e)}")
         return
 
+## --------- ------ ---- --------- ------ ---- --------- ------ ---- --------- ------ ---- --------- ------ ----
+def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, weight1, weight2, output_raster_path):
+    """
+    Combine two rasters with weights without preprocessing using QGIS Raster Calculator.
+    """
+    try:
+        feedback = QgsProcessingFeedback()
+        formula = f"({weight1} * A) + ({weight2} * B)"
+
+        params = {
+            'EXPRESSION': formula,
+            'LAYERS': [input_raster1, input_raster2],
+            'CELLSIZE': 0,  # Automatically determines resolution
+            'EXTENT': None,  # Automatically uses the union of extents
+            'OUTPUT': output_raster_path
+        }
+
+        processing.run("qgis:rastercalculator", params, feedback)
+        print(f"Combined raster saved at: {output_raster_path}")
+        return  #output_raster_path
+
+    except Exception as e:
+        print(f"Error combining rasters: {str(e)}")
+        return
 
 
 def combine_rasters_with_weights(dialog: 'Dialog', costs_raster: 'QgsMapLayer', slope_raster: 'QgsMapLayer', dem_weight, occupancy_weight, output_path):

@@ -1,24 +1,53 @@
+from .path import get_plugin_output_path
 from qgis import processing
+import os
+from qgis.core import QgsVectorLayer, QgsProject
 
-def run_r_drain(cost_result, points_layer, vector_output_path):
+def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
+    """
+    Runs r.drain, converts the result to vector with r.to.vect, and loads it into QGIS.
+    """
     try:
         # Step 1: Run r.drain
+        print("Running r.drain...")
+        drain_raster_path = get_plugin_output_path("drain_output.tif")
         params_r_drain = {
-            'input': cost_result['output'],  # Raster from r.cost
+            'input': cost_result['output'],  # Input raster from r.cost
             'start_points': points_layer,
-            'output': 'TEMPORARY_OUTPUT',  # r.drain raster output
+            'output': drain_raster_path
         }
-        drain_result = processing.run("grass7:r.drain", params_r_drain)
-    
-        # Step 2: Convert raster to vector
-        drain_raster_output = drain_result['output']
-        processing.run("gdal:polygonize", {
-            'INPUT': drain_raster_output,
-            'BAND': 1,
-            'FIELD': 'DN',  # Attribute field name
-            'OUTPUT': vector_output_path
-        })
+        print(f"r.drain parameters: {params_r_drain}")
+        processing.run("grass7:r.drain", params_r_drain)
 
-        return vector_output_path
+        # Verify r.drain output
+        if not os.path.exists(drain_raster_path):
+            raise RuntimeError(f"r.drain failed: Output raster not created: {drain_raster_path}")
+        print(f"r.drain output created: {drain_raster_path}")
+
+        # Step 2: Convert raster to vector lines using r.to.vect
+        print("Running r.to.vect...")
+        params_r_to_vect = {
+            'input': drain_raster_path,
+            'type': 2,  # Convert to lines
+            'flags': 'l',  # Use the '-l' flag for line extraction
+            'output': output_vector_path
+        }
+        print(f"r.to.vect parameters: {params_r_to_vect}")
+        processing.run("grass7:r.to.vect", params_r_to_vect)
+
+        # Verify r.to.vect output
+        if not os.path.exists(output_vector_path):
+            raise RuntimeError(f"r.to.vect failed: Vector file not created: {output_vector_path}")
+        print(f"r.to.vect output created: {output_vector_path}")
+
+        # Step 3: Load the vector layer into QGIS
+        print("Loading vector layer into QGIS...")
+        vector_layer = QgsVectorLayer(output_vector_path, "Least Cost Path Vector", "ogr")
+        if vector_layer.isValid():
+            QgsProject.instance().addMapLayer(vector_layer)
+            print("Vector layer successfully added to QGIS.")
+        else:
+            raise RuntimeError(f"Failed to load vector layer: {output_vector_path}")
+
     except Exception as e:
-        raise RuntimeError(f"Error running r.cost: {str(e)}")
+        print(f"Error: {str(e)}")
