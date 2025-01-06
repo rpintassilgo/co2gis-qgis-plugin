@@ -12,9 +12,14 @@ def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
         print("Running r.drain...")
         drain_raster_path = get_plugin_output_path("drain_output.tif")
         params_r_drain = {
-            'input': cost_result['output'],  # Input raster from r.cost
+            'input': cost_result['cost_raster'],  # Input raster from r.cost
+            'direction': cost_result['direction_raster'],
             'start_points': points_layer,
-            'output': drain_raster_path
+            'output': drain_raster_path,
+            'GRASS_REGION_PARAMETER': None,
+            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
+            'GRASS_RASTER_FORMAT_OPT': '',
+            'GRASS_RASTER_FORMAT_META': '',
         }
         print(f"r.drain parameters: {params_r_drain}")
         processing.run("grass7:r.drain", params_r_drain)
@@ -28,9 +33,10 @@ def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
         print("Running r.to.vect...")
         params_r_to_vect = {
             'input': drain_raster_path,
-            'type': 2,  # Convert to lines
-            'flags': 'l',  # Use the '-l' flag for line extraction
-            'output': output_vector_path
+            'type': 1,  # 1 corresponds to "line" in GRASS
+            'output': output_vector_path,
+            'GRASS_REGION_PARAMETER': None,
+            'GRASS_REGION_CELLSIZE_PARAMETER': 0,
         }
         print(f"r.to.vect parameters: {params_r_to_vect}")
         processing.run("grass7:r.to.vect", params_r_to_vect)

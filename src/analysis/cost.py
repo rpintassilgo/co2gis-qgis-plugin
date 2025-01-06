@@ -6,146 +6,20 @@ from qgis.core import ( QgsProcessingFeedback )
 
 if TYPE_CHECKING:
     from ..dialog import Dialog
-    from qgis.core import QgsMapLayer
+    from qgis.core import QgsMapLayer, QgsVectorLayer
     
 os.environ["GRASS_VERBOSE"] = "3"  # Enable GRASS debugging
-
-from osgeo import gdal
-import numpy as np
-
-from osgeo import gdal
+#os.environ['GRASS_TEMP'] = "/Volumes/rodrigo/ficheiros/temp"
 
 from osgeo import gdal
 
-# ------------ ------ ------------- ------ ---- GDAL --------- ------ ------------- ------ ------------- ------ ----
-def resample_raster_by_resolution(dialog, input_raster_path, reference_raster_path, output_raster_path, resample_alg="bilinear"):
-    """
-    Resamples an input raster to match the resolution of a reference raster.
-    """
-    try:
-        dialog.log_message("Starting raster resampling by resolution...")
-
-        # Open reference raster
-        ref_ds = gdal.Open(reference_raster_path)
-        ref_gt = ref_ds.GetGeoTransform()
-        ref_res_x, ref_res_y = abs(ref_gt[1]), abs(ref_gt[5])
-
-        dialog.log_message(f"Reference resolution: {ref_res_x}, {ref_res_y}")
-
-        # Resample the input raster to match the resolution of the reference raster
-        gdal.Warp(
-            output_raster_path,
-            input_raster_path,
-            format="GTiff",
-            xRes=ref_res_x,
-            yRes=ref_res_y,
-            resampleAlg=resample_alg,
-            dstSRS=ref_ds.GetProjection()
-        )
-
-        dialog.log_message(f"Resampled raster (by resolution) saved to: {output_raster_path}")
-        return output_raster_path
-
-    except Exception as e:
-        dialog.log_message(f"Error during raster resampling by resolution: {str(e)}")
-        return
-
-def resample_raster_by_size(dialog, input_raster_path, reference_raster_path, output_raster_path, resample_alg="bilinear"):
-    """
-    Resamples an input raster to match the size and extent of a reference raster.
-    """
-    try:
-        dialog.log_message("Starting raster resampling by size...")
-
-        # Open reference raster
-        ref_ds = gdal.Open(reference_raster_path)
-        ref_gt = ref_ds.GetGeoTransform()
-        ref_xmin = ref_gt[0]
-        ref_ymax = ref_gt[3]
-        ref_res_x = abs(ref_gt[1])
-        ref_res_y = abs(ref_gt[5])
-        ref_xmax = ref_xmin + ref_res_x * ref_ds.RasterXSize
-        ref_ymin = ref_ymax - ref_res_y * ref_ds.RasterYSize
-        output_bounds = [ref_xmin, ref_ymin, ref_xmax, ref_ymax]
-
-        dialog.log_message(f"Reference bounds: {output_bounds}")
-
-        # Resample the input raster to match the size and extent of the reference raster
-        gdal.Warp(
-            output_raster_path,
-            input_raster_path,
-            format="GTiff",
-            outputBounds=output_bounds,
-            width=ref_ds.RasterXSize,  # Match number of columns
-            height=ref_ds.RasterYSize,  # Match number of rows
-            resampleAlg=resample_alg,
-            dstSRS=ref_ds.GetProjection()
-        )
-
-        dialog.log_message(f"Resampled raster (by size) saved to: {output_raster_path}")
-        return output_raster_path
-
-    except Exception as e:
-        dialog.log_message(f"Error during raster resampling by size: {str(e)}")
-        return
-
-
-def combine_rasters_with_weights_gdal_api(dialog: 'Dialog', costs_raster_path, slope_raster_path, dem_weight, occupancy_weight, output_path):
-    try:
-        dialog.log_message("Combining land use costs raster and slope raster with weights using GDAL API...")
-
-        # Open rasters
-        costs_ds = gdal.Open(costs_raster_path)
-        slope_ds = gdal.Open(slope_raster_path)
-        
-        #costs_nodata = costs_ds.GetRasterBand(1).GetNoDataValue() or -9999  # Default to -9999 if not set
-        #slope_nodata = slope_ds.GetRasterBand(1).GetNoDataValue() or -9999
-        
-        #dialog.log_message("---- --- NO DATA ------- -----")
-        #dialog.log_message(costs_nodata)
-        #dialog.log_message(slope_nodata)
-        #dialog.log_message("---- ----- ------ -------- ----")
-
-        # Read raster bands as numpy arrays
-        costs_band = costs_ds.GetRasterBand(1).ReadAsArray()
-        slope_band = slope_ds.GetRasterBand(1).ReadAsArray()
-
-        # Get geotransform and projection from one of the rasters
-        geotransform = costs_ds.GetGeoTransform()
-        projection = costs_ds.GetProjection()
-
-        # Perform weighted raster calculation
-        combined_array = (float(occupancy_weight) * costs_band) + (float(dem_weight) * slope_band)
-
-        # Write the result to a new GeoTIFF
-        driver = gdal.GetDriverByName("GTiff")
-        out_ds = driver.Create(output_path, costs_ds.RasterXSize, costs_ds.RasterYSize, 1, gdal.GDT_Float32)
-        out_ds.SetGeoTransform(geotransform)
-        out_ds.SetProjection(projection)
-        out_band = out_ds.GetRasterBand(1)
-        out_band.WriteArray(combined_array)
-        out_band.SetNoDataValue(-9999)  # Replace with appropriate NoData value
-
-        # Cleanup
-        costs_ds = None
-        slope_ds = None
-        out_ds = None
-
-        dialog.log_message(f"Combined raster created with gdal pyAPI at: {output_path}")
-        return output_path
-
-    except Exception as e:
-        dialog.log_message(f"Error combining rasters using GDAL API: {str(e)}")
-        return
-
-## --------- ------ ---- --------- ------ ---- --------- ------ ---- --------- ------ ---- --------- ------ ----
 def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, weight1, weight2, output_raster_path):
     """
     Combine two rasters with weights without preprocessing using QGIS Raster Calculator.
     """
     try:
         feedback = QgsProcessingFeedback()
-        formula = f"({weight1} * A) + ({weight2} * B)"
+        formula = f"({weight1} * \"{input_raster1}@1\") + ({weight2} * \"{input_raster2}@1\")"
 
         params = {
             'EXPRESSION': formula,
@@ -164,35 +38,7 @@ def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, we
         return
 
 
-def combine_rasters_with_weights(dialog: 'Dialog', costs_raster: 'QgsMapLayer', slope_raster: 'QgsMapLayer', dem_weight, occupancy_weight, output_path):
-    try:
-        dialog.log_message("Combining land use costs raster and slope raster with weights...")
-
-        # build the raster calculator expression
-        expression = f"({occupancy_weight} * \"{costs_raster.name()}@1\") + ({dem_weight} * \"{slope_raster.name()}@1\")"
-        dialog.log_message(expression)
-        
-        # todo: theres that situation that needed to be fixed later, the resolution differences
-        params = {
-            'EXPRESSION': expression,
-            'LAYERS': [costs_raster, slope_raster],
-            'CELLSIZE': 0,
-            'EXTENT': None,
-            'CRS': None,  # if none, it uses the CRS of input rasters
-            'OUTPUT': output_path
-        }
-
-        result = processing.run("qgis:rastercalculator", params)
-
-        dialog.log_message(f"Combined raster created at: {result['OUTPUT']}")
-        return result['OUTPUT']
-
-    except Exception as e:
-        dialog.log_message(f"Error combining rasters: {str(e)}")
-        raise RuntimeError(f"Failed to combine rasters: {str(e)}")
-
-
-def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_raster_path, buffer=0):
+def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_raster_path, buffer=1000):
     """
     Clips a raster based on the bounding box of a vector layer.
 
@@ -229,22 +75,63 @@ def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_ra
         dialog.log_message(f"Error clipping raster: {str(e)}")
         return
     
-def run_r_cost(land_use_layer, points_layer):
-    output_path = get_plugin_output_path("r_cost_output.tif")
-    
-    params_r_cost = {
-        'input': land_use_layer,
-        'start_points': points_layer,
-        'output': output_path,
-        'memory': 4000 # allocate 2GB
-    }
+def run_r_cost(dialog: 'Dialog', land_use_layer, points_layer):
+    cost_output_path = get_plugin_output_path("r_cost_output.tif")
+    direction_output_path = get_plugin_output_path("direction_output.tif")  # Path for direction raster
     
     try:
+        vector_layer: QgsVectorLayer = points_layer
+        
+        # Get the coordinates of the points in the points_layer
+        start_coordinates = []
+        for feature in vector_layer.getFeatures():
+            geometry = feature.geometry()
+            if geometry.isMultipart():
+                point = geometry.asMultiPoint()[0]
+            else:
+                point = geometry.asPoint()
+            start_coordinates.append(f"{point.x()},{point.y()}")
+
+        #dialog.log_message(f"coordenadas start quant: [{len(start_coordinates)}")
+        # Ensure there are at least two points
+        if len(start_coordinates) < 2:
+            raise RuntimeError("At least two points are required for least-cost path analysis.")
+
+        # Use the first point as the start and the last point as the stop
+        start_coord = start_coordinates[0]  # Single-element list
+        stop_coord = start_coordinates[-1]  # Single-element list
+        
+        #dialog.log_message(f"coordenadas start: [{start_coordinates}")
+
+        
+        params_r_cost = {
+            'input': land_use_layer,
+            #'start_points': points_layer,
+            'start_coordinates': start_coord,  # Start coordinates (east, north)
+            'stop_coordinates': stop_coord,  # Stop coordinates (east, north)
+            'output': cost_output_path,
+            'outdir': direction_output_path,  # Output direction raster
+            'memory': 2000, # allocate 2GB
+            'max_cost': None,  # Optional max cost
+            'GRASS_REGION_PARAMETER': None,  # Optional for region alignment
+            'flags': 'c'  # Prevent adding a color table to the raster
+        }
+    
         result = processing.run("grass7:r.cost", params_r_cost)
 
-        if 'output' not in result or not result['output']:
-            print("RESULTDO DO R.COST INVALIDO")
-
-        return result
+        if not result.get('output') or not os.path.exists(cost_output_path):
+            raise RuntimeError("r.cost failed: Cost raster not generated.")
+        
+        if not os.path.exists(direction_output_path):
+            raise RuntimeError("r.cost failed: Direction raster not generated.")
+        
+        dialog.log_message(f"r.cost generated cost raster: {cost_output_path}")
+        dialog.log_message(f"r.cost generated direction raster: {direction_output_path}")
+        
+        # Return both cost and direction outputs
+        return {
+            'cost_raster': cost_output_path,
+            'direction_raster': direction_output_path
+        }
     except Exception as e:
         raise RuntimeError(f"Error running r.cost: {str(e)}")

@@ -51,10 +51,8 @@ def setup_ui(dialog: 'Dialog'):
     # Run button and log
     dialog.run_button = QPushButton("Run Analysis")
     dialog.clear_log_button = QPushButton("Clear Logs")
-    dialog.debug_button = QPushButton("Debug - Run after slope + costs raster")
     main_layout.addWidget(dialog.run_button)
     main_layout.addWidget(dialog.clear_log_button)
-    main_layout.addWidget(dialog.debug_button)
 
     dialog.log_output = QTextEdit()
     dialog.log_output.setReadOnly(True)
