@@ -5,7 +5,7 @@ import os
 from qgis.core import ( QgsProcessingFeedback )
 
 if TYPE_CHECKING:
-    from ..dialog import Dialog
+    from ..complete_dialog import Dialog
     from qgis.core import QgsMapLayer, QgsVectorLayer
     
 os.environ["GRASS_VERBOSE"] = "3"  # Enable GRASS debugging

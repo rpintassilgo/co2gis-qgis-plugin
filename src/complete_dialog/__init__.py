@@ -1,11 +1,8 @@
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsPalettedRasterRenderer
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QComboBox, QTableWidget, 
-    QTableWidgetItem, QLineEdit, QPushButton, QHBoxLayout, 
-    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QMessageBox
+    QDialog, QComboBox, QTableWidget, QLineEdit, QPushButton, QTextEdit, QTabWidget, QFileDialog
 )
-from PyQt5.QtCore import Qt
-from ..analysis import run_analysis
+from .run_analysis import run_analysis
 from .ui import setup_ui
 from .dropdowns import populate_layer_dropdowns
 from .dropdowns import refresh_layer_dropdown
@@ -36,6 +33,8 @@ class Dialog(QDialog):
         self.occupancyWeightInput: QLineEdit
         self.log_output: QTextEdit
         self.tabs: QTabWidget
+        self.outputDir: QLineEdit
+        self.outputDirBrowse: QPushButton
         
         setup_ui(self)
         populate_layer_dropdowns(self)
@@ -48,6 +47,7 @@ class Dialog(QDialog):
         self.terrainComboBox.currentIndexChanged.connect(lambda: refresh_layer_dropdown(self.terrainComboBox, QgsRasterLayer))
         self.demComboBox.currentIndexChanged.connect(lambda: refresh_layer_dropdown(self.demComboBox, QgsRasterLayer))
         self.pointsComboBox.currentIndexChanged.connect(lambda: refresh_layer_dropdown(self.pointsComboBox, QgsVectorLayer))
+        self.outputDirBrowse.clicked.connect(self.select_output_directory)
 
     def get_weights(self):
         """Retrieve DEM and occupancy weights."""
@@ -98,3 +98,13 @@ class Dialog(QDialog):
         
     def clear_logs(self):
         self.log_output.clear()
+        
+    def select_output_directory(self):
+        """Open a directory selection dialog and update the output directory field."""
+        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if directory:
+            self.outputDir.setText(directory)
+
+    def get_output_directory(self):
+        """Return the selected output directory or a default one if not set."""
+        return self.outputDir.text()

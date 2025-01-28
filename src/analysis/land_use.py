@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 from qgis import processing
 
 if TYPE_CHECKING:
-    from ..dialog import Dialog
+    from ..complete_dialog import Dialog
 
 # note: for some reason raster qgis:rastercalculator is very slow,
 # maybe try later check for alternatives

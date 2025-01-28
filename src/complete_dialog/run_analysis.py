@@ -1,23 +1,16 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtCore import (Qt, pyqtSignal)
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QComboBox, QTableWidget, 
-    QTableWidgetItem, QLineEdit, QPushButton, QHBoxLayout, 
-    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QMessageBox
-)
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsPalettedRasterRenderer, QgsApplication
-from .cost import clip_raster_to_vector, combine_rasters_with_qgis_raster_calculator, combine_rasters_with_qgis_raster_calculator, run_r_cost
-from .drain import run_r_drain_and_load
-from ..dialog.land_use import get_land_use_class_costs
-from qgis.core import QgsTask, QgsMessageLog, Qgis
-from .path import get_plugin_output_path
-from .land_use import get_land_use_costs_raster
-from .dem import create_slope_layer_from_dem
-import os
+from PyQt5.QtWidgets import ( QMessageBox )
+from qgis.core import QgsProject, QgsRasterLayer, QgsApplication
+from ..analysis.cost import clip_raster_to_vector, combine_rasters_with_qgis_raster_calculator, combine_rasters_with_qgis_raster_calculator, run_r_cost
+from ..analysis.drain import run_r_drain_and_load
+from ..complete_dialog.land_use import get_land_use_class_costs
+from qgis.core import QgsTask, QgsMessageLog
+from ..analysis.path import get_plugin_output_path
+from ..analysis.land_use import get_land_use_costs_raster
+from ..analysis.dem import create_slope_layer_from_dem
 
 if TYPE_CHECKING:
-    from ..dialog import Dialog
-
+    from ..complete_dialog import Dialog
 
 # Note: For what I've seen tasks in QGIS plugins are broken, it is necessary to log a message with QgsMessageLog
 # to run the task added to task manager, and it never enters finished function inside the task. So I'm using
@@ -83,6 +76,7 @@ class RunAnalysisTask(QgsTask):
             self.dialog.log_message(f"Error: {str(e)}")
             return False
 
+
     def finished(self, result):
         print("ENTROU NO FINISHED")
         if result:
@@ -94,8 +88,6 @@ class RunAnalysisTask(QgsTask):
         self.dialog.log_message("Task canceled.")
         super().cancel()
 
-def teste(task):
-    return 5*6
 
 def acabou(exception, value=None):
     if not exception:
@@ -104,12 +96,10 @@ def acabou(exception, value=None):
         print("DEU ERRO")
 
 def run_analysis(dialog: 'Dialog'):
-    dialog.log_message("ENTROU NO RUN ANALYSIS")
-    #if not dialog.all_fields_valid():
-    #    QMessageBox.warning(dialog, "Invalid Input", "Please fill in all required fields and ensure at least one cost is greater than 0.")
-    #    return
+    if not dialog.all_fields_valid():
+        QMessageBox.warning(dialog, "Invalid Input", "Please fill in all required fields and ensure at least one cost is greater than 0.")
+        return
 
-    dialog.log_message("PASSOU O RETURN")
     task = RunAnalysisTask(dialog)
     QgsApplication.taskManager().addTask(task)
     

@@ -1,14 +1,12 @@
 from typing import TYPE_CHECKING
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsPalettedRasterRenderer
-from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QComboBox, QTableWidget, 
-    QTableWidgetItem, QLineEdit, QPushButton, QHBoxLayout, 
-    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QMessageBox
-)
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from PyQt5.QtWidgets import ( QComboBox )
 
 if TYPE_CHECKING:
     from .import Dialog
+    from ui import StepByStepDialog
  
+# ######################## Dialog ############################################
 def populate_layer_dropdowns(dialog: 'Dialog'):
         """Populate the dropdowns with all available layers in the project."""
         # Clear existing items
@@ -45,4 +43,3 @@ def refresh_layer_dropdown(combo_box: QComboBox, layer_type):
     for layer in layers:
         if isinstance(layer, layer_type):
             combo_box.addItem(layer.name(), layer.id())
-       
