@@ -45,7 +45,7 @@ class RunAnalysisTask(QgsTask):
             
             # create slope raster from dem
             self.dialog.log_message("Creating slope raster from DEM...")
-            create_slope_layer_from_dem(self.dialog, dem_layer, dem_slope_path)
+            create_slope_layer_from_dem(dem_layer, dem_slope_path)
             self.dialog.log_message(f"Slope raster created at: {dem_slope_path}")
             
             # combine slope and class costs rasters
@@ -55,7 +55,7 @@ class RunAnalysisTask(QgsTask):
             
             # clip relevant area from combined raster
             self.dialog.log_message("Clipping combined raster to relevant area...")
-            clip_raster_to_vector(self.dialog, combined_raster_path, points_layer, clipped_combined_raster_path)
+            clip_raster_to_vector(combined_raster_path, points_layer, clipped_combined_raster_path)
             
             # add clipped combined raster to qgis project
             clipped_combined_raster = QgsRasterLayer(clipped_combined_raster_path, "Clipped Combined Raster")
@@ -63,7 +63,7 @@ class RunAnalysisTask(QgsTask):
             
             # use output on r.cost
             self.dialog.log_message("Running r.cost...")
-            cost_result = run_r_cost(self.dialog, clipped_combined_raster, points_layer)
+            cost_result = run_r_cost(clipped_combined_raster, points_layer)
             self.dialog.log_message("r.cost completed.")
             
             # Run r.drain and load the result

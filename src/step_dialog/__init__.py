@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from .ui import setup_ui
 from .dropdowns import populate_layer_step_by_step_dropdowns
-from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic  # Import step execution logic
+from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic
+from ..complete_dialog import populate_land_use_classes_table
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -50,15 +51,20 @@ class StepByStepDialog(QDialog):
         populate_layer_step_by_step_dropdowns(self)
 
         # Connect buttons to step execution functions
+        self.classify_button.clicked.connect(lambda: populate_land_use_classes_table(self))
         self.create_slope_button.clicked.connect(lambda: run_step(self, 2, run_step2_logic))
         self.create_land_use_costs_button.clicked.connect(lambda: run_step(self, 1, run_step1_logic))
         self.combine_button.clicked.connect(lambda: run_step(self, 3, run_step3_logic))
         self.clip_button.clicked.connect(lambda: run_step(self, 4, run_step4_logic))
         self.final_button.clicked.connect(lambda: run_step(self, 5, run_step5_logic))
+        self.clear_log_button.clicked.connect(self.clear_logs)
 
     def log_message(self, message: str):
         """Append a message to the log output."""
         self.log_output.append(message)
+        
+    def clear_logs(self):
+        self.log_output.clear()
 
 def open_step_by_step_dialog(parent):
     """Opens the Step-by-Step Analysis dialog."""

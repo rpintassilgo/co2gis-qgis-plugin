@@ -3,19 +3,16 @@ from qgis import processing
 import os
 from qgis.core import QgsVectorLayer, QgsProject
 
-def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
+def run_r_drain_and_load(cost_result, points_layer, output_drain_path, output_vector_path):
     """
     Runs r.drain, converts the result to vector with r.to.vect, and loads it into QGIS.
     """
     try:
-        # Step 1: Run r.drain
-        print("Running r.drain...")
-        drain_raster_path = get_plugin_output_path("drain_output.tif")
         params_r_drain = {
             'input': cost_result['cost_raster'],  # Input raster from r.cost
             'direction': cost_result['direction_raster'],
             'start_points': points_layer,
-            'output': drain_raster_path,
+            'output': output_drain_path,
             'GRASS_REGION_PARAMETER': None,
             'GRASS_REGION_CELLSIZE_PARAMETER': 0,
             'GRASS_RASTER_FORMAT_OPT': '',
@@ -25,14 +22,13 @@ def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
         processing.run("grass7:r.drain", params_r_drain)
 
         # Verify r.drain output
-        if not os.path.exists(drain_raster_path):
-            raise RuntimeError(f"r.drain failed: Output raster not created: {drain_raster_path}")
-        print(f"r.drain output created: {drain_raster_path}")
+        if not os.path.exists(output_drain_path):
+            raise RuntimeError(f"r.drain failed: Output raster not created: {output_drain_path}")
 
         # Step 2: Convert raster to vector lines using r.to.vect
         print("Running r.to.vect...")
         params_r_to_vect = {
-            'input': drain_raster_path,
+            'input': output_drain_path,
             'type': 1,  # 1 corresponds to "line" in GRASS
             'output': output_vector_path,
             'GRASS_REGION_PARAMETER': None,
@@ -56,4 +52,4 @@ def run_r_drain_and_load(cost_result, points_layer, output_vector_path):
             raise RuntimeError(f"Failed to load vector layer: {output_vector_path}")
 
     except Exception as e:
-        print(f"Error: {str(e)}")
+        raise RuntimeError(f"{str(e)}")

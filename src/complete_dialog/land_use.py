@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsPalettedRasterRenderer
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QComboBox, QTableWidget, 
@@ -9,8 +9,9 @@ from PyQt5.QtCore import Qt
 
 if TYPE_CHECKING:
     from .import Dialog
+    from ..step_dialog import StepByStepDialog
 
-def populate_land_use_classes_table(dialog: 'Dialog'):
+def populate_land_use_classes_table(dialog: Union['Dialog', 'StepByStepDialog']):
     # Get the selected terrain layer
     layer_id = dialog.terrainComboBox.currentData()
     terrain_layer = QgsProject.instance().mapLayer(layer_id)
@@ -46,7 +47,7 @@ def populate_land_use_classes_table(dialog: 'Dialog'):
 
     dialog.log_message("Classification data added to the table.")
 
-def get_land_use_class_costs(dialog: 'Dialog'):
+def get_land_use_class_costs(dialog: Union['Dialog', 'StepByStepDialog']):
     class_costs = {}
     for row in range(dialog.classTable.rowCount()):
         #dialog.log_message(dialog.classTable.item(row, 0).text())

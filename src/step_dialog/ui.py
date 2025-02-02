@@ -11,9 +11,17 @@ if TYPE_CHECKING:
 def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
     dialog.setWindowTitle("Step-by-Step Analysis")
-    dialog.setGeometry(0, 0, 700, 900)
+    dialog.setGeometry(0, 0, 1400, 900)
 
     main_layout = QVBoxLayout()
+    columns_layout = QHBoxLayout()
+    left_layout = QVBoxLayout()
+    right_layout = QVBoxLayout()
+    
+    columns_layout.addLayout(left_layout)  # Add left column to main columns layout
+    columns_layout.addLayout(right_layout)  # Add right column to main columns layout
+
+    main_layout.addLayout(columns_layout)  # Add the columns to the main layout
 
     ############ STEP 1: Select Start & End Points ############
     pointsGroupBox = QGroupBox()
@@ -30,7 +38,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     pointsLayout.addRow(dialog.pointsComboBox) 
 
     pointsGroupBox.setLayout(pointsLayout)
-    main_layout.addWidget(pointsGroupBox)
+    left_layout.addWidget(pointsGroupBox)
 
     ############ STEP 2: Select DEM Layer & Create Slope Raster ############
     demGroupBox = QGroupBox()
@@ -50,7 +58,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.slopeRasterPath = QLineEdit()
     dialog.slopeRasterPath.setPlaceholderText("Choose output path for Slope Raster")
     dialog.slopeRasterBrowse = QPushButton("Browse")
-    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath))
+    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath, "tif"))
     
     fileLayout = QHBoxLayout()
     fileLayout.addWidget(dialog.slopeRasterPath)
@@ -61,7 +69,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     demLayout.addWidget(dialog.create_slope_button)
 
     demGroupBox.setLayout(demLayout)
-    main_layout.addWidget(demGroupBox)
+    left_layout.addWidget(demGroupBox)
 
     ############ STEP 3: Select Land Use Layer, Get Classes & Create Costs Raster ############
     landUseGroupBox = QGroupBox()
@@ -92,7 +100,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.costsRasterPath = QLineEdit()
     dialog.costsRasterPath.setPlaceholderText("Choose output path for Costs Raster")
     dialog.costsRasterBrowse = QPushButton("Browse")
-    dialog.costsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costsRasterPath))
+    dialog.costsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costsRasterPath, "tif"))
     
     costsfileLayout = QHBoxLayout()
     costsfileLayout.addWidget(dialog.costsRasterPath)
@@ -103,7 +111,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     landUseLayout.addWidget(dialog.create_land_use_costs_button)
 
     landUseGroupBox.setLayout(landUseLayout)
-    main_layout.addWidget(landUseGroupBox)
+    left_layout.addWidget(landUseGroupBox)
 
     ############ STEP 4: Combine Rasters (Land Use & Slope) ############
     combineGroupBox = QGroupBox()
@@ -133,7 +141,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.combinedRasterPath = QLineEdit()
     dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
     dialog.combinedRasterBrowse = QPushButton("Browse")
-    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath))
+    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath, "tif"))
     
     combinedfileLayout = QHBoxLayout()
     combinedfileLayout.addWidget(dialog.combinedRasterPath)
@@ -144,7 +152,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combineLayout.addRow(dialog.combine_button)
 
     combineGroupBox.setLayout(combineLayout)
-    main_layout.addWidget(combineGroupBox)
+    right_layout.addWidget(combineGroupBox)
 
     ############ STEP 5: Select Combined Raster & Clip ############
     clipGroupBox = QGroupBox()
@@ -164,7 +172,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.clippedRasterPath = QLineEdit()
     dialog.clippedRasterPath.setPlaceholderText("Choose output path for Clipped Raster")
     dialog.clippedRasterBrowse = QPushButton("Browse")
-    dialog.clippedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.clippedRasterPath))
+    dialog.clippedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.clippedRasterPath, "tif"))
     
     combinedfileLayout = QHBoxLayout()
     combinedfileLayout.addWidget(dialog.clippedRasterPath)
@@ -175,38 +183,72 @@ def setup_ui(dialog: 'StepByStepDialog'):
     clipLayout.addWidget(dialog.clip_button)
 
     clipGroupBox.setLayout(clipLayout)
-    main_layout.addWidget(clipGroupBox)
+    right_layout.addWidget(clipGroupBox)
 
     ############ STEP 6: Select Clipped Combined Raster & Run r.cost, r.drain ############
     finalStepGroupBox = QGroupBox()
     finalStepGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     finalStepLayout = QFormLayout()
-    
+
     finalTitle = QLabel("Create Least Cost Path Vector from Entire or Clipped Raster")
-    finalTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    finalTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
+    finalTitle.setAlignment(Qt.AlignCenter)
+    finalTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     finalStepLayout.addRow(finalTitle)
 
     dialog.step5Dropdown = QComboBox()
     finalStepLayout.addRow(QLabel("Select Clipped Combined Raster:"))
     finalStepLayout.addRow(dialog.step5Dropdown)
-    
-    # File path selection
-    dialog.finalPath = QLineEdit()
-    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector")
-    dialog.finalBrowse = QPushButton("Browse")
-    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath))
-    
-    finalfileLayout = QHBoxLayout()
-    finalfileLayout.addWidget(dialog.finalPath)
-    finalfileLayout.addWidget(dialog.finalBrowse)
-    finalStepLayout.addRow(finalfileLayout)
 
+    # Cost Raster Output Path
+    dialog.costRasterPath = QLineEdit()
+    dialog.costRasterPath.setPlaceholderText("Choose output path for Cost Raster (r.cost)")
+    dialog.costRasterBrowse = QPushButton("Browse")
+    dialog.costRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costRasterPath, "tif"))
+
+    costFileLayout = QHBoxLayout()
+    costFileLayout.addWidget(dialog.costRasterPath)
+    costFileLayout.addWidget(dialog.costRasterBrowse)
+    finalStepLayout.addRow(costFileLayout)
+
+    # Direction Raster Output Path
+    dialog.directionRasterPath = QLineEdit()
+    dialog.directionRasterPath.setPlaceholderText("Choose output path for Direction Raster (r.cost)")
+    dialog.directionRasterBrowse = QPushButton("Browse")
+    dialog.directionRasterBrowse.clicked.connect(lambda: select_output_file(dialog.directionRasterPath, "tif"))
+
+    directionFileLayout = QHBoxLayout()
+    directionFileLayout.addWidget(dialog.directionRasterPath)
+    directionFileLayout.addWidget(dialog.directionRasterBrowse)
+    finalStepLayout.addRow(directionFileLayout)
+    
+    # Drain Raster Output Path
+    dialog.drainRasterPath = QLineEdit()
+    dialog.drainRasterPath.setPlaceholderText("Choose output path for Drain Raster (r.drain)")
+    dialog.drainRasterBrowse = QPushButton("Browse")
+    dialog.drainRasterBrowse.clicked.connect(lambda: select_output_file(dialog.drainRasterPath, "tif"))
+
+    drainFileLayout = QHBoxLayout()
+    drainFileLayout.addWidget(dialog.drainRasterPath)
+    drainFileLayout.addWidget(dialog.drainRasterBrowse)
+    finalStepLayout.addRow(drainFileLayout)
+
+    # LCP Vector Output Path (GPKG Format)
+    dialog.finalPath = QLineEdit()
+    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector (r.to.vect)")
+    dialog.finalBrowse = QPushButton("Browse")
+    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
+
+    finalFileLayout = QHBoxLayout()
+    finalFileLayout.addWidget(dialog.finalPath)
+    finalFileLayout.addWidget(dialog.finalBrowse)
+    finalStepLayout.addRow(finalFileLayout)
+
+    # Run Button
     dialog.final_button = QPushButton("Run r.cost, r.drain and Convert to Vector")
     finalStepLayout.addWidget(dialog.final_button)
 
     finalStepGroupBox.setLayout(finalStepLayout)
-    main_layout.addWidget(finalStepGroupBox)
+    right_layout.addWidget(finalStepGroupBox)
 
     ############ LOG OUTPUT ############
     dialog.log_output = QTextEdit()
@@ -220,8 +262,17 @@ def setup_ui(dialog: 'StepByStepDialog'):
 
     dialog.setLayout(main_layout)
 
-def select_output_file(output_field: QLineEdit):
-    """Opens a file dialog to select an output file path."""
-    file_path, _ = QFileDialog.getSaveFileName(None, "Select Output File", "", "GeoTIFF (*.tif);;All Files (*)")
+
+def select_output_file(output_field: QLineEdit, file_type: str):
+    """Opens a file dialog to select an output file path with the correct format."""
+    if file_type == "tif":
+        file_filter = "GeoTIFF (*.tif);;All Files (*)"
+    elif file_type == "gpkg":
+        file_filter = "GeoPackage (*.gpkg);;All Files (*)"
+    else:
+        file_filter = "All Files (*)"  # Fallback
+
+    file_path, _ = QFileDialog.getSaveFileName(None, "Select Output File", "", file_filter)
+    
     if file_path:
         output_field.setText(file_path)

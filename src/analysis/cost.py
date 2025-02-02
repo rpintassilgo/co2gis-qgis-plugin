@@ -29,16 +29,15 @@ def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, we
             'OUTPUT': output_raster_path
         }
 
-        processing.run("qgis:rastercalculator", params, feedback)
+        processing.run("qgis:rastercalculator", params, feedback=feedback)
         print(f"Combined raster saved at: {output_raster_path}")
-        return  #output_raster_path
-
-    except Exception as e:
-        print(f"Error combining rasters: {str(e)}")
         return
 
+    except Exception as e:
+        raise e
 
-def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_raster_path, buffer=1000):
+
+def clip_raster_to_vector(raster_path, vector_layer, output_raster_path, buffer=1000):
     """
     Clips a raster based on the bounding box of a vector layer.
 
@@ -57,8 +56,6 @@ def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_ra
         xmax = extent.xMaximum() + buffer
         ymax = extent.yMaximum() + buffer
 
-        dialog.log_message(f"Clipping raster with bounding box: [{xmin}, {ymin}, {xmax}, {ymax}]")
-
         # Clip the raster using gdal.Warp
         gdal.Warp(
             output_raster_path,
@@ -67,18 +64,12 @@ def clip_raster_to_vector(dialog: 'Dialog', raster_path, vector_layer, output_ra
             outputBounds=[xmin, ymin, xmax, ymax],
             cropToCutline=True
         )
-
-        dialog.log_message(f"Clipped raster saved to: {output_raster_path}")
         return output_raster_path
 
     except Exception as e:
-        dialog.log_message(f"Error clipping raster: {str(e)}")
-        return
+        raise e
     
-def run_r_cost(dialog: 'Dialog', land_use_layer, points_layer):
-    cost_output_path = get_plugin_output_path("r_cost_output.tif")
-    direction_output_path = get_plugin_output_path("direction_output.tif")  # Path for direction raster
-    
+def run_r_cost(land_use_layer, points_layer, cost_output_path, direction_output_path):
     try:
         vector_layer: QgsVectorLayer = points_layer
         
@@ -92,17 +83,13 @@ def run_r_cost(dialog: 'Dialog', land_use_layer, points_layer):
                 point = geometry.asPoint()
             start_coordinates.append(f"{point.x()},{point.y()}")
 
-        #dialog.log_message(f"coordenadas start quant: [{len(start_coordinates)}")
         # Ensure there are at least two points
         if len(start_coordinates) < 2:
             raise RuntimeError("At least two points are required for least-cost path analysis.")
 
         # Use the first point as the start and the last point as the stop
-        start_coord = start_coordinates[0]  # Single-element list
-        stop_coord = start_coordinates[-1]  # Single-element list
-        
-        #dialog.log_message(f"coordenadas start: [{start_coordinates}")
-
+        start_coord = start_coordinates[0]
+        stop_coord = start_coordinates[-1]
         
         params_r_cost = {
             'input': land_use_layer,
@@ -120,13 +107,10 @@ def run_r_cost(dialog: 'Dialog', land_use_layer, points_layer):
         result = processing.run("grass7:r.cost", params_r_cost)
 
         if not result.get('output') or not os.path.exists(cost_output_path):
-            raise RuntimeError("r.cost failed: Cost raster not generated.")
+            raise RuntimeError("Cost raster not generated.")
         
         if not os.path.exists(direction_output_path):
-            raise RuntimeError("r.cost failed: Direction raster not generated.")
-        
-        dialog.log_message(f"r.cost generated cost raster: {cost_output_path}")
-        dialog.log_message(f"r.cost generated direction raster: {direction_output_path}")
+            raise RuntimeError("Direction raster not generated.")
         
         # Return both cost and direction outputs
         return {
@@ -134,4 +118,4 @@ def run_r_cost(dialog: 'Dialog', land_use_layer, points_layer):
             'direction_raster': direction_output_path
         }
     except Exception as e:
-        raise RuntimeError(f"Error running r.cost: {str(e)}")
+        raise RuntimeError(f"{str(e)}")
