@@ -181,6 +181,52 @@ def run_step5_logic(dialog: 'StepByStepDialog'):
     except Exception as e:
         dialog.log_message(f"Process Failed: {str(e)}")
 
+def run_step_resample(dialog: 'StepByStepDialog'):
+    """Step 6: Resample Raster"""
+    try:
+        raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
+
+        if not raster_layer:
+            raise ValueError("No raster selected for resampling.")
+
+        target_resolution = dialog.targetResolutionInput.text().strip()
+        if not target_resolution:
+            raise ValueError("No target resolution specified.")
+
+        try:
+            target_resolution = float(target_resolution)
+            if target_resolution <= 0:
+                raise ValueError("Target resolution must be a positive number.")
+        except ValueError:
+            raise ValueError("Invalid target resolution. Please enter a numerical value.")
+
+        resampling_method = dialog.resamplingMethodComboBox.currentText()
+        output_path = dialog.resampleOutputPath.text().strip()
+        if not output_path:
+            raise ValueError("No output path specified for Resampled Raster.")
+
+        dialog.log_message(f"Resampling raster '{raster_layer.name()}' to {target_resolution} meters using {resampling_method} method...")
+
+        # Perform resampling using QGIS processing tools
+        params = {
+            'INPUT': raster_layer,
+            'TARGET_RESOLUTION': target_resolution,
+            'RESAMPLING_METHOD': resampling_method.lower().replace(" ", "_"),
+            'OUTPUT': output_path
+        }
+
+        from qgis import processing
+        processing.run("gdal:warpreproject", params)
+
+        dialog.log_message(f"Resampled raster saved successfully at: {output_path}")
+
+    except ValueError as ve:
+        error_message = f"Resampling Raster Validation Error: {str(ve)}"
+        dialog.log_message(error_message)
+    except Exception as e:
+        error_message = f"Resampling Raster Failed: {str(e)}"
+        dialog.log_message(error_message)
+
 def get_layer_path(layer):
     """Returns the file path of the given QgsMapLayer."""
     if layer is None:

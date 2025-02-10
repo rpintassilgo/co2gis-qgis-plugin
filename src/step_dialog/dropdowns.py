@@ -15,6 +15,7 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
     dialog.step3SlopeDropdown.clear()
     dialog.step4Dropdown.clear()
     dialog.step5Dropdown.clear()
+    dialog.resampleRasterComboBox.clear()
 
     # Get all layers in the project
     layers = QgsProject.instance().mapLayers().values()
@@ -39,6 +40,8 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
             dialog.step4Dropdown.addItem(layer_name, layer_id)
             # Populate Select Clipped Combined Raster (Step 6)
             dialog.step5Dropdown.addItem(layer_name, layer_id)
+            # Populate Select Clipped Combined Raster (Step 6)
+            dialog.resampleRasterComboBox.addItem(layer_name, layer_id)
 
     # Logging messages if no layers are found
     if dialog.pointsComboBox.count() == 0:

@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog
 )
 from PyQt5.QtCore import Qt
+from qgis.core import QgsProject, QgsUnitTypes
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -11,14 +12,16 @@ if TYPE_CHECKING:
 def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
     dialog.setWindowTitle("Step-by-Step Analysis")
-    dialog.setGeometry(0, 0, 1400, 900)
+    dialog.setGeometry(0, 0, 2100, 900)
 
     main_layout = QVBoxLayout()
     columns_layout = QHBoxLayout()
     left_layout = QVBoxLayout()
+    middle_layout = QVBoxLayout()
     right_layout = QVBoxLayout()
     
     columns_layout.addLayout(left_layout)  # Add left column to main columns layout
+    columns_layout.addLayout(middle_layout)  # Add middle column to main columns layout
     columns_layout.addLayout(right_layout)  # Add right column to main columns layout
 
     main_layout.addLayout(columns_layout)  # Add the columns to the main layout
@@ -122,6 +125,12 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combineTitle.setAlignment(Qt.AlignCenter)  # Center the label text
     combineTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
     combineLayout.addRow(combineTitle)
+    
+    infoText = QLabel(
+        "ⓘ If the input rasters have different resolutions, QGIS will automatically resample them using the nearest neighbor algorithm."
+    )
+    infoText.setStyleSheet("color: lightgrey; font-size: 11px;")  # Make text bold
+    combineLayout.addRow(infoText)
 
     dialog.step3LandUseDropdown = QComboBox()
     dialog.step3SlopeDropdown = QComboBox()
@@ -152,7 +161,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combineLayout.addRow(dialog.combine_button)
 
     combineGroupBox.setLayout(combineLayout)
-    right_layout.addWidget(combineGroupBox)
+    middle_layout.addWidget(combineGroupBox)
 
     ############ STEP 5: Select Combined Raster & Clip ############
     clipGroupBox = QGroupBox()
@@ -183,7 +192,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     clipLayout.addWidget(dialog.clip_button)
 
     clipGroupBox.setLayout(clipLayout)
-    right_layout.addWidget(clipGroupBox)
+    middle_layout.addWidget(clipGroupBox)
 
     ############ STEP 6: Select Clipped Combined Raster & Run r.cost, r.drain ############
     finalStepGroupBox = QGroupBox()
@@ -248,7 +257,65 @@ def setup_ui(dialog: 'StepByStepDialog'):
     finalStepLayout.addWidget(dialog.final_button)
 
     finalStepGroupBox.setLayout(finalStepLayout)
-    right_layout.addWidget(finalStepGroupBox)
+    middle_layout.addWidget(finalStepGroupBox)
+    
+    ############ STEP 7: Resample rasters ############
+    
+    # STEP: Raster Resampling Tool
+    resampleGroupBox = QGroupBox()
+    resampleGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    resampleLayout = QFormLayout()
+
+    resampleTitle = QLabel("Resample Raster")
+    resampleTitle.setAlignment(Qt.AlignCenter)
+    resampleTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    resampleLayout.addRow(resampleTitle)
+    
+    infoResampleText = QLabel(
+    "ⓘ For accurate GIS analysis, use a raster with a projected CRS (meters) instead of a geographic CRS (degrees), \n"
+    "as degrees are not uniform in distance across different latitudes."
+    )
+    infoResampleText.setStyleSheet("color: lightgrey; font-size: 11px;")  # Make text bold
+    resampleLayout.addRow(infoResampleText)
+
+    # Select Input Raster
+    dialog.resampleRasterComboBox = QComboBox()
+    resampleLayout.addRow(QLabel("Select Raster to Resample:"), dialog.resampleRasterComboBox)
+    dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
+
+    # Original Resolution (auto or manual)
+    dialog.originalResolutionInput = QLineEdit()
+    dialog.originalResolutionInput.setPlaceholderText("Original Resolution (auto or manual)")
+    resampleLayout.addRow(QLabel("Original Resolution:"), dialog.originalResolutionInput)
+
+    # Target Resolution (user input)
+    dialog.targetResolutionInput = QLineEdit()
+    dialog.targetResolutionInput.setPlaceholderText("Enter Target Resolution")
+    resampleLayout.addRow(QLabel("Target Resolution:"), dialog.targetResolutionInput)
+
+    # Resampling Method Dropdown
+    dialog.resamplingMethodComboBox = QComboBox()
+    dialog.resamplingMethodComboBox.addItems(["Nearest Neighbor", "Bilinear", "Cubic", "Lanczos"])
+    resampleLayout.addRow(QLabel("Resampling Method:"), dialog.resamplingMethodComboBox)
+
+    # Output Path Selection
+    dialog.resampleOutputPath = QLineEdit()
+    dialog.resampleOutputPath.setPlaceholderText("Choose output path for Resampled Raster")
+    dialog.resampleBrowse = QPushButton("Browse")
+    dialog.resampleBrowse.clicked.connect(lambda: select_output_file(dialog.resampleOutputPath, "tif"))
+
+    outputFileLayout = QHBoxLayout()
+    outputFileLayout.addWidget(dialog.resampleOutputPath)
+    outputFileLayout.addWidget(dialog.resampleBrowse)
+    resampleLayout.addRow(outputFileLayout)
+
+    # Run Resampling Button
+    dialog.runResampleButton = QPushButton("Run Resampling")
+    resampleLayout.addWidget(dialog.runResampleButton)
+
+    resampleGroupBox.setLayout(resampleLayout)
+    right_layout.addWidget(resampleGroupBox)  # Add to the third column
+
 
     ############ LOG OUTPUT ############
     dialog.log_output = QTextEdit()
@@ -276,3 +343,21 @@ def select_output_file(output_field: QLineEdit, file_type: str):
     
     if file_path:
         output_field.setText(file_path)
+        
+def update_original_resolution(dialog):
+    raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+
+        # Compute the average resolution and round it
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+
+        # Determine unit type (meters vs. degrees)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+
+        # Update UI with correct unit
+        dialog.originalResolutionInput.setText(f"~{avg_resolution} {unit}")
+
+

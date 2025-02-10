@@ -3,10 +3,10 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton,
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog, QDialog
 )
-from PyQt5.QtCore import Qt
+from qgis.core import QgsProject
 from .ui import setup_ui
 from .dropdowns import populate_layer_step_by_step_dropdowns
-from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic
+from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic, run_step_resample
 from ..complete_dialog import populate_land_use_classes_table
 
 if TYPE_CHECKING:
@@ -43,12 +43,20 @@ class StepByStepDialog(QDialog):
         self.finalPath: QLineEdit
         self.finalBrowse: QPushButton
         self.final_button: QPushButton
+        self.resampleRasterComboBox: QComboBox
+        self.originalResolutionInput: QLineEdit
+        self.targetResolutionInput: QLineEdit
+        self.resamplingMethodComboBox: QComboBox
+        self.resampleOutputPath: QLineEdit
+        self.resampleBrowse: QPushButton
+        self.runResampleButton: QPushButton
         self.log_output: QTextEdit
         self.clear_log_button: QPushButton
 
         # Setup UI and populate dropdowns
         setup_ui(self)
         populate_layer_step_by_step_dropdowns(self)
+        QgsProject.instance().layersAdded.connect(lambda: populate_layer_step_by_step_dropdowns(self))
 
         # Connect buttons to step execution functions
         self.classify_button.clicked.connect(lambda: populate_land_use_classes_table(self))
@@ -57,6 +65,7 @@ class StepByStepDialog(QDialog):
         self.combine_button.clicked.connect(lambda: run_step(self, 3, run_step3_logic))
         self.clip_button.clicked.connect(lambda: run_step(self, 4, run_step4_logic))
         self.final_button.clicked.connect(lambda: run_step(self, 5, run_step5_logic))
+        self.runResampleButton.clicked.connect(lambda: run_step(self, 6, run_step_resample)) 
         self.clear_log_button.clicked.connect(self.clear_logs)
 
     def log_message(self, message: str):
