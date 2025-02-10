@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton,
+    QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton, QCheckBox,
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog
 )
 from PyQt5.QtCore import Qt
@@ -168,14 +168,19 @@ def setup_ui(dialog: 'StepByStepDialog'):
     clipGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     clipLayout = QFormLayout()
     
-    clipTitle = QLabel("Select Combined Raster and Create Clipped Raster")
+    clipTitle = QLabel("Select Raster and Create Clipped Raster")
     clipTitle.setAlignment(Qt.AlignCenter)  # Center the label text
     clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
     clipLayout.addRow(clipTitle)
 
     dialog.step4Dropdown = QComboBox()
-    clipLayout.addRow(QLabel("Select Combined Raster:"))
+    clipLayout.addRow(QLabel("Select Raster To Clip:"))
     clipLayout.addRow(dialog.step4Dropdown)
+    
+    # Checkbox to Copy Symbology
+    dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
+    dialog.copySymbologyCheckbox.setChecked(False)  # Default checked
+    clipLayout.addRow(dialog.copySymbologyCheckbox)
     
     # File path selection
     dialog.clippedRasterPath = QLineEdit()
@@ -188,11 +193,11 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combinedfileLayout.addWidget(dialog.clippedRasterBrowse)
     clipLayout.addRow(combinedfileLayout)
 
-    dialog.clip_button = QPushButton("Clip Combined Raster to Area")
+    dialog.clip_button = QPushButton("Clip Raster to Area")
     clipLayout.addWidget(dialog.clip_button)
 
     clipGroupBox.setLayout(clipLayout)
-    middle_layout.addWidget(clipGroupBox)
+    right_layout.addWidget(clipGroupBox)
 
     ############ STEP 6: Select Clipped Combined Raster & Run r.cost, r.drain ############
     finalStepGroupBox = QGroupBox()
@@ -205,7 +210,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     finalStepLayout.addRow(finalTitle)
 
     dialog.step5Dropdown = QComboBox()
-    finalStepLayout.addRow(QLabel("Select Clipped Combined Raster:"))
+    finalStepLayout.addRow(QLabel("Select Combined Raster:"))
     finalStepLayout.addRow(dialog.step5Dropdown)
 
     # Cost Raster Output Path

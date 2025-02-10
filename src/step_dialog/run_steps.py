@@ -3,9 +3,10 @@ from qgis.core import QgsProject, QgsApplication, QgsMapLayer
 from ..analysis.cost import clip_raster_to_vector, combine_rasters_with_qgis_raster_calculator, run_r_cost
 from ..analysis.drain import run_r_drain_and_load
 from ..complete_dialog.land_use import get_land_use_class_costs
-from qgis.core import QgsTask, QgsMessageLog
+from qgis.core import QgsTask, QgsMessageLog, QgsRasterLayer
 from ..analysis.land_use import get_land_use_costs_raster
 from ..analysis.dem import create_slope_layer_from_dem
+import os
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -137,6 +138,12 @@ def run_step4_logic(dialog: 'StepByStepDialog'):
         dialog.log_message("Clipping Combined Raster to Area...")
         clip_raster_to_vector(get_layer_path(combined_layer), points_layer, output_path)
         dialog.log_message(f"Clipped Combined Raster created successfully at: {output_path}")
+        
+        # ✅ Copy Symbology if checkbox is checked
+        if dialog.copySymbologyCheckbox.isChecked():
+            dialog.log_message("Copying symbology from original raster...")
+            apply_symbology(combined_layer, output_path)
+            dialog.log_message("Symbology copied successfully.")
 
     except ValueError as ve:
         error_message = f"Clipping Combined Raster to Area Has Validation Errors: {str(ve)}"
@@ -244,3 +251,22 @@ def get_layer_path(layer):
         return uri.split("|")[0]
     
     raise ValueError("Unsupported layer type. Only Raster and Vector layers are supported.")
+
+def apply_symbology(original_layer, clipped_path):
+    """Applies symbology from the original raster to the clipped raster without adding it to QGIS."""
+    if not original_layer or not clipped_path:
+        raise ValueError("Layers are None")
+
+    # Define temporary QML style file
+    style_path = os.path.splitext(clipped_path)[0] + ".qml"
+
+    # Save original layer symbology to QML file
+    original_layer.saveNamedStyle(style_path)
+
+    # Load clipped raster layer (but NOT add it to the project)
+    clipped_layer = QgsRasterLayer(clipped_path, "Clipped Raster", "gdal")
+
+    if clipped_layer.isValid():
+        # Apply saved QML symbology to the clipped raster
+        clipped_layer.loadNamedStyle(style_path)
+        clipped_layer.triggerRepaint()  # Ensure it updates
