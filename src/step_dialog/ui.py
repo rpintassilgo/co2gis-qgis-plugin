@@ -67,12 +67,44 @@ def setup_ui(dialog: 'StepByStepDialog'):
     fileLayout.addWidget(dialog.slopeRasterPath)
     fileLayout.addWidget(dialog.slopeRasterBrowse)
     demLayout.addRow(fileLayout)
+    
+    # -------- Slope Cost Table Title --------
+    slopeCostsTitle = QLabel("Define Slope Cost Intervals")
+    slopeCostsTitle.setAlignment(Qt.AlignCenter)
+    slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    demLayout.addRow(slopeCostsTitle)
 
-    dialog.create_slope_button = QPushButton("Create Slope Raster from DEM")
+    # -------- Slope Cost Table --------
+    dialog.slopeCostTable = QTableWidget()
+    dialog.slopeCostTable.setColumnCount(4)
+    dialog.slopeCostTable.setHorizontalHeaderLabels(["Min % Slope", "Max % Slope", "Cost", "No Upper Limit"])
+    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    demLayout.addRow(dialog.slopeCostTable)
+
+    # -------- Add/Remove Row Buttons --------
+    slopeTableButtonsLayout = QHBoxLayout()
+    dialog.addSlopeRowButton = QPushButton("Add Row")
+    dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
+    slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
+    slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
+    demLayout.addRow(slopeTableButtonsLayout)
+    
+    # File path selection
+    dialog.slopeCostsRasterPath = QLineEdit()
+    dialog.slopeCostsRasterPath.setPlaceholderText("Choose output path for Slope Costs Raster")
+    dialog.slopeCostsRasterBrowse = QPushButton("Browse")
+    dialog.slopeCostsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeCostsRasterPath, "tif"))
+    
+    fileCostsLayout = QHBoxLayout()
+    fileCostsLayout.addWidget(dialog.slopeCostsRasterPath)
+    fileCostsLayout.addWidget(dialog.slopeCostsRasterBrowse)
+    demLayout.addRow(fileCostsLayout)
+
+    dialog.create_slope_button = QPushButton("Create Slope Costs Raster from DEM")
     demLayout.addWidget(dialog.create_slope_button)
 
     demGroupBox.setLayout(demLayout)
-    left_layout.addWidget(demGroupBox)
+    middle_layout.addWidget(demGroupBox)
 
     ############ STEP 3: Select Land Use Layer, Get Classes & Create Costs Raster ############
     landUseGroupBox = QGroupBox()
@@ -114,7 +146,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     landUseLayout.addWidget(dialog.create_land_use_costs_button)
 
     landUseGroupBox.setLayout(landUseLayout)
-    left_layout.addWidget(landUseGroupBox)
+    middle_layout.addWidget(landUseGroupBox)
 
     ############ STEP 4: Combine Rasters (Land Use & Slope) ############
     combineGroupBox = QGroupBox()
@@ -135,16 +167,16 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.step3LandUseDropdown = QComboBox()
     dialog.step3SlopeDropdown = QComboBox()
     combineLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.step3LandUseDropdown)
-    combineLayout.addRow(QLabel("Select Slope Raster:"), dialog.step3SlopeDropdown)
+    combineLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.step3SlopeDropdown)
 
     # Weights Input Fields
     dialog.landUseCostWeightInput = QLineEdit()
     dialog.landUseCostWeightInput.setPlaceholderText("Enter Land Use Costs Weight")
     dialog.slopeRasterWeightInput = QLineEdit()
-    dialog.slopeRasterWeightInput.setPlaceholderText("Enter Slope Weight")
+    dialog.slopeRasterWeightInput.setPlaceholderText("Enter Slope Costs Weight")
 
     combineLayout.addRow(QLabel("Land Use Costs Weight:"), dialog.landUseCostWeightInput)
-    combineLayout.addRow(QLabel("Slope Weight:"), dialog.slopeRasterWeightInput)
+    combineLayout.addRow(QLabel("Slope Costs Weight:"), dialog.slopeRasterWeightInput)
     
     # File path selection
     dialog.combinedRasterPath = QLineEdit()
@@ -161,7 +193,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combineLayout.addRow(dialog.combine_button)
 
     combineGroupBox.setLayout(combineLayout)
-    middle_layout.addWidget(combineGroupBox)
+    left_layout.addWidget(combineGroupBox)
 
     ############ STEP 5: Select Combined Raster & Clip ############
     clipGroupBox = QGroupBox()
@@ -262,7 +294,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     finalStepLayout.addWidget(dialog.final_button)
 
     finalStepGroupBox.setLayout(finalStepLayout)
-    middle_layout.addWidget(finalStepGroupBox)
+    left_layout.addWidget(finalStepGroupBox)
     
     ############ STEP 7: Resample rasters ############
     

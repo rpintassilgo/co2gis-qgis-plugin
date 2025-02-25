@@ -73,7 +73,7 @@ def run_r_cost(land_use_layer, points_layer, cost_output_path, direction_output_
     try:
         vector_layer: QgsVectorLayer = points_layer
         
-        # Get the coordinates of the points in the points_layer
+        # Extract start point coordinates from vector layer
         start_coordinates = []
         for feature in vector_layer.getFeatures():
             geometry = feature.geometry()
@@ -83,39 +83,32 @@ def run_r_cost(land_use_layer, points_layer, cost_output_path, direction_output_
                 point = geometry.asPoint()
             start_coordinates.append(f"{point.x()},{point.y()}")
 
-        # Ensure there are at least two points
-        if len(start_coordinates) < 2:
-            raise RuntimeError("At least two points are required for least-cost path analysis.")
+        if len(start_coordinates) < 1:
+            raise RuntimeError("At least one start point is required for r.cost.")
 
-        # Use the first point as the start and the last point as the stop
-        start_coord = start_coordinates[0]
-        stop_coord = start_coordinates[-1]
-        
+        start_coord = start_coordinates[0]  # Use first point as start
+
+        # Define r.cost parameters
         params_r_cost = {
             'input': land_use_layer,
-            #'start_points': points_layer,
-            'start_coordinates': start_coord,  # Start coordinates (east, north)
-            'stop_coordinates': stop_coord,  # Stop coordinates (east, north)
-            'output': cost_output_path,
-            'outdir': direction_output_path,  # Output direction raster
-            'memory': 2000, # allocate 2GB
-            'max_cost': None,  # Optional max cost
-            'GRASS_REGION_PARAMETER': None,  # Optional for region alignment
-            'flags': 'c'  # Prevent adding a color table to the raster
+            'start_coordinates': start_coord,  # Start point
+            'output': cost_output_path,  # Cumulative cost raster
+            'outdir': direction_output_path,  # Movement directions raster
+            'memory': 2000,
+            'max_cost': None,
+            'GRASS_REGION_PARAMETER': None,  
+            'flags': ''  # No color table (c talvez de prevent do add color table ver depois)
         }
     
         result = processing.run("grass7:r.cost", params_r_cost)
 
-        if not result.get('output') or not os.path.exists(cost_output_path):
-            raise RuntimeError("Cost raster not generated.")
+        if not os.path.exists(cost_output_path) or not os.path.exists(direction_output_path):
+            raise RuntimeError("r.cost failed to generate outputs.")
         
-        if not os.path.exists(direction_output_path):
-            raise RuntimeError("Direction raster not generated.")
-        
-        # Return both cost and direction outputs
         return {
-            'cost_raster': cost_output_path,
-            'direction_raster': direction_output_path
+            'cost_raster': cost_output_path,  # This is the cumulative cost
+            'direction_raster': direction_output_path  # This is the movement direction
         }
+
     except Exception as e:
-        raise RuntimeError(f"{str(e)}")
+        raise RuntimeError(f"Error in r.cost: {str(e)}")

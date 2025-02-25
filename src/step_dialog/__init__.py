@@ -1,8 +1,9 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton,
-    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog, QDialog
+    QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton, QCheckBox, QTableWidgetItem,
+    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog, QDialog, QSpinBox
 )
+from PyQt5.QtCore import Qt
 from qgis.core import QgsProject
 from .ui import setup_ui
 from .dropdowns import populate_layer_step_by_step_dropdowns
@@ -52,11 +53,16 @@ class StepByStepDialog(QDialog):
         self.runResampleButton: QPushButton
         self.log_output: QTextEdit
         self.clear_log_button: QPushButton
+        self.slopeCostTable: QTableWidget
+        self.addSlopeRowButton: QPushButton
+        self.removeSlopeRowButton: QPushButton
 
         # Setup UI and populate dropdowns
         setup_ui(self)
         populate_layer_step_by_step_dropdowns(self)
         QgsProject.instance().layersAdded.connect(lambda: populate_layer_step_by_step_dropdowns(self))
+        setup_slope_cost_table_logic(self)
+
 
         # Connect buttons to step execution functions
         self.classify_button.clicked.connect(lambda: populate_land_use_classes_table(self))
@@ -74,8 +80,69 @@ class StepByStepDialog(QDialog):
         
     def clear_logs(self):
         self.log_output.clear()
+        
+    def get_slope_cost_intervals(self):
+        """Extract slope intervals and costs from the table."""
+        intervals = []
+        for row in range(self.slopeCostTable.rowCount()):
+            min_spin = self.slopeCostTable.cellWidget(row, 0)
+            max_spin = self.slopeCostTable.cellWidget(row, 1)
+            cost_item = self.slopeCostTable.item(row, 2)
+            no_limit_checkbox = self.slopeCostTable.cellWidget(row, 3)
+
+            min_val = min_spin.value()
+            max_val = max_spin.value() if not no_limit_checkbox.isChecked() else None
+            cost = float(cost_item.text())
+
+            intervals.append({"min": min_val, "max": max_val, "cost": cost})
+
+        return intervals
 
 def open_step_by_step_dialog(parent):
     """Opens the Step-by-Step Analysis dialog."""
     step_dialog = StepByStepDialog(parent)
     step_dialog.exec_()
+    
+def setup_slope_cost_table_logic(self):
+    """Connects buttons to their functions for the slope cost table."""
+    self.addSlopeRowButton.clicked.connect(lambda: add_slope_row(self))
+    self.removeSlopeRowButton.clicked.connect(lambda: remove_selected_slope_row(self))
+    add_slope_row(self)  # Add initial row
+
+def add_slope_row(self):
+    """Add a new row to the slope cost table."""
+    row_position = self.slopeCostTable.rowCount()
+    self.slopeCostTable.insertRow(row_position)
+
+    # Min % Slope SpinBox
+    min_spin = QSpinBox()
+    min_spin.setRange(0, 1000)
+    self.slopeCostTable.setCellWidget(row_position, 0, min_spin)
+
+    # Max % Slope SpinBox
+    max_spin = QSpinBox()
+    max_spin.setRange(0, 1000)
+    self.slopeCostTable.setCellWidget(row_position, 1, max_spin)
+
+    # Cost Input
+    cost_item = QTableWidgetItem("1.0")
+    self.slopeCostTable.setItem(row_position, 2, cost_item)
+
+    # No Upper Limit Checkbox
+    no_limit_checkbox = QCheckBox()
+    self.slopeCostTable.setCellWidget(row_position, 3, no_limit_checkbox)
+
+    # Connect checkbox logic to disable Max % Slope
+    def toggle_max_spin(state):
+        max_spin.setDisabled(state == Qt.Checked)
+        if state == Qt.Checked:
+            max_spin.setValue(0)
+
+    no_limit_checkbox.stateChanged.connect(toggle_max_spin)
+
+def remove_selected_slope_row(self):
+    """Remove selected rows from the slope cost table."""
+    selected_rows = set(idx.row() for idx in self.slopeCostTable.selectedIndexes())
+    for row in sorted(selected_rows, reverse=True):
+        self.slopeCostTable.removeRow(row)
+

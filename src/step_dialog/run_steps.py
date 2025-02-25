@@ -5,7 +5,7 @@ from ..analysis.drain import run_r_drain_and_load
 from ..complete_dialog.land_use import get_land_use_class_costs
 from qgis.core import QgsTask, QgsMessageLog, QgsRasterLayer
 from ..analysis.land_use import get_land_use_costs_raster
-from ..analysis.dem import create_slope_layer_from_dem
+from ..analysis.dem import create_slope_costs_from_slope, create_slope_layer_from_dem
 import os
 
 if TYPE_CHECKING:
@@ -65,10 +65,26 @@ def run_step2_logic(dialog: 'StepByStepDialog'):
         output_path = dialog.slopeRasterPath.text()
         if not output_path:
             raise ValueError("No output path specified for Slope Raster.")
+        
+        costs_outputh_path = dialog.slopeRasterPath.text()
+        if not costs_outputh_path:
+            raise ValueError("No output path specified for Slope Costs Raster.")
 
         dialog.log_message("Creating Slope Raster from DEM...")
         create_slope_layer_from_dem(dem_layer, output_path)
         dialog.log_message(f"Slope Raster created successfully at: {output_path}")
+        
+        # Load the raster layer from the path
+        layer = QgsRasterLayer(output_path, "slope_layer")
+        slope_layer = QgsProject.instance().addMapLayer(layer)
+
+        if not slope_layer.isValid():
+            raise RuntimeError(f"Invalid slope raster layer: {output_path}")
+        
+        slope_costs = dialog.get_slope_cost_intervals()
+        dialog.log_message("Creating Slope Costs Raster from Slope Raster...")
+        create_slope_costs_from_slope(slope_layer, slope_costs, costs_outputh_path)
+        dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}")
     except Exception as e:
         error_message = f"Creating Slope Raster from DEM Has Failed {str(e)}"
         dialog.log_message(error_message)
