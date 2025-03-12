@@ -7,6 +7,8 @@
  ***************************************************************************/
 """
 from PyQt5.QtWidgets import QAction
+
+from .src.pipeline_costs import PipelineCostsDialog
 from .src.complete_dialog import Dialog
 from .src.step_dialog import StepByStepDialog
 
@@ -15,8 +17,10 @@ class LeastCostPipelinePlugin:
         self.iface = iface
         self.dialog = None
         self.step_dialog = None
+        self.pipeline_costs_dialog = None
         self.complete_analysis_action = None
         self.step_by_step_action = None
+        self.pipeline_costs_action = None
 
     def initGui(self):
         # Action for "Complete Analysis"
@@ -30,6 +34,12 @@ class LeastCostPipelinePlugin:
         self.step_by_step_action.triggered.connect(self.show_step_dialog)
         self.iface.addToolBarIcon(self.step_by_step_action)
         self.iface.addPluginToMenu("&Least Cost Pipeline", self.step_by_step_action)
+        
+        # Action for "Pipeline Costs"
+        self.pipeline_costs_action = QAction("Pipeline Price Costs", self.iface.mainWindow())
+        self.pipeline_costs_action.triggered.connect(self.show_pipeline_costs_dialog)
+        self.iface.addToolBarIcon(self.pipeline_costs_action)
+        self.iface.addPluginToMenu("&Least Cost Pipeline", self.pipeline_costs_action)
 
     def unload(self):
         # Remove the actions from the menu and toolbar
@@ -38,6 +48,10 @@ class LeastCostPipelinePlugin:
 
         self.iface.removePluginMenu("&Least Cost Pipeline", self.step_by_step_action)
         self.iface.removeToolBarIcon(self.step_by_step_action)
+        
+        self.iface.removePluginMenu("&Least Cost Pipeline", self.pipeline_costs_action)
+        self.iface.removeToolBarIcon(self.pipeline_costs_action)
+
 
     def show_dialog(self):
         # Show the Complete Analysis dialog
@@ -50,6 +64,11 @@ class LeastCostPipelinePlugin:
         if not self.step_dialog:
             self.step_dialog = StepByStepDialog()
         self.step_dialog.show()
+        
+    def show_pipeline_costs_dialog(self):
+        if not self.pipeline_costs_dialog:
+            self.pipeline_costs_dialog = PipelineCostsDialog()
+        self.pipeline_costs_dialog.show()
 
 def classFactory(iface):
     return LeastCostPipelinePlugin(iface)
