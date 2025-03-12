@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton,
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout
 )
+from .dropdowns import populate_layer_costs_dropdowns
 
 class PipelineCostsDialog(QDialog):
     def __init__(self, parent=None):
@@ -28,6 +29,7 @@ class PipelineCostsDialog(QDialog):
         # Connect button signals
         #self.calculateButton.clicked.connect(self.calculate_pipeline_costs)
         #self.clearLogButton.clicked.connect(self.clear_logs)
+        populate_layer_costs_dropdowns(self)
         
 
     def calculate_pipeline_costs(self):

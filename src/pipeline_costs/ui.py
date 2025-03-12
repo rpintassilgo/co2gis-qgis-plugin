@@ -1,3 +1,4 @@
+from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QLineEdit, QPushButton, QFormLayout,
     QGroupBox, QHBoxLayout, QTextEdit, QTabWidget, QCheckBox
@@ -7,7 +8,10 @@ import math
 
 from PyQt5.QtWidgets import QLabel, QGroupBox, QVBoxLayout, QHBoxLayout
 
-def setup_formula_groupbox(dialog):
+if TYPE_CHECKING:
+    from ..pipeline_costs import PipelineCostsDialog
+
+def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
     """Create a group box with side-by-side equations for D and I"""
     formulaGroupBox = QGroupBox()
     formulaGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
@@ -75,10 +79,10 @@ def setup_formula_groupbox(dialog):
     return formulaGroupBox
 
 
-def setup_ui(dialog):
+def setup_ui(dialog: 'PipelineCostsDialog'):
     """Set up the UI for PipelineCostsDialog."""
     dialog.setWindowTitle("Pipeline Price Costs")
-    dialog.setGeometry(0, 0, 1050, 650)
+    dialog.setGeometry(0, 0, 1050, 500)
 
     main_layout = QVBoxLayout()
     columns_layout = QHBoxLayout()
