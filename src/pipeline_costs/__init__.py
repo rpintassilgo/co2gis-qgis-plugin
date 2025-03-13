@@ -15,20 +15,21 @@ class PipelineCostsDialog(QDialog):
         self.pipelineVectorDropdown: QComboBox
         self.landUseCostsDropdown: QComboBox
         self.slopeCostsDropdown: QComboBox
+        self.pipelineLengthInput: QLineEdit
         self.standardizedCostInput: QLineEdit
         self.frictionFactorInput: QLineEdit
         self.massFlowRateInput: QLineEdit
-        self.co2DensityInput: QLineEdit
+        self.co2densityInput: QLineEdit
         self.pressureDropInput: QLineEdit
         self.log_output: QTextEdit
         self.tabs: QTabWidget
-        self.clear_log_button: QPushButton
+        self.clearLogButton: QPushButton
 
         setup_ui(self)
 
         # Connect button signals
         #self.calculateButton.clicked.connect(self.calculate_pipeline_costs)
-        #self.clearLogButton.clicked.connect(self.clear_logs)
+        self.clearLogButton.clicked.connect(self.clear_logs)
         populate_layer_costs_dropdowns(self)
         
 

@@ -129,9 +129,9 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     inputTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     inputLayout.addRow(inputTitle)
 
-    dialog.pipelineLength = QLineEdit()
-    dialog.pipelineLength.setReadOnly(True)
-    inputLayout.addRow(QLabel("Pipeline Length (L,\u00A0 in m):"), dialog.pipelineLength)
+    dialog.pipelineLengthInput = QLineEdit()
+    dialog.pipelineLengthInput.setReadOnly(True)
+    inputLayout.addRow(QLabel("Pipeline Length (L,\u00A0 in m):"), dialog.pipelineLengthInput)
     
     dialog.standardizedCostInput = QLineEdit()
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>,\u00A0 in €/m<sup>2</sup>):"), dialog.standardizedCostInput)
@@ -161,7 +161,7 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     dialog.tabs.addTab(dialog.log_output, "Log")
     main_layout.addWidget(dialog.tabs)
 
-    dialog.clear_log_button = QPushButton("Clear Logs")
-    main_layout.addWidget(dialog.clear_log_button)
+    dialog.clearLogButton = QPushButton("Clear Logs")
+    main_layout.addWidget(dialog.clearLogButton)
 
     dialog.setLayout(main_layout)
