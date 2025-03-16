@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QDialog
+from .run_costs import calculate_pipeline_costs
 from qgis.core import QgsProject
 from .ui import setup_ui
 from PyQt5.QtWidgets import (
@@ -31,6 +32,7 @@ class PipelineCostsDialog(QDialog):
         #self.calculateButton.clicked.connect(self.calculate_pipeline_costs)
         self.clearLogButton.clicked.connect(self.clear_logs)
         populate_layer_costs_dropdowns(self)
+        self.calculateButton.clicked.connect(lambda: calculate_pipeline_costs(self))
         
 
     def calculate_pipeline_costs(self):

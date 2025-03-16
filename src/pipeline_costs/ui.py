@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QHBoxLayout, QTextEdit, QTabWidget, QCheckBox
 )
 from PyQt5.QtCore import Qt
-import math
+from qgis.core import QgsProject, QgsUnitTypes, QgsVectorLayer
 
 from PyQt5.QtWidgets import QLabel, QGroupBox, QVBoxLayout, QHBoxLayout
 
@@ -62,7 +62,7 @@ def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
         <html>
             <body>
                 <p align="center" style="font-size:25px; font-weight:bold;">
-                    I = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>s</sub> ⋅ F<sub>lu</sub> ⋅ L }
+                    I = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N] ⋅ L<sub>cell</sub> }
                 </p>
             </body>
         </html>
@@ -110,11 +110,20 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     selectionLayout.addRow(selectionTitle)
 
     dialog.pipelineVectorDropdown = QComboBox()
+    dialog.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
     dialog.landUseCostsDropdown = QComboBox()
+    dialog.landUseCostsDropdown.currentIndexChanged.connect(lambda: update_land_use_resolution(dialog))
     dialog.slopeCostsDropdown = QComboBox()
+    dialog.slopeCostsDropdown.currentIndexChanged.connect(lambda: update_slope_resolution(dialog))
     selectionLayout.addRow(QLabel("Select Pipeline Vector:"), dialog.pipelineVectorDropdown)
     selectionLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.landUseCostsDropdown)
     selectionLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.slopeCostsDropdown)
+    
+    dialog.landUseCostsResInput = QLineEdit()
+    selectionLayout.addRow(QLabel("Land Use Costs Resolution:"), dialog.landUseCostsResInput)
+    
+    dialog.slopeCostsResInput = QLineEdit()
+    selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.slopeCostsResInput)
 
     selectionGroupBox.setLayout(selectionLayout)
     left_layout.addWidget(selectionGroupBox)
@@ -132,6 +141,9 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     dialog.pipelineLengthInput = QLineEdit()
     dialog.pipelineLengthInput.setReadOnly(True)
     inputLayout.addRow(QLabel("Pipeline Length (L,\u00A0 in m):"), dialog.pipelineLengthInput)
+    
+    dialog.numInfrastructureInput = QLineEdit()
+    inputLayout.addRow(QLabel("Number of infrastructure crossings (N):"), dialog.numInfrastructureInput)
     
     dialog.standardizedCostInput = QLineEdit()
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>,\u00A0 in €/m<sup>2</sup>):"), dialog.standardizedCostInput)
@@ -153,6 +165,10 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
 
     inputGroupBox.setLayout(inputLayout)
     right_layout.addWidget(inputGroupBox)
+    
+    ############ CALCULATE BTN #########
+    dialog.calculateButton = QPushButton("Calculate pipeline price")
+    main_layout.addWidget(dialog.calculateButton)
 
     ############ LOG OUTPUT ############
     dialog.log_output = QTextEdit()
@@ -165,3 +181,55 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     main_layout.addWidget(dialog.clearLogButton)
 
     dialog.setLayout(main_layout)
+    
+def update_land_use_resolution(dialog):
+    raster_layer = QgsProject.instance().mapLayer(dialog.landUseCostsDropdown.currentData())
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+
+        # Compute the average resolution and round it
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+
+        # Determine unit type (meters vs. degrees)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+
+        # Update UI with correct unit
+        dialog.landUseCostsResInput.setText(f"~{avg_resolution} {unit}")
+        
+def update_slope_resolution(dialog):
+    raster_layer = QgsProject.instance().mapLayer(dialog.slopeCostsDropdown.currentData())
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+
+        # Compute the average resolution and round it
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+
+        # Determine unit type (meters vs. degrees)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+
+        # Update UI with correct unit
+        dialog.slopeCostsResInput.setText(f"~{avg_resolution} {unit}")
+
+def update_pipeline_length(dialog: 'PipelineCostsDialog'):
+    """Calculate the total length of the selected pipeline vector and update the input field."""
+    selected_index = dialog.pipelineVectorDropdown.currentIndex()
+    if selected_index == -1:
+        dialog.pipelineLengthInput.setText("")
+        return
+
+    layer_id = dialog.pipelineVectorDropdown.currentData()
+    layer = QgsProject.instance().mapLayer(layer_id)
+
+    if not isinstance(layer, QgsVectorLayer):
+        dialog.log_message("Selected layer is not a valid polyline vector.")
+        return
+
+    total_length = sum(f.geometry().length() for f in layer.getFeatures())
+    rounded_length = str(round(total_length, 2))
+
+    dialog.pipelineLengthInput.setText(rounded_length)
+    dialog.log_message(f"Pipeline Length updated: {rounded_length} m")

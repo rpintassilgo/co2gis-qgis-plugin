@@ -26,8 +26,6 @@ def populate_layer_costs_dropdowns(dialog: 'PipelineCostsDialog'):
         elif isinstance(layer, QgsRasterLayer):
             dialog.landUseCostsDropdown.addItem(layer_name, layer_id)
             dialog.slopeCostsDropdown.addItem(layer_name, layer_id)
-
-    dialog.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
     
     # Logging messages if no layers are found
     if dialog.pipelineVectorDropdown.count() == 0:
@@ -36,23 +34,3 @@ def populate_layer_costs_dropdowns(dialog: 'PipelineCostsDialog'):
         dialog.log_message("No raster layers found for Land Use Costs.")
     if dialog.slopeCostsDropdown.count() == 0:
         dialog.log_message("No raster layers found for Slope Costs.")
-
-def update_pipeline_length(dialog: 'PipelineCostsDialog'):
-    """Calculate the total length of the selected pipeline vector and update the input field."""
-    selected_index = dialog.pipelineVectorDropdown.currentIndex()
-    if selected_index == -1:
-        dialog.pipelineLengthInput.setText("")
-        return
-
-    layer_id = dialog.pipelineVectorDropdown.currentData()
-    layer = QgsProject.instance().mapLayer(layer_id)
-
-    if not isinstance(layer, QgsVectorLayer):
-        dialog.log_message("Selected layer is not a valid polyline vector.")
-        return
-
-    total_length = sum(f.geometry().length() for f in layer.getFeatures())
-    rounded_length = str(round(total_length, 2))
-
-    dialog.pipelineLengthInput.setText(rounded_length)
-    dialog.log_message(f"Pipeline Length updated: {rounded_length} m")
