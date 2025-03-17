@@ -11,12 +11,43 @@ from PyQt5.QtWidgets import QLabel, QGroupBox, QVBoxLayout, QHBoxLayout
 if TYPE_CHECKING:
     from ..pipeline_costs import PipelineCostsDialog
 
+def setup_description_groupbox(dialog: 'PipelineCostsDialog'):
+    descriptionGroupBox = QGroupBox()
+    descriptionGroupBox.setStyleSheet("QGroupBox { border: 0px; }")
+    descriptionLayout = QFormLayout()
+    
+    dialog.descriptionLabel = QLabel()
+    dialog.descriptionLabel.setText("""
+        <html>
+            <body>
+                <p style="text-align:justify; font-size:11px;">
+                    ⓘ This submenu calculates the total pipeline cost (<b>I<sub>total</sub></b>) based on its length.
+                    If the pipeline is <b>150 km or less</b>, the cost is calculated using a single <b>I<sub>P</sub></b>
+                    with the total length in the <b>D</b> equation. <br> If the pipeline is longer than <b>150 km</b>, 
+                    it is split into <b>segments of up to 150 km</b>, and multiple <b>I<sub>P</sub></b> values are calculated. <br>
+                    In these calculations, <b>L<sub>segment</sub></b> is the length of each segment (max 150 km), while 
+                    <b>L<sub>cell</sub></b> represents the pipeline length inside each GIS cell. <br>
+                    Booster stations are added after every 150 km, and their costs (<b>I<sub>B</sub></b>)
+                    are included in <b>I<sub>total</sub></b>.
+                </p>
+            </body>
+        </html>
+    """)
+    dialog.descriptionLabel.setStyleSheet("color: lightgrey;")  # Make text bold
+    descriptionLayout.addRow(dialog.descriptionLabel)
+    
+    descriptionGroupBox.setLayout(descriptionLayout)
+    
+    return descriptionGroupBox
+
+    
 def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
     """Create a group box with side-by-side equations for D and I"""
     formulaGroupBox = QGroupBox()
     formulaGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
 
     formulaHLayout = QHBoxLayout()
+    formulaH2Layout = QHBoxLayout()
     formulaLayout = QFormLayout()
     
     formulaTitle = QLabel("Formulas")
@@ -38,7 +69,7 @@ def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
                             <table align="center" border="0" cellspacing="0" cellpadding="0">
                                 <tr>
                                     <td style="text-align:center; font-size:18px; padding-bottom:2px;">
-                                        8 ⋅ λ ⋅ M² ⋅ L
+                                        8 ⋅ λ ⋅ M² ⋅ L<sub>segment</sub>
                                     </td>
                                 </tr>
                                 <tr>
@@ -56,13 +87,13 @@ def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
         </html>
     """)
 
-    # I Equation
-    dialog.I_formula_label = QLabel()
-    dialog.I_formula_label.setText("""
+    # Ip Equation
+    dialog.Ip_formula_label = QLabel()
+    dialog.Ip_formula_label.setText("""
         <html>
             <body>
                 <p align="center" style="font-size:25px; font-weight:bold;">
-                    I = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N] ⋅ L<sub>cell</sub> }
+                    I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N] ⋅ L<sub>cell</sub> }
                 </p>
             </body>
         </html>
@@ -70,9 +101,66 @@ def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
 
     # Add both equations side by side
     formulaHLayout.addWidget(dialog.D_formula_label)
-    formulaHLayout.addWidget(dialog.I_formula_label)
-    
+    formulaHLayout.addWidget(dialog.Ip_formula_label)
     formulaLayout.addRow(formulaHLayout)
+    
+    # Sc Equation
+    dialog.Sc_formula_label = QLabel()
+    dialog.Sc_formula_label.setText("""
+        <html>
+            <body>
+                <table align="center" border="0" cellspacing="0" cellpadding="5">
+                    <tr>
+                        <td style="font-size:25px; font-weight:bold; text-align:right;">S<sub>c</sub></td>
+                        <td style="font-size:25px; font-weight:bold; text-align:center;">=</td>
+                        <td>
+                            <table align="center" border="0" cellspacing="0" cellpadding="0">
+                                <tr>
+                                    <td style="text-align:center; font-size:18px; padding-bottom:2px;">
+                                        M ⋅ Δp
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">
+                                        &#961; ⋅ B<sub>eff</sub>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+        </html>
+    """)
+    
+    # Ib Equation
+    dialog.Ib_formula_label = QLabel()
+    dialog.Ib_formula_label.setText("""
+        <html>
+            <body>
+                <p align="center" style="font-size:25px; font-weight:bold;">
+                    I<sub>B</sub> = 0.547 ⋅ S<sub>c</sub> + 0.42
+                </p>
+            </body>
+        </html>
+    """)
+    
+    formulaH2Layout.addWidget(dialog.Sc_formula_label)
+    formulaH2Layout.addWidget(dialog.Ib_formula_label)
+    formulaLayout.addRow(formulaH2Layout)
+    
+    # Itotal Equation
+    dialog.Itotal_formula_label = QLabel()
+    dialog.Itotal_formula_label.setText("""
+        <html>
+            <body>
+                <p align="center" style="font-size:25px; font-weight:bold;">
+                    I<sub>total</sub> = ΣI<sub>p</sub> + ΣI<sub>B</sub>
+                </p>
+            </body>
+        </html>
+    """)
+    formulaLayout.addRow(dialog.Itotal_formula_label)
 
     formulaGroupBox.setLayout(formulaLayout)
 
@@ -91,6 +179,11 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     
     columns_layout.addLayout(left_layout, 1)
     columns_layout.addLayout(right_layout, 1)
+    
+    ############ Description ############
+    
+    descriptionGroupBox = setup_description_groupbox(dialog)
+    main_layout.addWidget(descriptionGroupBox)
     
     ############ Formula ############
     
@@ -146,6 +239,7 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     inputLayout.addRow(QLabel("Number of infrastructure crossings (N):"), dialog.numInfrastructureInput)
     
     dialog.standardizedCostInput = QLineEdit()
+    dialog.standardizedCostInput.setText("1357")
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>,\u00A0 in €/m<sup>2</sup>):"), dialog.standardizedCostInput)
     
     dialog.frictionFactorInput = QLineEdit()
