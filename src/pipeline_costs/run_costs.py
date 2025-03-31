@@ -4,11 +4,6 @@ import numpy as np
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 
 def calculate_pipeline_costs(dialog):
-    """
-    Calculate pipeline cost using given formulas.
-    Includes detailed logging for debugging.
-    """
-
     try:
         dialog.log_message("Calculating pipeline price...")
 
@@ -21,62 +16,83 @@ def calculate_pipeline_costs(dialog):
         # Get raster layers
         land_use_layer = get_layer_by_name(dialog.landUseCostsDropdown.currentText())
         slope_layer = get_layer_by_name(dialog.slopeCostsDropdown.currentText())
-
         if not land_use_layer or not slope_layer:
             dialog.log_message("Error: Land use or slope cost raster not found.")
             return
 
-        # Get pipeline length
-        pipeline_length = float(dialog.pipelineLengthInput.text())
-
-        # Read raster values at pipeline locations
-        raster_values = extract_raster_values(pipeline_layer, land_use_layer, slope_layer)
-
-        if not raster_values:
+        # Read raster values along full pipeline
+        full_raster_values = extract_raster_values(pipeline_layer, land_use_layer, slope_layer)
+        if not full_raster_values:
             dialog.log_message("Error: No valid raster values found for pipeline path.")
             return
 
-        # Calculate pipeline diameter D
+        # Get all input parameters
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.massFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
-
-        # Convert MPa/km to Pa/m (SI units)
-        Δp = float(dialog.pressureDropInput.text()) * 1000
-
-        D = ((8 * λ * M**2 * pipeline_length) / (np.pi**2 * p * Δp))**(1/5)
-
-        dialog.log_message(f"Calculated pipeline diameter (D): {D:.4f} m")
-
-        # Get other inputs
+        Δp = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m
         Bc = float(dialog.standardizedCostInput.text())
         N = float(dialog.numInfrastructureInput.text())
 
-        # Initialize accumulators
-        total_sum = 0
+        # Initialize
+        total_cost = 0
         total_length = 0
-        segment_index = 1
+        segment_costs = []
+        booster_costs = []
+        segment_index = 0
 
-        for Fs, Flu, cell_length in raster_values:
-            cost_factor = Fs * (Flu * (1 - 0.1 * N) + 0.1 * N)
-            segment_cost = cost_factor * cell_length
-            total_sum += segment_cost
+        max_segment_length = 150000  # 150 km in meters
+        current_segment = []
+        current_segment_length = 0
+        sub_segment_index = 1  # Tracks internal cell index for debug
+
+        for Fs, Flu, cell_length in full_raster_values:
+            current_segment.append((Fs, Flu, cell_length))
             total_length += cell_length
+            current_segment_length += cell_length
 
-            # Debug each summation iteration
-            #dialog.log_message(
-            #    f"Segment {segment_index}: L_cell = {cell_length:.2f} m, "
-            #    f"Fs = {Fs:.2f}, Flu = {Flu:.2f}, Segment Cost = {segment_cost:.2f} €"
-            #)
-            segment_index += 1
+            segment_complete = current_segment_length >= max_segment_length
+            final_segment = (total_length >= sum(cl for _, _, cl in full_raster_values))
 
-        #dialog.log_message(f"Total summed L_cell (from segments): {total_length:.2f} m")
-        #dialog.log_message(f"Total summation result: {total_sum:.2f}")
+            if segment_complete or final_segment:
+                # Calculate D using this segment length
+                L_segment = current_segment_length
+                D = ((8 * λ * M**2 * L_segment) / (np.pi**2 * p * Δp))**(1/5)
 
-        # Final cost calculation
-        I = Bc * D * total_sum
+                # Compute summation part of I_p
+                summation = 0
+                for Fs_i, Flu_i, cl_i in current_segment:
+                    cost_factor = Fs_i * (Flu_i * (1 - 0.1 * N) + 0.1 * N)
+                    segment_cost = cost_factor * cl_i
+                    summation += segment_cost
 
-        dialog.log_message(f"Calculated pipeline price (I): {I:,.2f} €")
+                    # Debug message per cell — ENABLE IF NEEDED
+                    # dialog.log_message(
+                    #     f"Segment {segment_index+1}.{sub_segment_index}: L_cell = {cl_i:.2f} m, "
+                    #     f"Fs = {Fs_i:.2f}, Flu = {Flu_i:.2f}, Segment Cost = {segment_cost:.2f} €"
+                    # )
+                    sub_segment_index += 1
+
+                Ip = Bc * D * summation
+                segment_costs.append(Ip)
+                dialog.log_message(f"Segment {segment_index+1}: D = {D:.4f} m, Segment Cost (Ip) = {Ip:,.2f} €")
+
+                # Add booster if not the last segment
+                if not final_segment:
+                    Beff = 0.75
+                    Sc = (M * Δp) / (p * Beff)
+                    Ib = 0.547 * Sc + 0.42
+                    booster_costs.append(Ib)
+                    dialog.log_message(f"Booster Cost (Ib) added: {Ib:,.2f} €")
+
+                # Reset for next segment
+                current_segment = []
+                current_segment_length = 0
+                sub_segment_index = 1
+                segment_index += 1
+
+        I_total = sum(segment_costs) + sum(booster_costs)
+        dialog.log_message(f"Calculated pipeline price (Itotal): {I_total:,.2f} €")
 
     except Exception as e:
         QMessageBox.critical(None, "Error", f"An error occurred: {str(e)}")

@@ -326,4 +326,4 @@ def update_pipeline_length(dialog: 'PipelineCostsDialog'):
     rounded_length = str(round(total_length, 2))
 
     dialog.pipelineLengthInput.setText(rounded_length)
-    dialog.log_message(f"Pipeline Length updated: {rounded_length} m")
+    dialog.log_message(f"Entire pipeline length updated: {rounded_length} m")
