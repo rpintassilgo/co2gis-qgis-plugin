@@ -6,11 +6,12 @@ from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 def calculate_pipeline_costs(dialog):
     """
     Calculate pipeline cost using given formulas.
+    Includes detailed logging for debugging.
     """
 
     try:
-        dialog.log_message("Calculating Pipeline price..")
-        
+        dialog.log_message("Calculating pipeline price...")
+
         # Get pipeline vector layer
         pipeline_layer = get_layer_by_name(dialog.pipelineVectorDropdown.currentText())
         if not pipeline_layer:
@@ -29,40 +30,62 @@ def calculate_pipeline_costs(dialog):
         pipeline_length = float(dialog.pipelineLengthInput.text())
 
         # Read raster values at pipeline locations
-        raster_values = extract_raster_values(dialog, pipeline_layer, land_use_layer, slope_layer)
+        raster_values = extract_raster_values(pipeline_layer, land_use_layer, slope_layer)
 
-        # If no values are found, return
         if not raster_values:
             dialog.log_message("Error: No valid raster values found for pipeline path.")
             return
 
-        # Calculate D (pipeline diameter)
+        # Calculate pipeline diameter D
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.massFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
-        Δp = float(dialog.pressureDropInput.text())
+
+        # Convert MPa/km to Pa/m (SI units)
+        Δp = float(dialog.pressureDropInput.text()) * 1000
 
         D = ((8 * λ * M**2 * pipeline_length) / (np.pi**2 * p * Δp))**(1/5)
 
-        # Calculate I (pipeline cost)
+        dialog.log_message(f"Calculated pipeline diameter (D): {D:.4f} m")
+
+        # Get other inputs
         Bc = float(dialog.standardizedCostInput.text())
         N = float(dialog.numInfrastructureInput.text())
-        total_sum = sum((Fs * (Flu * (1 - 0.1 * N) + 0.1 * N) * cell_length)
-                        for Fs, Flu, cell_length in raster_values)
 
+        # Initialize accumulators
+        total_sum = 0
+        total_length = 0
+        segment_index = 1
+
+        for Fs, Flu, cell_length in raster_values:
+            cost_factor = Fs * (Flu * (1 - 0.1 * N) + 0.1 * N)
+            segment_cost = cost_factor * cell_length
+            total_sum += segment_cost
+            total_length += cell_length
+
+            # Debug each summation iteration
+            #dialog.log_message(
+            #    f"Segment {segment_index}: L_cell = {cell_length:.2f} m, "
+            #    f"Fs = {Fs:.2f}, Flu = {Flu:.2f}, Segment Cost = {segment_cost:.2f} €"
+            #)
+            segment_index += 1
+
+        #dialog.log_message(f"Total summed L_cell (from segments): {total_length:.2f} m")
+        #dialog.log_message(f"Total summation result: {total_sum:.2f}")
+
+        # Final cost calculation
         I = Bc * D * total_sum
 
-        # Display result
-        dialog.log_message(f"Pipeline Prince calculated successfully: {I:.2f} €")
-    
+        dialog.log_message(f"Calculated pipeline price (I): {I:,.2f} €")
+
     except Exception as e:
         QMessageBox.critical(None, "Error", f"An error occurred: {str(e)}")
         dialog.log_message(f"Error: {str(e)}")
 
 def extract_raster_values(pipeline_layer, land_use_layer, slope_layer):
     """
-    This function extracts raster values where the pipeline vector passes through.
-    It returns a list of tuples (Fs, Flu, cell_length).
+    This function extracts raster values at multiple points along each segment of the pipeline.
+    It returns a list of tuples (Fs, Flu, cell_length), using the maximum value for each raster per segment.
     """
     values = []
 
@@ -79,16 +102,29 @@ def extract_raster_values(pipeline_layer, land_use_layer, slope_layer):
                 start, end = line[i], line[i + 1]
                 cell_length = start.distance(end)
 
-                # get raster values at the midpoint
-                mid_x = (start.x() + end.x()) / 2
-                mid_y = (start.y() + end.y()) / 2
-                point = QgsPointXY(mid_x, mid_y)
+                # Calculate intermediate points at 0%, 25%, 50%, 75%, and 100%
+                sample_ratios = [0.0, 0.25, 0.5, 0.75, 1.0]
+                land_use_vals = []
+                slope_vals = []
 
-                Fs = get_raster_value(land_use_layer, point)
-                Flu = get_raster_value(slope_layer, point)
+                for ratio in sample_ratios:
+                    x = start.x() + (end.x() - start.x()) * ratio
+                    y = start.y() + (end.y() - start.y()) * ratio
+                    point = QgsPointXY(x, y)
 
-                if Fs is not None and Flu is not None:
-                    values.append((Fs, Flu, cell_length))
+                    Fs = get_raster_value(land_use_layer, point)
+                    Flu = get_raster_value(slope_layer, point)
+
+                    if Fs is not None:
+                        land_use_vals.append(Fs)
+                    if Flu is not None:
+                        slope_vals.append(Flu)
+
+                # Use maximum value from the samples
+                if land_use_vals and slope_vals:
+                    max_Fs = max(land_use_vals)
+                    max_Flu = max(slope_vals)
+                    values.append((max_Fs, max_Flu, cell_length))
 
     return values
 
