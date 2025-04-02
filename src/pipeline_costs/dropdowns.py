@@ -11,6 +11,8 @@ def populate_layer_costs_dropdowns(dialog: 'PipelineCostsDialog'):
     dialog.pipelineVectorDropdown.clear()
     dialog.landUseCostsDropdown.clear()
     dialog.slopeCostsDropdown.clear()
+    dialog.corridorsCostsDropdown.clear()
+    dialog.crossingsCostsDropdown.clear()
 
     # Get all layers in the project
     layers = QgsProject.instance().mapLayers().values()
@@ -26,6 +28,8 @@ def populate_layer_costs_dropdowns(dialog: 'PipelineCostsDialog'):
         elif isinstance(layer, QgsRasterLayer):
             dialog.landUseCostsDropdown.addItem(layer_name, layer_id)
             dialog.slopeCostsDropdown.addItem(layer_name, layer_id)
+            dialog.corridorsCostsDropdown.addItem(layer_name, layer_id)
+            dialog.crossingsCostsDropdown.addItem(layer_name, layer_id)
     
     # Logging messages if no layers are found
     if dialog.pipelineVectorDropdown.count() == 0:
@@ -34,3 +38,7 @@ def populate_layer_costs_dropdowns(dialog: 'PipelineCostsDialog'):
         dialog.log_message("No raster layers found for Land Use Costs.")
     if dialog.slopeCostsDropdown.count() == 0:
         dialog.log_message("No raster layers found for Slope Costs.")
+    if dialog.corridorsCostsDropdown.count() == 0:
+        dialog.log_message("No raster layers found for Corridors Costs.")
+    if dialog.crossingsCostsDropdown.count() == 0:
+        dialog.log_message("No raster layers found for Crossings Costs.")

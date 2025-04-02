@@ -93,7 +93,7 @@ def setup_formula_groupbox(dialog: 'PipelineCostsDialog'):
         <html>
             <body>
                 <p align="center" style="font-size:25px; font-weight:bold;">
-                    I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N] ⋅ L<sub>cell</sub> }
+                    I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>c</sub> ⋅F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N ⋅ F<sub>ci</sub>] ⋅ L<sub>cell</sub> }
                 </p>
             </body>
         </html>
@@ -208,15 +208,27 @@ def setup_ui(dialog: 'PipelineCostsDialog'):
     dialog.landUseCostsDropdown.currentIndexChanged.connect(lambda: update_land_use_resolution(dialog))
     dialog.slopeCostsDropdown = QComboBox()
     dialog.slopeCostsDropdown.currentIndexChanged.connect(lambda: update_slope_resolution(dialog))
+    dialog.corridorsCostsDropdown = QComboBox()
+    dialog.corridorsCostsDropdown.currentIndexChanged.connect(lambda: update_corridors_resolution(dialog))
+    dialog.crossingsCostsDropdown = QComboBox()
+    dialog.crossingsCostsDropdown.currentIndexChanged.connect(lambda: update_crossings_resolution(dialog))
     selectionLayout.addRow(QLabel("Select Pipeline Vector:"), dialog.pipelineVectorDropdown)
-    selectionLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.landUseCostsDropdown)
-    selectionLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.slopeCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
     
     dialog.landUseCostsResInput = QLineEdit()
     selectionLayout.addRow(QLabel("Land Use Costs Resolution:"), dialog.landUseCostsResInput)
     
     dialog.slopeCostsResInput = QLineEdit()
     selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.slopeCostsResInput)
+    
+    dialog.corridorsCostsResInput = QLineEdit()
+    selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.corridorsCostsResInput)
+    
+    dialog.crossingsCostsResInput = QLineEdit()
+    selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.crossingsCostsResInput)
 
     selectionGroupBox.setLayout(selectionLayout)
     left_layout.addWidget(selectionGroupBox)
@@ -307,6 +319,38 @@ def update_slope_resolution(dialog):
 
         # Update UI with correct unit
         dialog.slopeCostsResInput.setText(f"~{avg_resolution} {unit}")
+        
+def update_corridors_resolution(dialog):
+    raster_layer = QgsProject.instance().mapLayer(dialog.corridorsCostsDropdown.currentData())
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+
+        # Compute the average resolution and round it
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+
+        # Determine unit type (meters vs. degrees)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+
+        # Update UI with correct unit
+        dialog.corridorsCostsResInput.setText(f"~{avg_resolution} {unit}")
+        
+def update_crossings_resolution(dialog):
+    raster_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+
+        # Compute the average resolution and round it
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+
+        # Determine unit type (meters vs. degrees)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+
+        # Update UI with correct unit
+        dialog.crossingsCostsResInput.setText(f"~{avg_resolution} {unit}")
 
 def update_pipeline_length(dialog: 'PipelineCostsDialog'):
     """Calculate the total length of the selected pipeline vector and update the input field."""

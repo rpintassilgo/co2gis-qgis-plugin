@@ -16,12 +16,14 @@ def calculate_pipeline_costs(dialog):
         # Get raster layers
         land_use_layer = get_layer_by_name(dialog.landUseCostsDropdown.currentText())
         slope_layer = get_layer_by_name(dialog.slopeCostsDropdown.currentText())
-        if not land_use_layer or not slope_layer:
-            dialog.log_message("Error: Land use or slope cost raster not found.")
+        corridors_layer = get_layer_by_name(dialog.corridorsCostsDropdown.currentText())
+        crossings_layer = get_layer_by_name(dialog.crossingsCostsDropdown.currentText())
+        if not land_use_layer or not slope_layer or not corridors_layer or not crossings_layer:
+            dialog.log_message("Error: Cost raster not found.")
             return
 
         # Read raster values along full pipeline
-        full_raster_values = extract_raster_values(pipeline_layer, land_use_layer, slope_layer)
+        full_raster_values = extract_raster_values(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer)
         if not full_raster_values:
             dialog.log_message("Error: No valid raster values found for pipeline path.")
             return
@@ -46,13 +48,13 @@ def calculate_pipeline_costs(dialog):
         current_segment_length = 0
         sub_segment_index = 1  # Tracks internal cell index for debug
 
-        for Fs, Flu, cell_length in full_raster_values:
-            current_segment.append((Fs, Flu, cell_length))
+        for Fc, Fs, Flu, Fci, cell_length in full_raster_values:
+            current_segment.append((Fc, Fs, Flu, Fci, cell_length))
             total_length += cell_length
             current_segment_length += cell_length
 
             segment_complete = current_segment_length >= max_segment_length
-            final_segment = (total_length >= sum(cl for _, _, cl in full_raster_values))
+            final_segment = (total_length >= sum(cl for _, _, _, _, cl in full_raster_values))
 
             if segment_complete or final_segment:
                 # Calculate D using this segment length
@@ -61,8 +63,8 @@ def calculate_pipeline_costs(dialog):
 
                 # Compute summation part of I_p
                 summation = 0
-                for Fs_i, Flu_i, cl_i in current_segment:
-                    cost_factor = Fs_i * (Flu_i * (1 - 0.1 * N) + 0.1 * N)
+                for Fc_i, Fs_i, Flu_i, Fci_i, cl_i in current_segment:
+                    cost_factor = Fc_i * Fs_i * (Flu_i * (1 - 0.1 * N) + 0.1 * N * Fci_i)
                     segment_cost = cost_factor * cl_i
                     summation += segment_cost
 
@@ -98,7 +100,7 @@ def calculate_pipeline_costs(dialog):
         QMessageBox.critical(None, "Error", f"An error occurred: {str(e)}")
         dialog.log_message(f"Error: {str(e)}")
 
-def extract_raster_values(pipeline_layer, land_use_layer, slope_layer):
+def extract_raster_values(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer):
     """
     This function extracts raster values at multiple points along each segment of the pipeline.
     It returns a list of tuples (Fs, Flu, cell_length), using the maximum value for each raster per segment.
@@ -120,27 +122,37 @@ def extract_raster_values(pipeline_layer, land_use_layer, slope_layer):
 
                 # Calculate intermediate points at 0%, 25%, 50%, 75%, and 100%
                 sample_ratios = [0.0, 0.25, 0.5, 0.75, 1.0]
+                corridors_vals = []
                 land_use_vals = []
                 slope_vals = []
+                crossings_vals = []
 
                 for ratio in sample_ratios:
                     x = start.x() + (end.x() - start.x()) * ratio
                     y = start.y() + (end.y() - start.y()) * ratio
                     point = QgsPointXY(x, y)
 
+                    Fc = get_raster_value(corridors_layer, point)
                     Fs = get_raster_value(land_use_layer, point)
                     Flu = get_raster_value(slope_layer, point)
+                    Fci = get_raster_value(crossings_layer, point)
 
                     if Fs is not None:
                         land_use_vals.append(Fs)
                     if Flu is not None:
                         slope_vals.append(Flu)
+                    if Fc is not None:
+                        corridors_vals.append(Fc)
+                    if Fci is not None:
+                        crossings_vals.append(Fci)
 
                 # Use maximum value from the samples
-                if land_use_vals and slope_vals:
+                if land_use_vals and slope_vals and corridors_vals and crossings_vals:
+                    max_Fc = max(corridors_vals)
                     max_Fs = max(land_use_vals)
                     max_Flu = max(slope_vals)
-                    values.append((max_Fs, max_Flu, cell_length))
+                    max_Fci = max(crossings_vals)
+                    values.append((max_Fc, max_Fs, max_Flu, max_Fci, cell_length))
 
     return values
 
