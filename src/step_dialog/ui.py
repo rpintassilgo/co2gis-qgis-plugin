@@ -153,7 +153,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combineGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     combineLayout = QFormLayout()
     
-    combineTitle = QLabel("Combine Rasters (Land Use and Slope)")
+    combineTitle = QLabel("Create Combined Costs Raster")
     combineTitle.setAlignment(Qt.AlignCenter)  # Center the label text
     combineTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
     combineLayout.addRow(combineTitle)
@@ -166,17 +166,27 @@ def setup_ui(dialog: 'StepByStepDialog'):
 
     dialog.step3LandUseDropdown = QComboBox()
     dialog.step3SlopeDropdown = QComboBox()
+    dialog.step3CorridorsDropdown = QComboBox()
+    dialog.step3CrossingsDropdown = QComboBox()
     combineLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.step3LandUseDropdown)
     combineLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.step3SlopeDropdown)
+    combineLayout.addRow(QLabel("Select Corridors Costs Raster:"), dialog.step3CorridorsDropdown)
+    combineLayout.addRow(QLabel("Select Crossings Costs Raster:"), dialog.step3CrossingsDropdown)
 
     # Weights Input Fields
     dialog.landUseCostWeightInput = QLineEdit()
     dialog.landUseCostWeightInput.setPlaceholderText("Enter Land Use Costs Weight")
     dialog.slopeRasterWeightInput = QLineEdit()
     dialog.slopeRasterWeightInput.setPlaceholderText("Enter Slope Costs Weight")
+    dialog.corridorsRasterWeightInput = QLineEdit()
+    dialog.corridorsRasterWeightInput.setPlaceholderText("Enter Corridors Costs Weight")
+    dialog.crossingsRasterWeightInput = QLineEdit()
+    dialog.crossingsRasterWeightInput.setPlaceholderText("Enter Crossings Costs Weight")
 
     combineLayout.addRow(QLabel("Land Use Costs Weight:"), dialog.landUseCostWeightInput)
     combineLayout.addRow(QLabel("Slope Costs Weight:"), dialog.slopeRasterWeightInput)
+    combineLayout.addRow(QLabel("Corridors Costs Weight:"), dialog.corridorsRasterWeightInput)
+    combineLayout.addRow(QLabel("Crossings Costs Weight:"), dialog.crossingsRasterWeightInput)
     
     # File path selection
     dialog.combinedRasterPath = QLineEdit()
@@ -295,6 +305,74 @@ def setup_ui(dialog: 'StepByStepDialog'):
 
     finalStepGroupBox.setLayout(finalStepLayout)
     left_layout.addWidget(finalStepGroupBox)
+
+    ############ STEP 7: Combine vectors & Create Cost Raster from Vectors ############
+
+    combineVectorsGroupBox = QGroupBox()
+    combineVectorsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    combineVectorsLayout = QFormLayout()
+
+    combineVectorsTitle = QLabel("Combine vectors & Create Cost Raster from Vectors")
+    combineVectorsTitle.setAlignment(Qt.AlignCenter)
+    combineVectorsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    combineVectorsLayout.addRow(combineVectorsTitle)
+    
+    # Select Input Vectors
+    dialog.vectorComboBox = QComboBox()
+    dialog.vector2ComboBox = QComboBox()
+    vectorSelectionLayout = QHBoxLayout()
+    vectorSelectionLayout.addWidget(dialog.vectorComboBox)
+    vectorSelectionLayout.addWidget(dialog.vector2ComboBox)
+    combineVectorsLayout.addRow(QLabel("Select Vectors:"), vectorSelectionLayout)
+
+    # Output Path Selection
+    dialog.vectorsOutputPath = QLineEdit()
+    dialog.vectorsOutputPath.setPlaceholderText("Choose output path for Combined Vectors")
+    dialog.vectorsBrowse = QPushButton("Browse")
+    dialog.vectorsBrowse.clicked.connect(lambda: select_output_file(dialog.vectorsOutputPath, "ogr"))
+    
+    outputVectorsLayout = QHBoxLayout()
+    outputVectorsLayout.addWidget(dialog.vectorsOutputPath)
+    outputVectorsLayout.addWidget(dialog.vectorsBrowse)
+    combineVectorsLayout.addRow(outputVectorsLayout)
+
+    # Run Resampling Button
+    dialog.runCombineVectorsButton = QPushButton("Combine vectors")
+    combineVectorsLayout.addWidget(dialog.runCombineVectorsButton)
+    
+    # Select vector to create raster
+    dialog.vectorRasterComboBox = QComboBox()
+    combineVectorsLayout.addRow(QLabel("Select Vector:"), dialog.vectorRasterComboBox)
+    
+    # Select vector to create raster
+    dialog.refRasterComboBox = QComboBox()
+    combineVectorsLayout.addRow(QLabel("Select Reference Raster:"), dialog.refRasterComboBox)
+    
+    # Output Path Selection
+    dialog.vectorRasterOutputPath = QLineEdit()
+    dialog.vectorRasterOutputPath.setPlaceholderText("Choose output path for Raster")
+    dialog.vectorRasterBrowse = QPushButton("Browse")
+    dialog.vectorRasterBrowse.clicked.connect(lambda: select_output_file(dialog.vectorRasterOutputPath, "tif"))
+    
+    outputVectorRasterLayout = QHBoxLayout()
+    outputVectorRasterLayout.addWidget(dialog.vectorRasterOutputPath)
+    outputVectorRasterLayout.addWidget(dialog.vectorRasterBrowse)
+    combineVectorsLayout.addRow(outputVectorRasterLayout)
+    
+    dialog.hasVectorCostInput = QLineEdit()
+    dialog.hasVectorCostInput.setPlaceholderText("Enter cost where vector is present")
+    dialog.hasNotVectorCostInput = QLineEdit()
+    dialog.hasNotVectorCostInput.setPlaceholderText("Enter cost where vector is absent")
+
+    combineVectorsLayout.addRow(QLabel("Cost for vector-covered cells:"), dialog.hasVectorCostInput)
+    combineVectorsLayout.addRow(QLabel("Cost for non-vector cells:"), dialog.hasNotVectorCostInput)
+    
+    # Run Create Raster Button
+    dialog.runCreateRasterFromVectorButton = QPushButton("Create cost raster from vector")
+    combineVectorsLayout.addWidget(dialog.runCreateRasterFromVectorButton)
+    
+    combineVectorsGroupBox.setLayout(combineVectorsLayout)
+    right_layout.addWidget(combineVectorsGroupBox)  # Add to the third column
     
     ############ STEP 7: Resample rasters ############
     

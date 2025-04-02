@@ -13,9 +13,15 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
     dialog.terrainComboBox.clear()
     dialog.step3LandUseDropdown.clear()
     dialog.step3SlopeDropdown.clear()
+    dialog.step3CorridorsDropdown.clear()
+    dialog.step3CrossingsDropdown.clear()
     dialog.step4Dropdown.clear()
     dialog.step5Dropdown.clear()
     dialog.resampleRasterComboBox.clear()
+    dialog.vectorComboBox.clear()
+    dialog.vector2ComboBox.clear()
+    dialog.vectorRasterComboBox.clear()
+    dialog.refRasterComboBox.clear()
 
     # Get all layers in the project
     layers = QgsProject.instance().mapLayers().values()
@@ -27,8 +33,15 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
         if isinstance(layer, QgsVectorLayer) and layer.geometryType() == 0:
             # Populate point layers (Step 1)
             dialog.pointsComboBox.addItem(layer_name, layer_id)
+            
+        elif isinstance(layer, QgsVectorLayer) and layer.geometryType() == 1:
+            # Populate line layers
+            dialog.vectorComboBox.addItem(layer_name, layer_id)
+            dialog.vector2ComboBox.addItem(layer_name, layer_id)
+            dialog.vectorRasterComboBox.addItem(layer_name, layer_id)
         
         elif isinstance(layer, QgsRasterLayer):
+            dialog.refRasterComboBox.addItem(layer_name, layer_id)
             # Populate DEM layers (Step 2)
             dialog.demComboBox.addItem(layer_name, layer_id)
             # Populate Land Use layers (Step 3)
@@ -36,6 +49,8 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
             # Populate Combined Raster (Step 4)
             dialog.step3LandUseDropdown.addItem(layer_name, layer_id)
             dialog.step3SlopeDropdown.addItem(layer_name, layer_id)
+            dialog.step3CorridorsDropdown.addItem(layer_name, layer_id)
+            dialog.step3CrossingsDropdown.addItem(layer_name, layer_id)
             # Populate Select Combined Raster (Step 5)
             dialog.step4Dropdown.addItem(layer_name, layer_id)
             # Populate Select Clipped Combined Raster (Step 6)

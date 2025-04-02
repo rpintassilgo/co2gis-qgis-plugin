@@ -13,17 +13,17 @@ os.environ["GRASS_VERBOSE"] = "3"  # Enable GRASS debugging
 
 from osgeo import gdal
 
-def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, weight1, weight2, output_raster_path):
+def combine_rasters_with_qgis_raster_calculator(input_raster1, input_raster2, input_raster3, input_raster4, weight1, weight2, weight3, weight4, output_raster_path):
     """
     Combine two rasters with weights without preprocessing using QGIS Raster Calculator.
     """
     try:
         feedback = QgsProcessingFeedback()
-        formula = f"({weight1} * \"{input_raster1}@1\") + ({weight2} * \"{input_raster2}@1\")"
+        formula = f"({weight1} * \"{input_raster1}@1\") + ({weight2} * \"{input_raster2}@1\") + ({weight3} * \"{input_raster3}@1\") + ({weight4} * \"{input_raster4}@1\")"
 
         params = {
             'EXPRESSION': formula,
-            'LAYERS': [input_raster1, input_raster2],
+            'LAYERS': [input_raster1, input_raster2, input_raster3, input_raster4],
             'CELLSIZE': 0,  # Automatically determines resolution
             'EXTENT': None,  # Automatically uses the union of extents
             'OUTPUT': output_raster_path

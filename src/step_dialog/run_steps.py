@@ -7,6 +7,26 @@ from qgis.core import QgsTask, QgsMessageLog, QgsRasterLayer
 from ..analysis.land_use import get_land_use_costs_raster
 from ..analysis.dem import create_slope_costs_from_slope, create_slope_layer_from_dem
 import os
+from qgis.core import (
+    QgsProject,
+    QgsVectorLayer,
+    QgsRasterLayer,
+    QgsProcessingFeedback,
+    QgsProcessing
+)
+from qgis.core import (
+    QgsProject,
+    QgsVectorLayer,
+    QgsRasterLayer,
+    QgsProcessingFeedback,
+    QgsProcessing
+)
+from PyQt5.QtWidgets import QMessageBox
+import processing
+import os
+from qgis.core import QgsVectorLayer, QgsVectorFileWriter, QgsProject, QgsFeature, QgsFields, QgsWkbTypes
+from PyQt5.QtWidgets import QMessageBox
+import processing
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -96,19 +116,27 @@ def run_step3_logic(dialog: 'StepByStepDialog'):
         # Retrieve weight inputs
         occupancy_weight = float(dialog.landUseCostWeightInput.text().strip())
         dem_weight = float(dialog.slopeRasterWeightInput.text().strip())
+        corridors_weight = float(dialog.slopeRasterWeightInput.text().strip())
+        crossings_weight = float(dialog.slopeRasterWeightInput.text().strip())
 
         # Validate weights
-        if occupancy_weight <= 0 or dem_weight <= 0:
-            raise ValueError("Both Land Use and Slope Weights must be greater than zero.")
+        if occupancy_weight <= 0 or dem_weight <= 0 or corridors_weight <= 0 or crossings_weight <= 0:
+            raise ValueError("All weights must be greater than zero.")
 
         # Retrieve selected layers
         costs_layer = QgsProject.instance().mapLayer(dialog.step3LandUseDropdown.currentData())
         slope_layer = QgsProject.instance().mapLayer(dialog.step3SlopeDropdown.currentData())
+        corridors_layer = QgsProject.instance().mapLayer(dialog.step3CorridorsDropdown.currentData())
+        crossings_layer = QgsProject.instance().mapLayer(dialog.step3CrossingsDropdown.currentData())
 
         if not costs_layer:
             raise ValueError("No Land Use Costs Raster selected.")
         if not slope_layer:
             raise ValueError("No Slope Raster selected.")
+        if not corridors_layer:
+            raise ValueError("No Corridors Raster selected.")
+        if not crossings_layer:
+            raise ValueError("No Crossings Raster selected.")
 
         # Retrieve output path
         output_path = dialog.combinedRasterPath.text().strip()
@@ -121,17 +149,21 @@ def run_step3_logic(dialog: 'StepByStepDialog'):
         combine_rasters_with_qgis_raster_calculator(
             get_layer_path(costs_layer),
             get_layer_path(slope_layer),
+            get_layer_path(corridors_layer),
+            get_layer_path(crossings_layer),
             occupancy_weight,
             dem_weight,
+            corridors_weight,
+            crossings_weight,
             output_path
         )
 
         dialog.log_message(f"Combined Raster created successfully at: {output_path}")
     except ValueError as ve:
-        error_message = f"Combining Land Use Costs and Slope Rasters Has Validation Errors: {str(ve)}"
+        error_message = f"Combining Cost Rasters Has Validation Errors: {str(ve)}"
         dialog.log_message(error_message)
     except Exception as e:
-        error_message = f"Combining Land Use Costs and Slope Rasters Has Failed: {str(e)}"
+        error_message = f"Combining Cost Rasters Has Failed: {str(e)}"
         dialog.log_message(error_message)
 
 
@@ -249,6 +281,121 @@ def run_step_resample(dialog: 'StepByStepDialog'):
     except Exception as e:
         error_message = f"Resampling Raster Failed: {str(e)}"
         dialog.log_message(error_message)
+
+def run_step7_logic(dialog: 'StepByStepDialog'):
+    """Step 7: Create Cost Raster from Vector"""
+    try:
+        vector_layer = QgsProject.instance().mapLayer(dialog.vectorRasterComboBox.currentData())
+        output_path = dialog.vectorRasterOutputPath.text().strip()
+        cost_with_vector = dialog.hasVectorCostInput.text().strip()
+        cost_without_vector = dialog.hasNotVectorCostInput.text().strip()
+
+        if not vector_layer or not output_path or not cost_with_vector or not cost_without_vector:
+            raise ValueError("Missing inputs. Please select a vector layer, enter costs, and set an output path.")
+
+        try:
+            cost_with_vector = float(cost_with_vector)
+            cost_without_vector = float(cost_without_vector)
+        except ValueError:
+            raise ValueError("Costs must be valid numeric values.")
+
+        feedback = QgsProcessingFeedback()
+
+        dialog.log_message("Creating cost raster from vector...")
+        
+        ref_layer_id = dialog.refRasterComboBox.currentData()
+        ref_raster = QgsProject.instance().mapLayer(ref_layer_id)
+
+        if not isinstance(ref_raster, QgsRasterLayer):
+            raise ValueError("Please select a valid reference raster.")
+
+        pixel_size = 10.0  # or 30.0 depending on your use case
+        extent = ref_raster.extent()
+        width = 10
+        height = 10
+
+        dialog.log_message(f"Pixel size X: {ref_raster.rasterUnitsPerPixelX()}")
+        dialog.log_message(f"Pixel size Y: {ref_raster.rasterUnitsPerPixelY()}")
+        dialog.log_message(f"custo com vetor: {cost_with_vector}")
+        dialog.log_message(f"custo sem vetor: {cost_without_vector}")
+        dialog.log_message(f"width: {width}")
+        dialog.log_message(f"height: {height}")
+        dialog.log_message(f"teste: {(extent.xMaximum() - extent.xMinimum())}")
+
+        # Rasterize
+        rasterized_output = processing.run("gdal:rasterize", {
+            'INPUT': vector_layer,
+            'FIELD': None,
+            'BURN': cost_with_vector,
+            'UNITS': 1,
+            'WIDTH': width,
+            'HEIGHT': height,
+            'EXTENT': extent,
+            'INIT': cost_without_vector,
+            'DATA_TYPE': 5,  # Float32
+            'OUTPUT': output_path
+        }, feedback=feedback)
+
+
+        if rasterized_output and 'OUTPUT' in rasterized_output:
+            dialog.log_message(f"Cost raster created successfully at: {rasterized_output['OUTPUT']}")
+            new_raster = QgsRasterLayer(rasterized_output['OUTPUT'], "Cost Raster from Vector")
+            if new_raster.isValid():
+                QgsProject.instance().addMapLayer(new_raster)
+            else:
+                raise RuntimeError("Output raster is invalid.")
+        else:
+            raise RuntimeError("Rasterization failed without output.")
+    except Exception as e:
+        dialog.log_message(f"Step 7 Failed: {str(e)}")
+
+def run_step8_logic(dialog: 'StepByStepDialog'):
+    """Step 8: Combine two vector layers into one"""
+    try:
+        layer1_id = dialog.vectorComboBox.currentData()
+        layer2_id = dialog.vector2ComboBox.currentData()
+        output_path = dialog.vectorsOutputPath.text().strip()
+
+        if not layer1_id or not layer2_id or not output_path:
+            raise ValueError("Please select two vector layers and specify an output path.")
+
+        layer1 = QgsProject.instance().mapLayer(layer1_id)
+        layer2 = QgsProject.instance().mapLayer(layer2_id)
+
+        if not isinstance(layer1, QgsVectorLayer) or not isinstance(layer2, QgsVectorLayer):
+            raise TypeError("Selected layers are not valid vector layers.")
+
+        if layer1.geometryType() != layer2.geometryType():
+            raise ValueError("Both vectors must have the same geometry type.")
+
+        fields = layer1.fields()
+        geometry_type = layer1.wkbType()
+        crs = layer1.crs()
+
+        writer = QgsVectorFileWriter(output_path, 'UTF-8', fields, geometry_type, crs, 'ESRI Shapefile')
+
+        if writer.hasError() != QgsVectorFileWriter.NoError:
+            raise IOError(f"Error writing file: {writer.errorMessage()}")
+
+        for layer in [layer1, layer2]:
+            for feature in layer.getFeatures():
+                writer.addFeature(QgsFeature(feature))
+
+        del writer  # Finalize writing
+
+        dialog.log_message("Step 8: Vectors combined and saved successfully.")
+
+        if os.path.exists(output_path):
+            combined_layer = QgsVectorLayer(output_path, "Combined Vectors", "ogr")
+            if combined_layer.isValid():
+                QgsProject.instance().addMapLayer(combined_layer)
+                dialog.log_message("Combined layer added to map.")
+            else:
+                raise RuntimeError("The output combined vector layer is invalid.")
+
+    except Exception as e:
+        dialog.log_message(f"Step 8 Failed: {str(e)}")
+
 
 def get_layer_path(layer):
     """Returns the file path of the given QgsMapLayer."""

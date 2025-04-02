@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 from qgis.core import QgsProject
 from .ui import setup_ui
 from .dropdowns import populate_layer_step_by_step_dropdowns
-from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic, run_step_resample
+from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic, run_step7_logic, run_step8_logic, run_step_resample
 from ..complete_dialog import populate_land_use_classes_table
 
 if TYPE_CHECKING:
@@ -48,6 +48,8 @@ class StepByStepDialog(QDialog):
         self.originalResolutionInput: QLineEdit
         self.targetResolutionInput: QLineEdit
         self.resamplingMethodComboBox: QComboBox
+        self.vectorComboBox: QComboBox
+        self.vector2ComboBox: QComboBox
         self.resampleOutputPath: QLineEdit
         self.resampleBrowse: QPushButton
         self.runResampleButton: QPushButton
@@ -73,6 +75,8 @@ class StepByStepDialog(QDialog):
         self.final_button.clicked.connect(lambda: run_step(self, 5, run_step5_logic))
         self.runResampleButton.clicked.connect(lambda: run_step(self, 6, run_step_resample)) 
         self.clear_log_button.clicked.connect(self.clear_logs)
+        self.runCombineVectorsButton.clicked.connect(lambda: run_step(self, 8, run_step8_logic))
+        self.runCreateRasterFromVectorButton.clicked.connect(lambda: run_step(self, 7, run_step7_logic))
 
     def log_message(self, message: str):
         """Append a message to the log output."""
