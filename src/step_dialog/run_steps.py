@@ -114,13 +114,18 @@ def run_step3_logic(dialog: 'StepByStepDialog'):
     """Step 3: Combine Land Use and Slope Rasters"""
     try:
         # Retrieve weight inputs
-        occupancy_weight = float(dialog.landUseCostWeightInput.text().strip())
-        dem_weight = float(dialog.slopeRasterWeightInput.text().strip())
-        corridors_weight = float(dialog.slopeRasterWeightInput.text().strip())
-        crossings_weight = float(dialog.slopeRasterWeightInput.text().strip())
+        occupancy_weight = dialog.weight_spinboxes[0].value()
+        dem_weight = dialog.weight_spinboxes[1].value()
+        corridors_weight = dialog.weight_spinboxes[2].value()
+        crossings_weight = dialog.weight_spinboxes[3].value()
 
-        # Validate weights
-        if occupancy_weight <= 0 or dem_weight <= 0 or corridors_weight <= 0 or crossings_weight <= 0:
+        # Validate that weights sum to 1.0
+        total_weight = occupancy_weight + dem_weight + corridors_weight + crossings_weight
+        if abs(total_weight - 1.0) > 0.001:
+            raise ValueError("The sum of all weights must be equal to 1.0.")
+
+        # Validate individual weights
+        if any(w <= 0 for w in [occupancy_weight, dem_weight, corridors_weight, crossings_weight]):
             raise ValueError("All weights must be greater than zero.")
 
         # Retrieve selected layers

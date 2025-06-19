@@ -34,10 +34,8 @@ class StepByStepDialog(QDialog):
         self.step3SlopeDropdown: QComboBox
         self.step3CorridorsDropdown: QComboBox
         self.step3CrossingsDropdown: QComboBox
-        self.landUseCostWeightInput: QLineEdit
-        self.slopeRasterWeightInput: QLineEdit
-        self.corridorsRasterWeightInput: QLineEdit
-        self.crossingsRasterWeightInput: QLineEdit
+        self.weight_sliders: list
+        self.weight_spinboxes: list
         self.combinedRasterPath: QLineEdit
         self.combinedRasterBrowse: QPushButton
         self.combine_button: QPushButton

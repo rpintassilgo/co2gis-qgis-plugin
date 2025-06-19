@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton, QCheckBox,
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog,
-    QWidget
+    QWidget, QSlider, QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsUnitTypes
@@ -359,15 +359,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     combinedCostsLayout.addRow(QLabel("Select Crossings Costs Raster:"), dialog.step3CrossingsDropdown)
 
     # Weights
-    dialog.landUseCostWeightInput = QLineEdit()
-    dialog.slopeRasterWeightInput = QLineEdit()
-    dialog.corridorsRasterWeightInput = QLineEdit()
-    dialog.crossingsRasterWeightInput = QLineEdit()
-
-    combinedCostsLayout.addRow(QLabel("Land Use Costs Weight:"), dialog.landUseCostWeightInput)
-    combinedCostsLayout.addRow(QLabel("Slope Costs Weight:"), dialog.slopeRasterWeightInput)
-    combinedCostsLayout.addRow(QLabel("Corridors Costs Weight:"), dialog.corridorsRasterWeightInput)
-    combinedCostsLayout.addRow(QLabel("Crossings Costs Weight:"), dialog.crossingsRasterWeightInput)
+    setup_weight_sliders(dialog, combinedCostsLayout)
     
     # Combined raster output path
     dialog.combinedRasterPath = QLineEdit()
@@ -466,6 +458,79 @@ def setup_ui(dialog: 'StepByStepDialog'):
     main_layout.addWidget(dialog.clear_log_button)
 
     dialog.setLayout(main_layout)
+
+def setup_weight_sliders(dialog, layout):
+    """Adds sliders and spin boxes for weight input with validation feedback."""
+    from PyQt5.QtWidgets import QSlider, QDoubleSpinBox, QLabel, QHBoxLayout
+    from PyQt5.QtCore import Qt
+
+    dialog.weight_sliders = []
+    dialog.weight_spinboxes = []
+    dialog._is_updating_weights = False
+
+    labels = ["Land Use Costs Weight:", "Slope Costs Weight:", "Corridors Costs Weight:", "Crossings Costs Weight:"]
+    initial_value = 0.25
+
+    for i, label_text in enumerate(labels):
+        slider = QSlider(Qt.Horizontal)
+        slider.setRange(0, 1000)
+        slider.setValue(int(initial_value * 1000))
+
+        spinbox = QDoubleSpinBox()
+        spinbox.setRange(0.0, 1.0)
+        spinbox.setDecimals(3)
+        spinbox.setSingleStep(0.01)
+        spinbox.setValue(initial_value)
+
+        dialog.weight_sliders.append(slider)
+        dialog.weight_spinboxes.append(spinbox)
+
+        row_layout = QHBoxLayout()
+        row_layout.addWidget(QLabel(label_text))
+        row_layout.addWidget(slider)
+        row_layout.addWidget(spinbox)
+        layout.addRow(row_layout)
+
+        slider.valueChanged.connect(lambda value, s=slider: sync_and_validate_weights(dialog, changed_widget=s))
+        spinbox.valueChanged.connect(lambda value, sb=spinbox: sync_and_validate_weights(dialog, changed_widget=sb))
+    
+    validate_weight_sum(dialog)
+
+def sync_and_validate_weights(dialog, changed_widget):
+    """Syncs a slider with its spinbox and validates the total sum."""
+    if dialog._is_updating_weights:
+        return
+    dialog._is_updating_weights = True
+
+    from PyQt5.QtWidgets import QSlider
+
+    sliders = dialog.weight_sliders
+    spinboxes = dialog.weight_spinboxes
+
+    if isinstance(changed_widget, QSlider):
+        changed_index = sliders.index(changed_widget)
+        new_value = changed_widget.value()
+        spinboxes[changed_index].setValue(new_value / 1000.0)
+    else:
+        changed_index = spinboxes.index(changed_widget)
+        new_value = changed_widget.value()
+        sliders[changed_index].setValue(int(new_value * 1000))
+
+    validate_weight_sum(dialog)
+
+    dialog._is_updating_weights = False
+
+def validate_weight_sum(dialog):
+    """Checks if the sum of weights is 1.0 and updates slider colors."""
+    total_weight = sum(sb.value() for sb in dialog.weight_spinboxes)
+
+    if abs(total_weight - 1.0) < 0.001:
+        style = "QSlider::handle:horizontal { background-color: #5cb85c; border-radius: 9px; }"
+    else:
+        style = "QSlider::handle:horizontal { background-color: #d9534f; border-radius: 9px; }"
+
+    for slider in dialog.weight_sliders:
+        slider.setStyleSheet(style)
 
 def select_output_file(output_field: QLineEdit, file_type: str):
     """Open a file dialog to select an output file location."""
