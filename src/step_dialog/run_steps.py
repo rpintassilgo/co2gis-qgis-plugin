@@ -170,7 +170,7 @@ def run_step3_logic(dialog: 'StepByStepDialog'):
 def run_step4_logic(dialog: 'StepByStepDialog'):
     """Step 4: Clip Combined Raster"""
     try:
-        points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
+        points_layer = QgsProject.instance().mapLayer(dialog.clipPointVectorComboBox.currentData())
         combined_layer = QgsProject.instance().mapLayer(dialog.step4Dropdown.currentData())
 
         if not points_layer:
@@ -204,12 +204,12 @@ def run_step5_logic(dialog: 'StepByStepDialog'):
     """Step 5: Generate Least Cost Path Vector"""
     try:
         points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
-        clipped_combined_layer = QgsProject.instance().mapLayer(dialog.step5Dropdown.currentData())
+        combined_layer = QgsProject.instance().mapLayer(dialog.step5Dropdown.currentData())
 
         if not points_layer:
             raise ValueError("No points layer selected.")
-        if not clipped_combined_layer:
-            raise ValueError("No clipped combined raster layer selected.")
+        if not combined_layer:
+            raise ValueError("No combined raster layer selected.")
 
         cost_output_path = dialog.costRasterPath.text().strip()
         direction_output_path = dialog.directionRasterPath.text().strip()
@@ -220,11 +220,13 @@ def run_step5_logic(dialog: 'StepByStepDialog'):
             raise ValueError("No output path specified for Cost Raster.")
         if not direction_output_path:
             raise ValueError("No output path specified for Direction Raster.")
+        if not drain_output_path:
+            raise ValueError("No output path specified for Drain Raster.")
         if not vector_output_path:
             raise ValueError("No output path specified for Least Cost Path Vector.")
 
         dialog.log_message("Running r.cost to compute cost surface...")
-        cost_result = run_r_cost(clipped_combined_layer, points_layer, cost_output_path, direction_output_path)
+        cost_result = run_r_cost(combined_layer, points_layer, cost_output_path, direction_output_path)
         dialog.log_message(f"r.cost completed successfully.")
 
         dialog.log_message("Running r.drain and converting to vector...")
@@ -396,6 +398,38 @@ def run_step8_logic(dialog: 'StepByStepDialog'):
     except Exception as e:
         dialog.log_message(f"Step 8 Failed: {str(e)}")
 
+def run_slope_costs_logic(dialog: 'StepByStepDialog'):
+    """Create slope costs raster based on defined intervals."""
+    try:
+        # Get slope intervals from the table
+        intervals = dialog.get_slope_cost_intervals()
+        if not intervals:
+            raise ValueError("No slope intervals defined.")
+
+        # Get the slope layer from the dropdown
+        slope_layer = QgsProject.instance().mapLayer(dialog.slopeLayerComboBox.currentData())
+        if not slope_layer or not slope_layer.isValid():
+            raise ValueError("Please select a valid slope layer.")
+        
+        # Get output path from UI
+        output_path = dialog.slopeCostsRasterPath.text()
+        if not output_path:
+            raise ValueError("No output path specified for Slope Costs Raster.")
+        
+        dialog.log_message("Creating Slope Costs Raster...")
+        create_slope_costs_from_slope(slope_layer, intervals, output_path)
+        dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}")
+        
+        # Load the created raster into QGIS
+        new_layer = QgsRasterLayer(output_path, "Slope Costs")
+        if new_layer.isValid():
+            QgsProject.instance().addMapLayer(new_layer)
+        else:
+            dialog.log_message("Warning: Created raster could not be loaded into QGIS.")
+            
+    except Exception as e:
+        error_message = f"Creating Slope Costs Raster Has Failed: {str(e)}"
+        dialog.log_message(error_message)
 
 def get_layer_path(layer):
     """Returns the file path of the given QgsMapLayer."""

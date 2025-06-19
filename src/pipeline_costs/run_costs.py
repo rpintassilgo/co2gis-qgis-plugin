@@ -69,10 +69,10 @@ def calculate_pipeline_costs(dialog):
                     summation += segment_cost
 
                     # Debug message per cell — ENABLE IF NEEDED
-                    # dialog.log_message(
-                    #     f"Segment {segment_index+1}.{sub_segment_index}: L_cell = {cl_i:.2f} m, "
-                    #     f"Fs = {Fs_i:.2f}, Flu = {Flu_i:.2f}, Segment Cost = {segment_cost:.2f} €"
-                    # )
+                    dialog.log_message(
+                         f"Segment {segment_index+1}.{sub_segment_index}: L_cell = {cl_i:.2f} m, "
+                         f"Fs = {Fs_i:.2f}, Flu = {Flu_i:.2f}, Segment Cost = {segment_cost:.2f} €"
+                    )
                     sub_segment_index += 1
 
                 Ip = Bc * D * summation

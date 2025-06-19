@@ -1,66 +1,60 @@
 from typing import TYPE_CHECKING
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsWkbTypes
 from PyQt5.QtWidgets import QComboBox
 
 if TYPE_CHECKING:
     from ..step_dialog import StepByStepDialog
 
 def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
-    """Populate the dropdowns with all available layers in the project."""
-    # Clear existing items
-    dialog.pointsComboBox.clear()
-    dialog.demComboBox.clear()
+    """Populate all dropdowns with available layers."""
+    # Clear all dropdowns first
     dialog.terrainComboBox.clear()
+    dialog.demComboBox.clear()
     dialog.step3LandUseDropdown.clear()
     dialog.step3SlopeDropdown.clear()
     dialog.step3CorridorsDropdown.clear()
     dialog.step3CrossingsDropdown.clear()
     dialog.step4Dropdown.clear()
     dialog.step5Dropdown.clear()
+    dialog.pointsComboBox.clear()
+    dialog.clipPointVectorComboBox.clear()
     dialog.resampleRasterComboBox.clear()
     dialog.vectorComboBox.clear()
     dialog.vector2ComboBox.clear()
     dialog.vectorRasterComboBox.clear()
     dialog.refRasterComboBox.clear()
+    dialog.slopeLayerComboBox.clear()
 
-    # Get all layers in the project
+    # Get all layers from the project
     layers = QgsProject.instance().mapLayers().values()
 
+    # Populate dropdowns based on layer type
     for layer in layers:
-        layer_name = layer.name()
-        layer_id = layer.id()
-
-        if isinstance(layer, QgsVectorLayer) and layer.geometryType() == 0:
-            # Populate point layers (Step 1)
-            dialog.pointsComboBox.addItem(layer_name, layer_id)
-            
-        elif isinstance(layer, QgsVectorLayer) and layer.geometryType() == 1:
-            # Populate line layers
-            dialog.vectorComboBox.addItem(layer_name, layer_id)
-            dialog.vector2ComboBox.addItem(layer_name, layer_id)
-            dialog.vectorRasterComboBox.addItem(layer_name, layer_id)
-        
-        elif isinstance(layer, QgsRasterLayer):
-            dialog.refRasterComboBox.addItem(layer_name, layer_id)
-            # Populate DEM layers (Step 2)
-            dialog.demComboBox.addItem(layer_name, layer_id)
-            # Populate Land Use layers (Step 3)
-            dialog.terrainComboBox.addItem(layer_name, layer_id)
-            # Populate Combined Raster (Step 4)
-            dialog.step3LandUseDropdown.addItem(layer_name, layer_id)
-            dialog.step3SlopeDropdown.addItem(layer_name, layer_id)
-            dialog.step3CorridorsDropdown.addItem(layer_name, layer_id)
-            dialog.step3CrossingsDropdown.addItem(layer_name, layer_id)
-            # Populate Select Combined Raster (Step 5)
-            dialog.step4Dropdown.addItem(layer_name, layer_id)
-            # Populate Select Clipped Combined Raster (Step 6)
-            dialog.step5Dropdown.addItem(layer_name, layer_id)
-            # Populate Select Clipped Combined Raster (Step 6)
-            dialog.resampleRasterComboBox.addItem(layer_name, layer_id)
+        if isinstance(layer, QgsRasterLayer):
+            # Add to raster dropdowns
+            dialog.terrainComboBox.addItem(layer.name(), layer.id())
+            dialog.demComboBox.addItem(layer.name(), layer.id())
+            dialog.step3LandUseDropdown.addItem(layer.name(), layer.id())
+            dialog.step3SlopeDropdown.addItem(layer.name(), layer.id())
+            dialog.step3CorridorsDropdown.addItem(layer.name(), layer.id())
+            dialog.step3CrossingsDropdown.addItem(layer.name(), layer.id())
+            dialog.step4Dropdown.addItem(layer.name(), layer.id())
+            dialog.step5Dropdown.addItem(layer.name(), layer.id())
+            dialog.resampleRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.refRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.slopeLayerComboBox.addItem(layer.name(), layer.id())
+        elif isinstance(layer, QgsVectorLayer):
+            # Add to vector dropdowns
+            if layer.geometryType() == QgsWkbTypes.PointGeometry:
+                dialog.pointsComboBox.addItem(layer.name(), layer.id())
+                dialog.clipPointVectorComboBox.addItem(layer.name(), layer.id())
+            dialog.vectorComboBox.addItem(layer.name(), layer.id())
+            dialog.vector2ComboBox.addItem(layer.name(), layer.id())
+            dialog.vectorRasterComboBox.addItem(layer.name(), layer.id())
 
     # Logging messages if no layers are found
     if dialog.pointsComboBox.count() == 0:
-        dialog.log_message("No point vector layers found for Start and End Points.")
+        dialog.log_message("No point vector layers found.")
     if dialog.demComboBox.count() == 0:
         dialog.log_message("No raster layers found for DEM.")
     if dialog.terrainComboBox.count() == 0:
@@ -69,8 +63,14 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
         dialog.log_message("No raster layers found for Land Use Costs Raster.")
     if dialog.step3SlopeDropdown.count() == 0:
         dialog.log_message("No raster layers found for Slope Raster.")
+    if dialog.step3CorridorsDropdown.count() == 0:
+        dialog.log_message("No raster layers found for Corridors Costs Raster.")
+    if dialog.step3CrossingsDropdown.count() == 0:
+        dialog.log_message("No raster layers found for Crossings Costs Raster.")
     if dialog.step4Dropdown.count() == 0:
-        dialog.log_message("No raster layers found for Combined Raster.")
+        dialog.log_message("No raster layers found for clipping.")
     if dialog.step5Dropdown.count() == 0:
-        dialog.log_message("No raster layers found for Clipped Combined Raster.")
+        dialog.log_message("No raster layers found for least cost path calculation.")
+    if dialog.resampleRasterComboBox.count() == 0:
+        dialog.log_message("No raster layers found for resampling.")
 

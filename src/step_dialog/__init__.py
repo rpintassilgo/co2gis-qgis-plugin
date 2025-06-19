@@ -19,6 +19,7 @@ class StepByStepDialog(QDialog):
 
         # Explicitly declare attributes for widgets
         self.pointsComboBox: QComboBox
+        self.clipPointVectorComboBox: QComboBox
         self.demComboBox: QComboBox
         self.slopeRasterPath: QLineEdit
         self.slopeRasterBrowse: QPushButton
@@ -31,8 +32,12 @@ class StepByStepDialog(QDialog):
         self.create_land_use_costs_button: QPushButton
         self.step3LandUseDropdown: QComboBox
         self.step3SlopeDropdown: QComboBox
+        self.step3CorridorsDropdown: QComboBox
+        self.step3CrossingsDropdown: QComboBox
         self.landUseCostWeightInput: QLineEdit
         self.slopeRasterWeightInput: QLineEdit
+        self.corridorsRasterWeightInput: QLineEdit
+        self.crossingsRasterWeightInput: QLineEdit
         self.combinedRasterPath: QLineEdit
         self.combinedRasterBrowse: QPushButton
         self.combine_button: QPushButton
@@ -58,6 +63,9 @@ class StepByStepDialog(QDialog):
         self.slopeCostTable: QTableWidget
         self.addSlopeRowButton: QPushButton
         self.removeSlopeRowButton: QPushButton
+        self.slopeLayerComboBox: QComboBox
+        self.slopeCostsRasterPath: QLineEdit
+        self.slopeCostsRasterBrowse: QPushButton
 
         # Setup UI and populate dropdowns
         setup_ui(self)
@@ -65,10 +73,10 @@ class StepByStepDialog(QDialog):
         QgsProject.instance().layersAdded.connect(lambda: populate_layer_step_by_step_dropdowns(self))
         setup_slope_cost_table_logic(self)
 
-
         # Connect buttons to step execution functions
-        self.classify_button.clicked.connect(lambda: populate_land_use_classes_table(self))
+        self.terrainComboBox.currentIndexChanged.connect(lambda: populate_land_use_classes_table(self))
         self.create_slope_button.clicked.connect(lambda: run_step(self, 2, run_step2_logic))
+        self.create_slope_costs_button.clicked.connect(lambda: run_step(self, 9, run_slope_costs_logic))
         self.create_land_use_costs_button.clicked.connect(lambda: run_step(self, 1, run_step1_logic))
         self.combine_button.clicked.connect(lambda: run_step(self, 3, run_step3_logic))
         self.clip_button.clicked.connect(lambda: run_step(self, 4, run_step4_logic))

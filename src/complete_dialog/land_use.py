@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from ..step_dialog import StepByStepDialog
 
 def populate_land_use_classes_table(dialog: Union['Dialog', 'StepByStepDialog']):
+    # Clear the table first
+    dialog.classTable.setRowCount(0)
+    
     # Get the selected terrain layer
     layer_id = dialog.terrainComboBox.currentData()
     terrain_layer = QgsProject.instance().mapLayer(layer_id)

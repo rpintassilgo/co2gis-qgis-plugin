@@ -1,7 +1,8 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton, QCheckBox,
-    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog
+    QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog,
+    QWidget
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsUnitTypes
@@ -12,126 +13,53 @@ if TYPE_CHECKING:
 def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
     dialog.setWindowTitle("Step-by-Step Analysis")
-    dialog.setGeometry(0, 0, 2100, 900)
+    dialog.setGeometry(0, 0, 800, 800)  # Adjusted size for tabbed layout
 
     main_layout = QVBoxLayout()
-    columns_layout = QHBoxLayout()
-    left_layout = QVBoxLayout()
-    middle_layout = QVBoxLayout()
-    right_layout = QVBoxLayout()
     
-    columns_layout.addLayout(left_layout)  # Add left column to main columns layout
-    columns_layout.addLayout(middle_layout)  # Add middle column to main columns layout
-    columns_layout.addLayout(right_layout)  # Add right column to main columns layout
-
-    main_layout.addLayout(columns_layout)  # Add the columns to the main layout
-
-    ############ STEP 1: Select Start & End Points ############
-    pointsGroupBox = QGroupBox()
-    pointsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    pointsLayout = QFormLayout()
+    # Create tab widget
+    dialog.tabs = QTabWidget()
     
-    pointsTitle = QLabel("Select Start and End Points")
-    pointsTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    pointsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
-    pointsLayout.addRow(pointsTitle)
-
-    dialog.pointsComboBox = QComboBox()
-    pointsLayout.addRow(QLabel("Select Point Vector Layer Containing Start and End Points:")) 
-    pointsLayout.addRow(dialog.pointsComboBox) 
-
-    pointsGroupBox.setLayout(pointsLayout)
-    left_layout.addWidget(pointsGroupBox)
-
-    ############ STEP 2: Select DEM Layer & Create Slope Raster ############
-    demGroupBox = QGroupBox()
-    demGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    demLayout = QFormLayout()
+    # Create the five tabs
+    land_use_tab = QWidget()
+    slope_tab = QWidget()
+    vectors_tab = QWidget()
+    aux_tab = QWidget()
+    lcp_tab = QWidget()
     
-    demTitle = QLabel("Select DEM Layer and Create Slope Raster")
-    demTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    demTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
-    demLayout.addRow(demTitle)
-
-    dialog.demComboBox = QComboBox()
-    demLayout.addRow(QLabel("Select DEM Layer:"))
-    demLayout.addRow(dialog.demComboBox)
+    # Add tabs to tab widget
+    dialog.tabs.addTab(land_use_tab, "Land Use")
+    dialog.tabs.addTab(slope_tab, "Slope")
+    dialog.tabs.addTab(vectors_tab, "Corridors and Crossings")
+    dialog.tabs.addTab(aux_tab, "Aux")
+    dialog.tabs.addTab(lcp_tab, "LCP")
     
-    # File path selection
-    dialog.slopeRasterPath = QLineEdit()
-    dialog.slopeRasterPath.setPlaceholderText("Choose output path for Slope Raster")
-    dialog.slopeRasterBrowse = QPushButton("Browse")
-    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath, "tif"))
+    # Setup layouts for each tab
+    land_use_layout = QFormLayout()
+    slope_layout = QFormLayout()
+    vectors_layout = QFormLayout()
+    aux_main_layout = QVBoxLayout()
+    lcp_layout = QFormLayout()
     
-    fileLayout = QHBoxLayout()
-    fileLayout.addWidget(dialog.slopeRasterPath)
-    fileLayout.addWidget(dialog.slopeRasterBrowse)
-    demLayout.addRow(fileLayout)
-    
-    # -------- Slope Cost Table Title --------
-    slopeCostsTitle = QLabel("Define Slope Cost Intervals")
-    slopeCostsTitle.setAlignment(Qt.AlignCenter)
-    slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    demLayout.addRow(slopeCostsTitle)
+    land_use_tab.setLayout(land_use_layout)
+    slope_tab.setLayout(slope_layout)
+    vectors_tab.setLayout(vectors_layout)
+    aux_tab.setLayout(aux_main_layout)
+    lcp_tab.setLayout(lcp_layout)
 
-    # -------- Slope Cost Table --------
-    dialog.slopeCostTable = QTableWidget()
-    dialog.slopeCostTable.setColumnCount(4)
-    dialog.slopeCostTable.setHorizontalHeaderLabels(["Min % Slope", "Max % Slope", "Cost", "No Upper Limit"])
-    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-    demLayout.addRow(dialog.slopeCostTable)
-
-    # -------- Add/Remove Row Buttons --------
-    slopeTableButtonsLayout = QHBoxLayout()
-    dialog.addSlopeRowButton = QPushButton("Add Row")
-    dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
-    slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
-    slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
-    demLayout.addRow(slopeTableButtonsLayout)
-    
-    # File path selection
-    dialog.slopeCostsRasterPath = QLineEdit()
-    dialog.slopeCostsRasterPath.setPlaceholderText("Choose output path for Slope Costs Raster")
-    dialog.slopeCostsRasterBrowse = QPushButton("Browse")
-    dialog.slopeCostsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeCostsRasterPath, "tif"))
-    
-    fileCostsLayout = QHBoxLayout()
-    fileCostsLayout.addWidget(dialog.slopeCostsRasterPath)
-    fileCostsLayout.addWidget(dialog.slopeCostsRasterBrowse)
-    demLayout.addRow(fileCostsLayout)
-
-    dialog.create_slope_button = QPushButton("Create Slope Costs Raster from DEM")
-    demLayout.addWidget(dialog.create_slope_button)
-
-    demGroupBox.setLayout(demLayout)
-    middle_layout.addWidget(demGroupBox)
-
-    ############ STEP 3: Select Land Use Layer, Get Classes & Create Costs Raster ############
-    landUseGroupBox = QGroupBox()
-    landUseGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    landUseLayout = QFormLayout()
-    
-    landCostsTitle = QLabel("Select Land Use Layer, Apply Costs to Classes and Create Costs Raster")
-    landCostsTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    landCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
-    landUseLayout.addRow(landCostsTitle)
-
+    ############ Land Use Tab ############
     dialog.terrainComboBox = QComboBox()
-    landUseLayout.addRow(QLabel("Select Land Use Layer:"))
-    landUseLayout.addRow(dialog.terrainComboBox)
-
-    dialog.classify_button = QPushButton("Get Classes")
-    landUseLayout.addWidget(dialog.classify_button)
+    land_use_layout.addRow(QLabel("Select Land Use Layer:"), dialog.terrainComboBox)
 
     # Land Use Classes Table
     dialog.classTable = QTableWidget()
     dialog.classTable.setColumnCount(3)
     dialog.classTable.setHorizontalHeaderLabels(["Class ID", "Class Name", "Cost"])
     dialog.classTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-    landUseLayout.addRow(QLabel("Land Use Classes Costs:"))
-    landUseLayout.addWidget(dialog.classTable)
+    land_use_layout.addRow(QLabel("Land Use Classes Costs:"))
+    land_use_layout.addRow(dialog.classTable)
     
-    # File path selection
+    # File path selection for land use costs
     dialog.costsRasterPath = QLineEdit()
     dialog.costsRasterPath.setPlaceholderText("Choose output path for Costs Raster")
     dialog.costsRasterBrowse = QPushButton("Browse")
@@ -140,213 +68,109 @@ def setup_ui(dialog: 'StepByStepDialog'):
     costsfileLayout = QHBoxLayout()
     costsfileLayout.addWidget(dialog.costsRasterPath)
     costsfileLayout.addWidget(dialog.costsRasterBrowse)
-    landUseLayout.addRow(costsfileLayout)
+    land_use_layout.addRow(costsfileLayout)
 
     dialog.create_land_use_costs_button = QPushButton("Create Land Use Costs Raster")
-    landUseLayout.addWidget(dialog.create_land_use_costs_button)
+    land_use_layout.addRow(dialog.create_land_use_costs_button)
 
-    landUseGroupBox.setLayout(landUseLayout)
-    middle_layout.addWidget(landUseGroupBox)
-
-    ############ STEP 4: Combine Rasters (Land Use & Slope) ############
-    combineGroupBox = QGroupBox()
-    combineGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    combineLayout = QFormLayout()
+    ############ Slope Tab ############
+    # First Group Box - Create Slope from DEM
+    createSlopeGroupBox = QGroupBox()
+    createSlopeGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    createSlopeLayout = QFormLayout()
     
-    combineTitle = QLabel("Create Combined Costs Raster")
-    combineTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    combineTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
-    combineLayout.addRow(combineTitle)
+    # Title for Create Slope
+    createSlopeTitle = QLabel("Create Slope from DEM")
+    createSlopeTitle.setAlignment(Qt.AlignCenter)
+    createSlopeTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    createSlopeLayout.addRow(createSlopeTitle)
     
-    infoText = QLabel(
-        "ⓘ If the input rasters have different resolutions, QGIS will automatically resample them using the nearest neighbor algorithm."
-    )
-    infoText.setStyleSheet("color: lightgrey; font-size: 11px;")  # Make text bold
-    combineLayout.addRow(infoText)
-
-    dialog.step3LandUseDropdown = QComboBox()
-    dialog.step3SlopeDropdown = QComboBox()
-    dialog.step3CorridorsDropdown = QComboBox()
-    dialog.step3CrossingsDropdown = QComboBox()
-    combineLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.step3LandUseDropdown)
-    combineLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.step3SlopeDropdown)
-    combineLayout.addRow(QLabel("Select Corridors Costs Raster:"), dialog.step3CorridorsDropdown)
-    combineLayout.addRow(QLabel("Select Crossings Costs Raster:"), dialog.step3CrossingsDropdown)
-
-    # Weights Input Fields
-    dialog.landUseCostWeightInput = QLineEdit()
-    dialog.landUseCostWeightInput.setPlaceholderText("Enter Land Use Costs Weight")
-    dialog.slopeRasterWeightInput = QLineEdit()
-    dialog.slopeRasterWeightInput.setPlaceholderText("Enter Slope Costs Weight")
-    dialog.corridorsRasterWeightInput = QLineEdit()
-    dialog.corridorsRasterWeightInput.setPlaceholderText("Enter Corridors Costs Weight")
-    dialog.crossingsRasterWeightInput = QLineEdit()
-    dialog.crossingsRasterWeightInput.setPlaceholderText("Enter Crossings Costs Weight")
-
-    combineLayout.addRow(QLabel("Land Use Costs Weight:"), dialog.landUseCostWeightInput)
-    combineLayout.addRow(QLabel("Slope Costs Weight:"), dialog.slopeRasterWeightInput)
-    combineLayout.addRow(QLabel("Corridors Costs Weight:"), dialog.corridorsRasterWeightInput)
-    combineLayout.addRow(QLabel("Crossings Costs Weight:"), dialog.crossingsRasterWeightInput)
+    dialog.demComboBox = QComboBox()
+    createSlopeLayout.addRow(QLabel("Select DEM Layer:"), dialog.demComboBox)
     
-    # File path selection
-    dialog.combinedRasterPath = QLineEdit()
-    dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
-    dialog.combinedRasterBrowse = QPushButton("Browse")
-    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath, "tif"))
+    # Slope raster output path
+    dialog.slopeRasterPath = QLineEdit()
+    dialog.slopeRasterPath.setPlaceholderText("Choose output path for Slope Raster")
+    dialog.slopeRasterBrowse = QPushButton("Browse")
+    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath, "tif"))
     
-    combinedfileLayout = QHBoxLayout()
-    combinedfileLayout.addWidget(dialog.combinedRasterPath)
-    combinedfileLayout.addWidget(dialog.combinedRasterBrowse)
-    combineLayout.addRow(combinedfileLayout)
+    slopeFileLayout = QHBoxLayout()
+    slopeFileLayout.addWidget(dialog.slopeRasterPath)
+    slopeFileLayout.addWidget(dialog.slopeRasterBrowse)
+    createSlopeLayout.addRow(slopeFileLayout)
 
-    dialog.combine_button = QPushButton("Combine Rasters")
-    combineLayout.addRow(dialog.combine_button)
-
-    combineGroupBox.setLayout(combineLayout)
-    left_layout.addWidget(combineGroupBox)
-
-    ############ STEP 5: Select Combined Raster & Clip ############
-    clipGroupBox = QGroupBox()
-    clipGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    clipLayout = QFormLayout()
+    dialog.create_slope_button = QPushButton("Create Slope Raster from DEM")
+    createSlopeLayout.addRow(dialog.create_slope_button)
     
-    clipTitle = QLabel("Select Raster and Create Clipped Raster")
-    clipTitle.setAlignment(Qt.AlignCenter)  # Center the label text
-    clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")  # Make text bold
-    clipLayout.addRow(clipTitle)
+    createSlopeGroupBox.setLayout(createSlopeLayout)
+    slope_layout.addWidget(createSlopeGroupBox)
 
-    dialog.step4Dropdown = QComboBox()
-    clipLayout.addRow(QLabel("Select Raster To Clip:"))
-    clipLayout.addRow(dialog.step4Dropdown)
+    # Second Group Box - Create Slope Costs
+    slopeCostsGroupBox = QGroupBox()
+    slopeCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    slopeCostsLayout = QFormLayout()
     
-    # Checkbox to Copy Symbology
-    dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
-    dialog.copySymbologyCheckbox.setChecked(False)  # Default checked
-    clipLayout.addRow(dialog.copySymbologyCheckbox)
+    # Title for Create Slope Costs
+    slopeCostsTitle = QLabel("Create Slope Costs")
+    slopeCostsTitle.setAlignment(Qt.AlignCenter)
+    slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    slopeCostsLayout.addRow(slopeCostsTitle)
+
+    # Select Slope Layer Dropdown
+    dialog.slopeLayerComboBox = QComboBox()
+    slopeCostsLayout.addRow(QLabel("Select Slope Layer:"), dialog.slopeLayerComboBox)
+
+    # Slope Cost Intervals Label (left-aligned)
+    slopeCostsLayout.addRow(QLabel("Define Slope Cost Intervals:"))
+
+    # Slope Cost Table
+    dialog.slopeCostTable = QTableWidget()
+    dialog.slopeCostTable.setColumnCount(4)
+    dialog.slopeCostTable.setHorizontalHeaderLabels(["Min % Slope", "Max % Slope", "Cost", "No Upper Limit"])
+    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    slopeCostsLayout.addRow(dialog.slopeCostTable)
+
+    # Add/Remove Row Buttons for slope table
+    slopeTableButtonsLayout = QHBoxLayout()
+    dialog.addSlopeRowButton = QPushButton("Add Row")
+    dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
+    slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
+    slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
+    slopeCostsLayout.addRow(slopeTableButtonsLayout)
+
+    # Slope costs raster output path
+    dialog.slopeCostsRasterPath = QLineEdit()
+    dialog.slopeCostsRasterPath.setPlaceholderText("Choose output path for Slope Costs Raster")
+    dialog.slopeCostsRasterBrowse = QPushButton("Browse")
+    dialog.slopeCostsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeCostsRasterPath, "tif"))
     
-    # File path selection
-    dialog.clippedRasterPath = QLineEdit()
-    dialog.clippedRasterPath.setPlaceholderText("Choose output path for Clipped Raster")
-    dialog.clippedRasterBrowse = QPushButton("Browse")
-    dialog.clippedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.clippedRasterPath, "tif"))
-    
-    combinedfileLayout = QHBoxLayout()
-    combinedfileLayout.addWidget(dialog.clippedRasterPath)
-    combinedfileLayout.addWidget(dialog.clippedRasterBrowse)
-    clipLayout.addRow(combinedfileLayout)
+    slopeCostsFileLayout = QHBoxLayout()
+    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterPath)
+    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterBrowse)
+    slopeCostsLayout.addRow(slopeCostsFileLayout)
 
-    dialog.clip_button = QPushButton("Clip Raster to Area")
-    clipLayout.addWidget(dialog.clip_button)
+    dialog.create_slope_costs_button = QPushButton("Create Slope Costs Raster")
+    slopeCostsLayout.addRow(dialog.create_slope_costs_button)
 
-    clipGroupBox.setLayout(clipLayout)
-    right_layout.addWidget(clipGroupBox)
+    slopeCostsGroupBox.setLayout(slopeCostsLayout)
+    slope_layout.addWidget(slopeCostsGroupBox)
 
-    ############ STEP 6: Select Clipped Combined Raster & Run r.cost, r.drain ############
-    finalStepGroupBox = QGroupBox()
-    finalStepGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    finalStepLayout = QFormLayout()
-
-    finalTitle = QLabel("Create Least Cost Path Vector from Entire or Clipped Raster")
-    finalTitle.setAlignment(Qt.AlignCenter)
-    finalTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    finalStepLayout.addRow(finalTitle)
-
-    dialog.step5Dropdown = QComboBox()
-    finalStepLayout.addRow(QLabel("Select Combined Raster:"))
-    finalStepLayout.addRow(dialog.step5Dropdown)
-
-    # Cost Raster Output Path
-    dialog.costRasterPath = QLineEdit()
-    dialog.costRasterPath.setPlaceholderText("Choose output path for Cost Raster (r.cost)")
-    dialog.costRasterBrowse = QPushButton("Browse")
-    dialog.costRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costRasterPath, "tif"))
-
-    costFileLayout = QHBoxLayout()
-    costFileLayout.addWidget(dialog.costRasterPath)
-    costFileLayout.addWidget(dialog.costRasterBrowse)
-    finalStepLayout.addRow(costFileLayout)
-
-    # Direction Raster Output Path
-    dialog.directionRasterPath = QLineEdit()
-    dialog.directionRasterPath.setPlaceholderText("Choose output path for Direction Raster (r.cost)")
-    dialog.directionRasterBrowse = QPushButton("Browse")
-    dialog.directionRasterBrowse.clicked.connect(lambda: select_output_file(dialog.directionRasterPath, "tif"))
-
-    directionFileLayout = QHBoxLayout()
-    directionFileLayout.addWidget(dialog.directionRasterPath)
-    directionFileLayout.addWidget(dialog.directionRasterBrowse)
-    finalStepLayout.addRow(directionFileLayout)
-    
-    # Drain Raster Output Path
-    dialog.drainRasterPath = QLineEdit()
-    dialog.drainRasterPath.setPlaceholderText("Choose output path for Drain Raster (r.drain)")
-    dialog.drainRasterBrowse = QPushButton("Browse")
-    dialog.drainRasterBrowse.clicked.connect(lambda: select_output_file(dialog.drainRasterPath, "tif"))
-
-    drainFileLayout = QHBoxLayout()
-    drainFileLayout.addWidget(dialog.drainRasterPath)
-    drainFileLayout.addWidget(dialog.drainRasterBrowse)
-    finalStepLayout.addRow(drainFileLayout)
-
-    # LCP Vector Output Path (GPKG Format)
-    dialog.finalPath = QLineEdit()
-    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector (r.to.vect)")
-    dialog.finalBrowse = QPushButton("Browse")
-    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
-
-    finalFileLayout = QHBoxLayout()
-    finalFileLayout.addWidget(dialog.finalPath)
-    finalFileLayout.addWidget(dialog.finalBrowse)
-    finalStepLayout.addRow(finalFileLayout)
-
-    # Run Button
-    dialog.final_button = QPushButton("Run r.cost, r.drain and Convert to Vector")
-    finalStepLayout.addWidget(dialog.final_button)
-
-    finalStepGroupBox.setLayout(finalStepLayout)
-    left_layout.addWidget(finalStepGroupBox)
-
-    ############ STEP 7: Combine vectors & Create Cost Raster from Vectors ############
-
-    combineVectorsGroupBox = QGroupBox()
-    combineVectorsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    combineVectorsLayout = QFormLayout()
-
-    combineVectorsTitle = QLabel("Combine vectors & Create Cost Raster from Vectors")
-    combineVectorsTitle.setAlignment(Qt.AlignCenter)
-    combineVectorsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    combineVectorsLayout.addRow(combineVectorsTitle)
-    
-    # Select Input Vectors
-    dialog.vectorComboBox = QComboBox()
-    dialog.vector2ComboBox = QComboBox()
-    vectorSelectionLayout = QHBoxLayout()
-    vectorSelectionLayout.addWidget(dialog.vectorComboBox)
-    vectorSelectionLayout.addWidget(dialog.vector2ComboBox)
-    combineVectorsLayout.addRow(QLabel("Select Vectors:"), vectorSelectionLayout)
-
-    # Output Path Selection
-    dialog.vectorsOutputPath = QLineEdit()
-    dialog.vectorsOutputPath.setPlaceholderText("Choose output path for Combined Vectors")
-    dialog.vectorsBrowse = QPushButton("Browse")
-    dialog.vectorsBrowse.clicked.connect(lambda: select_output_file(dialog.vectorsOutputPath, "ogr"))
-    
-    outputVectorsLayout = QHBoxLayout()
-    outputVectorsLayout.addWidget(dialog.vectorsOutputPath)
-    outputVectorsLayout.addWidget(dialog.vectorsBrowse)
-    combineVectorsLayout.addRow(outputVectorsLayout)
-
-    # Run Resampling Button
-    dialog.runCombineVectorsButton = QPushButton("Combine vectors")
-    combineVectorsLayout.addWidget(dialog.runCombineVectorsButton)
-    
+    ############ Vectors Tab ############
     # Select vector to create raster
     dialog.vectorRasterComboBox = QComboBox()
-    combineVectorsLayout.addRow(QLabel("Select Vector:"), dialog.vectorRasterComboBox)
+    vectors_layout.addRow(QLabel("Select Vector:"), dialog.vectorRasterComboBox)
     
-    # Select vector to create raster
+    # Select reference raster
     dialog.refRasterComboBox = QComboBox()
-    combineVectorsLayout.addRow(QLabel("Select Reference Raster:"), dialog.refRasterComboBox)
+    vectors_layout.addRow(QLabel("Select Reference Raster:"), dialog.refRasterComboBox)
+    
+    # Cost inputs
+    dialog.hasVectorCostInput = QLineEdit()
+    dialog.hasVectorCostInput.setPlaceholderText("Enter cost where vector is present")
+    dialog.hasNotVectorCostInput = QLineEdit()
+    dialog.hasNotVectorCostInput.setPlaceholderText("Enter cost where vector is absent")
+    vectors_layout.addRow(QLabel("Cost for vector-covered cells:"), dialog.hasVectorCostInput)
+    vectors_layout.addRow(QLabel("Cost for non-vector cells:"), dialog.hasNotVectorCostInput)
     
     # Output Path Selection
     dialog.vectorRasterOutputPath = QLineEdit()
@@ -357,40 +181,75 @@ def setup_ui(dialog: 'StepByStepDialog'):
     outputVectorRasterLayout = QHBoxLayout()
     outputVectorRasterLayout.addWidget(dialog.vectorRasterOutputPath)
     outputVectorRasterLayout.addWidget(dialog.vectorRasterBrowse)
-    combineVectorsLayout.addRow(outputVectorRasterLayout)
+    vectors_layout.addRow(outputVectorRasterLayout)
     
-    dialog.hasVectorCostInput = QLineEdit()
-    dialog.hasVectorCostInput.setPlaceholderText("Enter cost where vector is present")
-    dialog.hasNotVectorCostInput = QLineEdit()
-    dialog.hasNotVectorCostInput.setPlaceholderText("Enter cost where vector is absent")
-
-    combineVectorsLayout.addRow(QLabel("Cost for vector-covered cells:"), dialog.hasVectorCostInput)
-    combineVectorsLayout.addRow(QLabel("Cost for non-vector cells:"), dialog.hasNotVectorCostInput)
-    
-    # Run Create Raster Button
+    # Create button
     dialog.runCreateRasterFromVectorButton = QPushButton("Create cost raster from vector")
-    combineVectorsLayout.addWidget(dialog.runCreateRasterFromVectorButton)
+    vectors_layout.addRow(dialog.runCreateRasterFromVectorButton)
+
+    ############ Aux Tab ############
+    # First Group Box - Combine Vectors
+    combineVectorsGroupBox = QGroupBox()
+    combineVectorsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    combineVectorsLayout = QFormLayout()
+    
+    # Title for Combine Vectors
+    combineVectorsTitle = QLabel("Combine Vectors")
+    combineVectorsTitle.setAlignment(Qt.AlignCenter)
+    combineVectorsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    combineVectorsLayout.addRow(combineVectorsTitle)
+    
+    # Helper text for Combine Vectors
+    infoCombineText = QLabel(
+        "ⓘ Combine vectors functionality is useful to combine roads and railroads vectors for crossings to calculate crossings cost raster in Corridors and Crossings tab later."
+    )
+    infoCombineText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoCombineText.setWordWrap(True)
+    combineVectorsLayout.addRow(infoCombineText)
+    
+    # Select Input Vectors
+    dialog.vectorComboBox = QComboBox()
+    dialog.vector2ComboBox = QComboBox()
+    vectorSelectionLayout = QHBoxLayout()
+    vectorSelectionLayout.addWidget(dialog.vectorComboBox)
+    vectorSelectionLayout.addWidget(dialog.vector2ComboBox)
+    combineVectorsLayout.addRow(QLabel("Select Vectors:"), vectorSelectionLayout)
+
+    # Output Path Selection for combined vectors
+    dialog.vectorsOutputPath = QLineEdit()
+    dialog.vectorsOutputPath.setPlaceholderText("Choose output path for Combined Vectors")
+    dialog.vectorsBrowse = QPushButton("Browse")
+    dialog.vectorsBrowse.clicked.connect(lambda: select_output_file(dialog.vectorsOutputPath, "ogr"))
+    
+    outputVectorsLayout = QHBoxLayout()
+    outputVectorsLayout.addWidget(dialog.vectorsOutputPath)
+    outputVectorsLayout.addWidget(dialog.vectorsBrowse)
+    combineVectorsLayout.addRow(outputVectorsLayout)
+
+    # Run Combine Vectors Button
+    dialog.runCombineVectorsButton = QPushButton("Combine vectors")
+    combineVectorsLayout.addRow(dialog.runCombineVectorsButton)
     
     combineVectorsGroupBox.setLayout(combineVectorsLayout)
-    right_layout.addWidget(combineVectorsGroupBox)  # Add to the third column
-    
-    ############ STEP 7: Resample rasters ############
-    
-    # STEP: Raster Resampling Tool
+    aux_main_layout.addWidget(combineVectorsGroupBox)
+
+    # Second Group Box - Resample Raster
     resampleGroupBox = QGroupBox()
     resampleGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     resampleLayout = QFormLayout()
-
+    
+    # Title for Resample
     resampleTitle = QLabel("Resample Raster")
     resampleTitle.setAlignment(Qt.AlignCenter)
     resampleTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     resampleLayout.addRow(resampleTitle)
     
+    # Helper text for Resample
     infoResampleText = QLabel(
-    "ⓘ For accurate GIS analysis, use a raster with a projected CRS (meters) instead of a geographic CRS (degrees), \n"
-    "as degrees are not uniform in distance across different latitudes."
+        "ⓘ For accurate GIS analysis, use a raster with a projected CRS (meters) instead of a geographic CRS (degrees), as degrees are not uniform in distance across different latitudes."
     )
-    infoResampleText.setStyleSheet("color: lightgrey; font-size: 11px;")  # Make text bold
+    infoResampleText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoResampleText.setWordWrap(True)
     resampleLayout.addRow(infoResampleText)
 
     # Select Input Raster
@@ -419,47 +278,212 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.resampleBrowse = QPushButton("Browse")
     dialog.resampleBrowse.clicked.connect(lambda: select_output_file(dialog.resampleOutputPath, "tif"))
 
-    outputFileLayout = QHBoxLayout()
-    outputFileLayout.addWidget(dialog.resampleOutputPath)
-    outputFileLayout.addWidget(dialog.resampleBrowse)
-    resampleLayout.addRow(outputFileLayout)
+    resampleOutputLayout = QHBoxLayout()
+    resampleOutputLayout.addWidget(dialog.resampleOutputPath)
+    resampleOutputLayout.addWidget(dialog.resampleBrowse)
+    resampleLayout.addRow(resampleOutputLayout)
 
     # Run Resampling Button
     dialog.runResampleButton = QPushButton("Run Resampling")
-    resampleLayout.addWidget(dialog.runResampleButton)
+    resampleLayout.addRow(dialog.runResampleButton)
 
     resampleGroupBox.setLayout(resampleLayout)
-    right_layout.addWidget(resampleGroupBox)  # Add to the third column
+    aux_main_layout.addWidget(resampleGroupBox)
 
+    # Third Group Box - Clip Raster
+    clipGroupBox = QGroupBox()
+    clipGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    clipLayout = QFormLayout()
+    
+    # Title for Clip
+    clipTitle = QLabel("Clip Raster to Area")
+    clipTitle.setAlignment(Qt.AlignCenter)
+    clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    clipLayout.addRow(clipTitle)
 
-    ############ LOG OUTPUT ############
+    # Helper text for Clip Raster
+    infoClipText = QLabel(
+        "ⓘ This functionality clips rasters based on a two-point vector layer (like a rectangle between points). It's useful to reduce raster sizes for faster processing. For example, when calculating a new LCP, you can clip DEM and land use rasters to make computations lighter. While unlikely, some edge cases might lose precision since routes outside the clipped area are not considered. For instance, in scenarios with water bodies, a cheaper route might exist that goes around the clipped area."
+    )
+    infoClipText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoClipText.setWordWrap(True)
+    clipLayout.addRow(infoClipText)
+
+    # Point vector selection for clipping
+    dialog.clipPointVectorComboBox = QComboBox()
+    clipLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.clipPointVectorComboBox)
+
+    dialog.step4Dropdown = QComboBox()
+    clipLayout.addRow(QLabel("Select Raster To Clip:"), dialog.step4Dropdown)
+    
+    dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
+    dialog.copySymbologyCheckbox.setChecked(False)
+    clipLayout.addRow(dialog.copySymbologyCheckbox)
+    
+    dialog.clippedRasterPath = QLineEdit()
+    dialog.clippedRasterPath.setPlaceholderText("Choose output path for Clipped Raster")
+    dialog.clippedRasterBrowse = QPushButton("Browse")
+    dialog.clippedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.clippedRasterPath, "tif"))
+    
+    clippedFileLayout = QHBoxLayout()
+    clippedFileLayout.addWidget(dialog.clippedRasterPath)
+    clippedFileLayout.addWidget(dialog.clippedRasterBrowse)
+    clipLayout.addRow(clippedFileLayout)
+
+    dialog.clip_button = QPushButton("Clip Raster to Area")
+    clipLayout.addRow(dialog.clip_button)
+
+    clipGroupBox.setLayout(clipLayout)
+    aux_main_layout.addWidget(clipGroupBox)
+
+    ############ LCP Tab ############
+    # First Group Box - Create Combined Costs Raster
+    combinedCostsGroupBox = QGroupBox()
+    combinedCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    combinedCostsLayout = QFormLayout()
+    
+    # Title for Combined Costs
+    combinedCostsTitle = QLabel("Create Combined Costs Raster")
+    combinedCostsTitle.setAlignment(Qt.AlignCenter)
+    combinedCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    combinedCostsLayout.addRow(combinedCostsTitle)
+
+    dialog.step3LandUseDropdown = QComboBox()
+    dialog.step3SlopeDropdown = QComboBox()
+    dialog.step3CorridorsDropdown = QComboBox()
+    dialog.step3CrossingsDropdown = QComboBox()
+    
+    combinedCostsLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.step3LandUseDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.step3SlopeDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Corridors Costs Raster:"), dialog.step3CorridorsDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Crossings Costs Raster:"), dialog.step3CrossingsDropdown)
+
+    # Weights
+    dialog.landUseCostWeightInput = QLineEdit()
+    dialog.slopeRasterWeightInput = QLineEdit()
+    dialog.corridorsRasterWeightInput = QLineEdit()
+    dialog.crossingsRasterWeightInput = QLineEdit()
+
+    combinedCostsLayout.addRow(QLabel("Land Use Costs Weight:"), dialog.landUseCostWeightInput)
+    combinedCostsLayout.addRow(QLabel("Slope Costs Weight:"), dialog.slopeRasterWeightInput)
+    combinedCostsLayout.addRow(QLabel("Corridors Costs Weight:"), dialog.corridorsRasterWeightInput)
+    combinedCostsLayout.addRow(QLabel("Crossings Costs Weight:"), dialog.crossingsRasterWeightInput)
+    
+    # Combined raster output path
+    dialog.combinedRasterPath = QLineEdit()
+    dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
+    dialog.combinedRasterBrowse = QPushButton("Browse")
+    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath, "tif"))
+    
+    combinedFileLayout = QHBoxLayout()
+    combinedFileLayout.addWidget(dialog.combinedRasterPath)
+    combinedFileLayout.addWidget(dialog.combinedRasterBrowse)
+    combinedCostsLayout.addRow(combinedFileLayout)
+
+    dialog.combine_button = QPushButton("Create Combined Raster")
+    combinedCostsLayout.addRow(dialog.combine_button)
+
+    combinedCostsGroupBox.setLayout(combinedCostsLayout)
+    lcp_layout.addWidget(combinedCostsGroupBox)
+
+    # Second Group Box - Create Least Cost Path
+    lcpGroupBox = QGroupBox()
+    lcpGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    lcpPathLayout = QFormLayout()
+    
+    # Title for LCP
+    lcpTitle = QLabel("Create Least Cost Path")
+    lcpTitle.setAlignment(Qt.AlignCenter)
+    lcpTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    lcpPathLayout.addRow(lcpTitle)
+
+    dialog.pointsComboBox = QComboBox()
+    lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
+
+    dialog.step5Dropdown = QComboBox()
+    lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.step5Dropdown)
+
+    # Cost Raster Output Path
+    dialog.costRasterPath = QLineEdit()
+    dialog.costRasterPath.setPlaceholderText("Choose output path for Cost Raster (r.cost)")
+    dialog.costRasterBrowse = QPushButton("Browse")
+    dialog.costRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costRasterPath, "tif"))
+
+    costFileLayout = QHBoxLayout()
+    costFileLayout.addWidget(dialog.costRasterPath)
+    costFileLayout.addWidget(dialog.costRasterBrowse)
+    lcpPathLayout.addRow(costFileLayout)
+
+    # Direction Raster Output Path
+    dialog.directionRasterPath = QLineEdit()
+    dialog.directionRasterPath.setPlaceholderText("Choose output path for Direction Raster (r.cost)")
+    dialog.directionRasterBrowse = QPushButton("Browse")
+    dialog.directionRasterBrowse.clicked.connect(lambda: select_output_file(dialog.directionRasterPath, "tif"))
+
+    directionFileLayout = QHBoxLayout()
+    directionFileLayout.addWidget(dialog.directionRasterPath)
+    directionFileLayout.addWidget(dialog.directionRasterBrowse)
+    lcpPathLayout.addRow(directionFileLayout)
+    
+    # Drain Raster Output Path
+    dialog.drainRasterPath = QLineEdit()
+    dialog.drainRasterPath.setPlaceholderText("Choose output path for Drain Raster (r.drain)")
+    dialog.drainRasterBrowse = QPushButton("Browse")
+    dialog.drainRasterBrowse.clicked.connect(lambda: select_output_file(dialog.drainRasterPath, "tif"))
+
+    drainFileLayout = QHBoxLayout()
+    drainFileLayout.addWidget(dialog.drainRasterPath)
+    drainFileLayout.addWidget(dialog.drainRasterBrowse)
+    lcpPathLayout.addRow(drainFileLayout)
+
+    # LCP Vector Output Path (GPKG Format)
+    dialog.finalPath = QLineEdit()
+    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector (r.to.vect)")
+    dialog.finalBrowse = QPushButton("Browse")
+    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
+
+    finalFileLayout = QHBoxLayout()
+    finalFileLayout.addWidget(dialog.finalPath)
+    finalFileLayout.addWidget(dialog.finalBrowse)
+    lcpPathLayout.addRow(finalFileLayout)
+
+    # Run Button
+    dialog.final_button = QPushButton("Run r.cost, r.drain and Convert to Vector")
+    lcpPathLayout.addRow(dialog.final_button)
+
+    lcpGroupBox.setLayout(lcpPathLayout)
+    lcp_layout.addWidget(lcpGroupBox)
+
+    # Add log output area at the bottom of the main window
     dialog.log_output = QTextEdit()
     dialog.log_output.setReadOnly(True)
-    dialog.tabs = QTabWidget()
-    dialog.tabs.addTab(dialog.log_output, "Log")
+    dialog.log_output.setMaximumHeight(100)
     main_layout.addWidget(dialog.tabs)
+    main_layout.addWidget(dialog.log_output)
 
+    # Add clear log button
     dialog.clear_log_button = QPushButton("Clear Logs")
     main_layout.addWidget(dialog.clear_log_button)
 
     dialog.setLayout(main_layout)
 
-
 def select_output_file(output_field: QLineEdit, file_type: str):
-    """Opens a file dialog to select an output file path with the correct format."""
-    if file_type == "tif":
-        file_filter = "GeoTIFF (*.tif);;All Files (*)"
-    elif file_type == "gpkg":
-        file_filter = "GeoPackage (*.gpkg);;All Files (*)"
-    else:
-        file_filter = "All Files (*)"  # Fallback
-
-    file_path, _ = QFileDialog.getSaveFileName(None, "Select Output File", "", file_filter)
+    """Open a file dialog to select an output file location."""
+    file_dialog = QFileDialog()
+    file_dialog.setFileMode(QFileDialog.AnyFile)
+    file_dialog.setAcceptMode(QFileDialog.AcceptSave)
+    file_dialog.setNameFilter(f"*.{file_type}")
     
-    if file_path:
-        output_field.setText(file_path)
-        
+    if file_dialog.exec_():
+        selected_files = file_dialog.selectedFiles()
+        if selected_files:
+            selected_file = selected_files[0]
+            if not selected_file.endswith(f".{file_type}"):
+                selected_file += f".{file_type}"
+            output_field.setText(selected_file)
+
 def update_original_resolution(dialog):
+    """Update the original resolution input field based on the selected raster."""
     raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
     if raster_layer:
         crs = raster_layer.crs()
