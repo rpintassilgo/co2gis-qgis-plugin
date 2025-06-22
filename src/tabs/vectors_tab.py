@@ -21,8 +21,10 @@ def setup_vectors_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     
     dialog.hasVectorCostInput = QLineEdit()
     dialog.hasVectorCostInput.setPlaceholderText("Enter cost where vector is present")
+    dialog.hasVectorCostInput.setText("3")
     dialog.hasNotVectorCostInput = QLineEdit()
     dialog.hasNotVectorCostInput.setPlaceholderText("Enter cost where vector is absent")
+    dialog.hasNotVectorCostInput.setText("1")
     layout.addRow(QLabel("Cost for vector-covered cells:"), dialog.hasVectorCostInput)
     layout.addRow(QLabel("Cost for non-vector cells:"), dialog.hasNotVectorCostInput)
     

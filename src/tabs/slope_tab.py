@@ -66,8 +66,10 @@ def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     slopeTableButtonsLayout = QHBoxLayout()
     dialog.addSlopeRowButton = QPushButton("Add Row")
     dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
+    dialog.populateCometButton = QPushButton("Populate according to COMET")
     slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
     slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
+    slopeTableButtonsLayout.addWidget(dialog.populateCometButton)
     slopeCostsLayout.addRow(slopeTableButtonsLayout)
 
     dialog.slopeCostsRasterPath = QLineEdit()
@@ -177,33 +179,56 @@ def setup_slope_cost_table_logic(dialog: 'AnalysisDialog'):
     """Connects buttons to their functions for the slope cost table."""
     dialog.addSlopeRowButton.clicked.connect(lambda: add_slope_row(dialog))
     dialog.removeSlopeRowButton.clicked.connect(lambda: remove_selected_slope_row(dialog))
-    add_slope_row(dialog)  # Add initial row
+    dialog.populateCometButton.clicked.connect(lambda: populate_slope_table_with_comet_defaults(dialog))
+    
+    add_slope_row(dialog) # Add a single empty row to start
 
-def add_slope_row(dialog: 'AnalysisDialog'):
+def populate_slope_table_with_comet_defaults(dialog: 'AnalysisDialog'):
+    """Clear the table and populate with COMET project default slope costs."""
+    dialog.slopeCostTable.setRowCount(0)
+    
+    comet_defaults = [
+        (0, 10, 1.0, False),
+        (10, 20, 1.1, False),
+        (20, 30, 1.2, False),
+        (30, 70, 3.0, False),
+        (70, 0, 9.0, True)
+    ]
+    for min_val, max_val, cost, no_limit in comet_defaults:
+        add_slope_row(dialog, min_val, max_val, cost, no_limit)
+
+def add_slope_row(dialog: 'AnalysisDialog', min_val=None, max_val=None, cost_val=None, no_limit=False):
     """Add a new row to the slope cost table."""
     row_position = dialog.slopeCostTable.rowCount()
     dialog.slopeCostTable.insertRow(row_position)
 
     min_spin = QSpinBox()
     min_spin.setRange(0, 1000)
+    if min_val is not None:
+        min_spin.setValue(min_val)
     dialog.slopeCostTable.setCellWidget(row_position, 0, min_spin)
 
     max_spin = QSpinBox()
     max_spin.setRange(0, 1000)
+    if max_val is not None:
+        max_spin.setValue(max_val)
     dialog.slopeCostTable.setCellWidget(row_position, 1, max_spin)
 
-    cost_item = QTableWidgetItem("1.0")
+    cost_item = QTableWidgetItem(str(cost_val) if cost_val is not None else "1.0")
     dialog.slopeCostTable.setItem(row_position, 2, cost_item)
 
     no_limit_checkbox = QCheckBox()
+    no_limit_checkbox.setChecked(no_limit)
     dialog.slopeCostTable.setCellWidget(row_position, 3, no_limit_checkbox)
 
     def toggle_max_spin(state):
-        max_spin.setDisabled(state == Qt.Checked)
-        if state == Qt.Checked:
+        is_disabled = state == Qt.Checked
+        max_spin.setDisabled(is_disabled)
+        if is_disabled:
             max_spin.setValue(0)
 
     no_limit_checkbox.stateChanged.connect(toggle_max_spin)
+    toggle_max_spin(Qt.Checked if no_limit else Qt.Unchecked)
 
 def remove_selected_slope_row(dialog: 'AnalysisDialog'):
     """Remove selected rows from the slope cost table."""

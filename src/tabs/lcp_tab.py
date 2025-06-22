@@ -166,7 +166,7 @@ def setup_weight_sliders(dialog: 'AnalysisDialog', layout: QFormLayout):
     dialog._is_updating_weights = False
 
     labels = ["Land Use Costs Weight:", "Slope Costs Weight:", "Corridors Costs Weight:", "Crossings Costs Weight:"]
-    initial_values = [0.25, 0.25, 0.25, 0.25]
+    initial_values = [0.250, 0.250, 0.250, 0.250]
 
     for i, label_text in enumerate(labels):
         slider = QSlider(Qt.Horizontal)
