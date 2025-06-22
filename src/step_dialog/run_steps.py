@@ -2,7 +2,6 @@ from typing import Callable, TYPE_CHECKING
 from qgis.core import QgsProject, QgsApplication, QgsMapLayer
 from ..analysis.cost import clip_raster_to_vector, combine_rasters_with_qgis_raster_calculator, run_r_cost
 from ..analysis.drain import run_r_drain_and_load
-from ..complete_dialog.land_use import get_land_use_class_costs
 from qgis.core import QgsTask, QgsMessageLog, QgsRasterLayer
 from ..analysis.land_use import get_land_use_costs_raster
 from ..analysis.dem import create_slope_costs_from_slope, create_slope_layer_from_dem
@@ -24,9 +23,10 @@ from qgis.core import (
 from PyQt5.QtWidgets import QMessageBox
 import processing
 import os
-from qgis.core import QgsVectorLayer, QgsVectorFileWriter, QgsProject, QgsFeature, QgsFields, QgsWkbTypes
+from qgis.core import QgsVectorLayer, QgsVectorFileWriter, QgsProject, QgsFeature, QgsFields, QgsWkbTypes, QgsRaster, QgsPointXY
 from PyQt5.QtWidgets import QMessageBox
 import processing
+import numpy as np
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -58,7 +58,7 @@ def run_step1_logic(dialog: 'StepByStepDialog'):
     """Step 1: Create Land Use Costs Raster"""
     try:
         land_use_layer = QgsProject.instance().mapLayer(dialog.terrainComboBox.currentData())
-        class_costs = get_land_use_class_costs(dialog)
+        class_costs = dialog.get_land_use_costs()
         
         if not land_use_layer:
             raise ValueError("No land use layer selected.")
@@ -435,6 +435,139 @@ def run_slope_costs_logic(dialog: 'StepByStepDialog'):
     except Exception as e:
         error_message = f"Creating Slope Costs Raster Has Failed: {str(e)}"
         dialog.log_message(error_message)
+
+def run_price_estimation_logic(dialog: 'StepByStepDialog'):
+    """Calculates the total pipeline price based on various cost factors."""
+    try:
+        dialog.log_message("Calculating pipeline price...")
+
+        # Get pipeline vector layer by its ID
+        pipeline_layer_id = dialog.pipelineVectorDropdown.currentData()
+        pipeline_layer = QgsProject.instance().mapLayer(pipeline_layer_id)
+        if not pipeline_layer:
+            raise ValueError("Pipeline vector layer not found.")
+
+        # Get raster layers by their IDs
+        land_use_layer_id = dialog.landUseCostsDropdown.currentData()
+        slope_layer_id = dialog.slopeCostsDropdown.currentData()
+        corridors_layer_id = dialog.corridorsCostsDropdown.currentData()
+        crossings_layer_id = dialog.crossingsCostsDropdown.currentData()
+
+        land_use_layer = QgsProject.instance().mapLayer(land_use_layer_id)
+        slope_layer = QgsProject.instance().mapLayer(slope_layer_id)
+        corridors_layer = QgsProject.instance().mapLayer(corridors_layer_id)
+        crossings_layer = QgsProject.instance().mapLayer(crossings_layer_id)
+        
+        if not all([land_use_layer, slope_layer, corridors_layer, crossings_layer]):
+            raise ValueError("One or more cost raster layers are not selected.")
+
+        # Read raster values
+        full_raster_values = extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer)
+        if not full_raster_values:
+            raise ValueError("No valid raster values found for the pipeline path.")
+
+        # Get all input parameters
+        λ = float(dialog.frictionFactorInput.text())
+        M = float(dialog.massFlowRateInput.text())
+        p = float(dialog.co2densityInput.text())
+        Δp = float(dialog.pressureDropInput.text()) * 1000
+        Bc = float(dialog.standardizedCostFactorInput.text())
+        N = float(dialog.numInfrastructureInput.text())
+        
+        total_cost = 0
+        total_length = 0
+        segment_costs = []
+        booster_costs = []
+        segment_index = 0
+
+        max_segment_length = 150000
+        current_segment = []
+        current_segment_length = 0
+        sub_segment_index = 1
+
+        for Fc, Fs, Flu, Fci, cell_length in full_raster_values:
+            current_segment.append((Fc, Fs, Flu, Fci, cell_length))
+            total_length += cell_length
+            current_segment_length += cell_length
+
+            segment_complete = current_segment_length >= max_segment_length
+            final_segment = (total_length >= sum(cl for _, _, _, _, cl in full_raster_values))
+
+            if segment_complete or final_segment:
+                L_segment = current_segment_length
+                D = ((8 * λ * M**2 * L_segment) / (np.pi**2 * p * Δp))**(1/5)
+
+                summation = 0
+                for Fc_i, Fs_i, Flu_i, Fci_i, cl_i in current_segment:
+                    cost_factor = Fc_i * Fs_i * (Flu_i * (1 - 0.1 * N) + 0.1 * N * Fci_i)
+                    segment_cost = cost_factor * cl_i
+                    summation += segment_cost
+
+                    dialog.log_message(
+                         f"Segment {segment_index+1}.{sub_segment_index}: L_cell = {cl_i:.2f} m, "
+                         f"Fs = {Fs_i:.2f}, Flu = {Flu_i:.2f}, Segment Cost = {segment_cost:.2f} €"
+                    )
+                    sub_segment_index += 1
+
+                Ip = Bc * D * summation
+                segment_costs.append(Ip)
+                dialog.log_message(f"Segment {segment_index+1}: D = {D:.4f} m, Segment Cost (Ip) = {Ip:,.2f} €")
+
+                if not final_segment:
+                    Beff = 0.75
+                    Sc = (M * Δp) / (p * Beff)
+                    Ib = 0.547 * Sc + 0.42
+                    booster_costs.append(Ib)
+                    dialog.log_message(f"Booster Cost (Ib) added: {Ib:,.2f} €")
+
+                current_segment = []
+                current_segment_length = 0
+                sub_segment_index = 1
+                segment_index += 1
+
+        I_total = sum(segment_costs) + sum(booster_costs)
+        dialog.log_message(f"Calculated pipeline price (Itotal): {I_total:,.2f} €")
+
+    except Exception as e:
+        QMessageBox.critical(dialog, "Error", f"An error occurred: {str(e)}")
+        dialog.log_message(f"Error: {str(e)}")
+
+
+def extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer):
+    """Extracts raster values along the pipeline."""
+    values = []
+    for feature in pipeline_layer.getFeatures():
+        geom = feature.geometry()
+        parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
+        for line in parts:
+            for i in range(len(line) - 1):
+                start, end = line[i], line[i + 1]
+                cell_length = start.distance(end)
+                sample_ratios = [0.0, 0.25, 0.5, 0.75, 1.0]
+                corridors_vals, land_use_vals, slope_vals, crossings_vals = [], [], [], []
+                for ratio in sample_ratios:
+                    x, y = start.x() + (end.x() - start.x()) * ratio, start.y() + (end.y() - start.y()) * ratio
+                    point = QgsPointXY(x, y)
+                    Fc, Fs, Flu, Fci = (
+                        get_raster_value_at_point(corridors_layer, point),
+                        get_raster_value_at_point(land_use_layer, point),
+                        get_raster_value_at_point(slope_layer, point),
+                        get_raster_value_at_point(crossings_layer, point)
+                    )
+                    if Fc is not None: corridors_vals.append(Fc)
+                    if Fs is not None: land_use_vals.append(Fs)
+                    if Flu is not None: slope_vals.append(Flu)
+                    if Fci is not None: crossings_vals.append(Fci)
+
+                if all([land_use_vals, slope_vals, corridors_vals, crossings_vals]):
+                    values.append((max(corridors_vals), max(land_use_vals), max(slope_vals), max(crossings_vals), cell_length))
+    return values
+
+def get_raster_value_at_point(raster_layer, point):
+    """Gets a raster value at a specific point."""
+    provider = raster_layer.dataProvider()
+    ident = provider.identify(point, QgsRaster.IdentifyFormatValue)
+    return list(ident.results().values())[0] if ident.isValid() else None
 
 def get_layer_path(layer):
     """Returns the file path of the given QgsMapLayer."""

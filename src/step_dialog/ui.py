@@ -2,23 +2,22 @@ from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QVBoxLayout, QLabel, QComboBox, QTableWidget, QLineEdit, QPushButton, QCheckBox,
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog,
-    QWidget, QSlider, QDoubleSpinBox
+    QWidget, QSlider, QDoubleSpinBox, QGridLayout, QDialog
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject, QgsUnitTypes
+from qgis.core import QgsProject, QgsUnitTypes, QgsVectorLayer
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
 
 def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
-    dialog.setWindowTitle("Step-by-Step Analysis")
-    dialog.setGeometry(0, 0, 800, 850)  # Adjusted size for tabbed layout
+    dialog.setWindowTitle("Least Cost Pipeline")
+    dialog.setGeometry(0, 0, 800, 780)  # Adjusted size for tabbed layout
     dialog.setStyleSheet("""
-        QPushButton { color: white; }
-        QLabel { color: white; }
-        QComboBox { color: white; }
-        QHeaderView::section { color: white; }
+        QLabel, QComboBox, QPushButton, QGroupBox::title, QHeaderView::section {
+            color: white;
+        }
     """)
 
     main_layout = QVBoxLayout()
@@ -32,6 +31,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     vectors_tab = QWidget()
     aux_tab = QWidget()
     lcp_tab = QWidget()
+    price_estimation_tab = QWidget()
     
     # Add tabs to tab widget
     dialog.tabs.addTab(land_use_tab, "Land Use")
@@ -39,6 +39,7 @@ def setup_ui(dialog: 'StepByStepDialog'):
     dialog.tabs.addTab(vectors_tab, "Corridors and Crossings")
     dialog.tabs.addTab(aux_tab, "Aux")
     dialog.tabs.addTab(lcp_tab, "LCP")
+    dialog.tabs.addTab(price_estimation_tab, "Price Estimation")
     
     # Setup layouts for each tab
     land_use_layout = QFormLayout()
@@ -46,12 +47,14 @@ def setup_ui(dialog: 'StepByStepDialog'):
     vectors_layout = QFormLayout()
     aux_main_layout = QVBoxLayout()
     lcp_layout = QFormLayout()
+    price_estimation_layout = QVBoxLayout()
     
     land_use_tab.setLayout(land_use_layout)
     slope_tab.setLayout(slope_layout)
     vectors_tab.setLayout(vectors_layout)
     aux_tab.setLayout(aux_main_layout)
     lcp_tab.setLayout(lcp_layout)
+    price_estimation_tab.setLayout(price_estimation_layout)
 
     ############ Land Use Tab ############
     dialog.terrainComboBox = QComboBox()
@@ -452,6 +455,9 @@ def setup_ui(dialog: 'StepByStepDialog'):
     lcpGroupBox.setLayout(lcpPathLayout)
     lcp_layout.addWidget(lcpGroupBox)
 
+    # Setup Price Estimation Tab
+    setup_price_estimation_tab(dialog, price_estimation_layout)
+
     # Add log output area at the bottom of the main window
     dialog.log_output = QTextEdit()
     dialog.log_output.setReadOnly(True)
@@ -538,6 +544,42 @@ def validate_weight_sum(dialog):
     for slider in dialog.weight_sliders:
         slider.setStyleSheet(style)
 
+def update_resolution_field(dialog, combo_box: QComboBox, line_edit: QLineEdit):
+    """Update the resolution input field based on the selected raster."""
+    layer_id = combo_box.currentData()
+    if not layer_id:
+        line_edit.setText("")
+        return
+        
+    raster_layer = QgsProject.instance().mapLayer(layer_id)
+    if raster_layer:
+        crs = raster_layer.crs()
+        resolution_x = raster_layer.rasterUnitsPerPixelX()
+        resolution_y = raster_layer.rasterUnitsPerPixelY()
+        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+        line_edit.setText(f"~{avg_resolution} {unit}")
+
+def update_pipeline_length(dialog):
+    """Calculate the total length of the selected pipeline vector and update the input field."""
+    selected_index = dialog.pipelineVectorDropdown.currentIndex()
+    if selected_index == -1:
+        dialog.pipelineLengthInput.setText("")
+        return
+
+    layer_id = dialog.pipelineVectorDropdown.currentData()
+    layer = QgsProject.instance().mapLayer(layer_id)
+
+    if not isinstance(layer, QgsVectorLayer):
+        dialog.log_message("Selected layer is not a valid polyline vector.")
+        return
+
+    total_length = sum(f.geometry().length() for f in layer.getFeatures())
+    rounded_length = str(round(total_length, 2))
+
+    dialog.pipelineLengthInput.setText(rounded_length)
+    dialog.log_message(f"Entire pipeline length updated: {rounded_length} m")
+
 def select_output_file(output_field: QLineEdit, file_type: str):
     """Open a file dialog to select an output file location."""
     file_dialog = QFileDialog()
@@ -569,5 +611,182 @@ def update_original_resolution(dialog):
 
         # Update UI with correct unit
         dialog.originalResolutionInput.setText(f"~{avg_resolution} {unit}")
+
+def setup_price_estimation_tab(dialog, layout):
+    """Sets up the UI for the Price Estimation tab."""
+    main_layout = QVBoxLayout()
+    columns_layout = QHBoxLayout()
+    left_layout = QVBoxLayout()
+    right_layout = QVBoxLayout()
+
+    columns_layout.addLayout(left_layout, 1)
+    columns_layout.addLayout(right_layout, 1)
+
+    # Description GroupBox
+    descriptionGroupBox = QGroupBox()
+    descriptionGroupBox.setStyleSheet("QGroupBox { border: 0px; }")
+    descriptionLayout = QFormLayout()
+    descriptionLabel = QLabel("""
+        <html>
+            <body>
+                <p style="text-align:justify; font-size:11px; color:lightgrey;">
+                    ⓘ This submenu calculates the total pipeline cost (<b>I<sub>total</sub></b>) based on its length.
+                    If the pipeline is <b>150 km or less</b>, the cost is calculated using a single <b>I<sub>P</sub></b>
+                    with the total length in the <b>D</b> equation. <br> If the pipeline is longer than <b>150 km</b>, 
+                    it is split into <b>segments of up to 150 km</b>, and multiple <b>I<sub>P</sub></b> values are calculated. <br>
+                    In these calculations, <b>L<sub>segment</sub></b> is the length of each segment (max 150 km), while 
+                    <b>L<sub>cell</sub></b> represents the pipeline length inside each GIS cell. <br>
+                    Booster stations are added after every 150 km, and their costs (<b>I<sub>B</sub></b>)
+                    are included in <b>I<sub>total</sub></b>.
+                </p>
+            </body>
+        </html>
+    """)
+    descriptionLayout.addRow(descriptionLabel)
+    descriptionGroupBox.setLayout(descriptionLayout)
+    main_layout.addWidget(descriptionGroupBox)
+
+    # "Show Formulas" Button
+    dialog.show_formulas_button = QPushButton("Show Calculation Formulas")
+    main_layout.addWidget(dialog.show_formulas_button)
+    
+    main_layout.addLayout(columns_layout)
+
+    # Selection GroupBox
+    selectionGroupBox = QGroupBox()
+    selectionGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    selectionLayout = QFormLayout()
+    selectionTitle = QLabel("Select Cost Rasters and Vector")
+    selectionTitle.setAlignment(Qt.AlignCenter)
+    selectionTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    selectionLayout.addRow(selectionTitle)
+    dialog.pipelineVectorDropdown = QComboBox()
+    dialog.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
+    dialog.landUseCostsDropdown = QComboBox()
+    dialog.slopeCostsDropdown = QComboBox()
+    dialog.corridorsCostsDropdown = QComboBox()
+    dialog.crossingsCostsDropdown = QComboBox()
+    selectionLayout.addRow(QLabel("Select Pipeline Vector:"), dialog.pipelineVectorDropdown)
+    selectionLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
+    
+    dialog.landUseCostsResInput = QLineEdit()
+    dialog.slopeCostsResInput = QLineEdit()
+    dialog.corridorsCostsResInput = QLineEdit()
+    dialog.crossingsCostsResInput = QLineEdit()
+    selectionLayout.addRow(QLabel("Land Use Costs Resolution:"), dialog.landUseCostsResInput)
+    selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.slopeCostsResInput)
+    selectionLayout.addRow(QLabel("Corridors Costs Resolution:"), dialog.corridorsCostsResInput)
+    selectionLayout.addRow(QLabel("Crossings Costs Resolution:"), dialog.crossingsCostsResInput)
+    selectionGroupBox.setLayout(selectionLayout)
+    left_layout.addWidget(selectionGroupBox)
+
+    # Input GroupBox
+    inputGroupBox = QGroupBox()
+    inputGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    inputLayout = QFormLayout()
+    inputTitle = QLabel("Equation Input Variables")
+    inputTitle.setAlignment(Qt.AlignCenter)
+    inputTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    inputLayout.addRow(inputTitle)
+    dialog.pipelineLengthInput = QLineEdit()
+    dialog.pipelineLengthInput.setReadOnly(True)
+    dialog.numInfrastructureInput = QLineEdit()
+    dialog.standardizedCostFactorInput = QLineEdit()
+    dialog.frictionFactorInput = QLineEdit()
+    dialog.co2MassFlowRateInput = QLineEdit()
+    dialog.co2densityInput = QLineEdit()
+    dialog.pressureDropInput = QLineEdit()
+    
+    # Set default values
+    dialog.numInfrastructureInput.setText("0")
+    dialog.standardizedCostFactorInput.setText("1357")
+    dialog.frictionFactorInput.setText("0.015")
+    dialog.co2MassFlowRateInput.setText("1")
+    dialog.co2densityInput.setText("827")
+    dialog.pressureDropInput.setText("0.02")
+    
+    inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
+    inputLayout.addRow(QLabel("Number of infrastructure crossings (N):"), dialog.numInfrastructureInput)
+    inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
+    inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
+    inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
+    inputLayout.addRow(QLabel("CO2 Density (ρ, in kg/m³):"), dialog.co2densityInput)
+    inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp, in MPa/km):"), dialog.pressureDropInput)
+    inputGroupBox.setLayout(inputLayout)
+    right_layout.addWidget(inputGroupBox)
+    
+    # Calculate button
+    dialog.calculatePriceButton = QPushButton("Calculate pipeline price")
+    main_layout.addWidget(dialog.calculatePriceButton)
+
+    layout.addLayout(main_layout)
+
+class FormulaDialog(QDialog):
+    """A simple dialog to display the formulas in a grid."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Calculation Formulas")
+        self.setStyleSheet("""
+            QDialog { background-color: #2a2a2a; }
+            QLabel { color: white; }
+        """)
+        
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(20)
+        grid_layout.setColumnStretch(1, 1)
+
+        # D Formula
+        D_formula_label = QLabel("""
+            <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
+            <tr><td style="font-size:25px; font-weight:bold; text-align:right;">D</td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td style="font-size:40px; font-weight:bold; text-align:center;">(</td><td>
+            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L<sub>segment</sub></td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ Δp</td></tr></table>
+            </td><td style="font-size:40px; font-weight:bold; text-align:center;">)</td><td style="font-size:22px; font-weight:bold; text-align:center;"><sup>1/5</sup></td></tr></table></body></html>""")
+        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), and pressure drop (Δp) over a segment length (L).")
+        D_explanation.setWordWrap(True)
+        grid_layout.addWidget(D_formula_label, 1, 0, Qt.AlignCenter)
+        grid_layout.addWidget(D_explanation, 1, 1)
+
+        # Ip Formula
+        Ip_formula_label = QLabel("""
+            <html><body><p align="center" style="font-size:25px; font-weight:bold;">
+            I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>c</sub> ⋅F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 - 0.1N) + 0.1N ⋅ F<sub>ci</sub>] ⋅ L<sub>cell</sub> }</p></body></html>""")
+        Ip_explanation = QLabel("<b>Pipeline Segment Cost (I<sub>p</sub>):</b><br>Determined by the standardized cost (B<sub>c</sub>), diameter (D), and a summation of various cost factors (F<sub>c</sub>, F<sub>s</sub>, F<sub>lu</sub>, F<sub>ci</sub>) and infrastructure crossings (N) over each cell's length (L<sub>cell</sub>).")
+        Ip_explanation.setWordWrap(True)
+        grid_layout.addWidget(Ip_formula_label, 2, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Ip_explanation, 2, 1)
+
+        # Sc Formula
+        Sc_formula_label = QLabel("""
+            <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
+            <tr><td style="font-size:25px; font-weight:bold; text-align:right;">S<sub>c</sub></td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td>
+            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">M ⋅ Δp</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">&#961; ⋅ B<sub>eff</sub></td></tr></table>
+            </td></tr></table></body></html>""")
+        Sc_explanation = QLabel("<b>Compressor Power (S<sub>c</sub>):</b><br>Represents the power required for a booster station, based on flow rate (M), pressure drop (Δp), and fluid density (ρ).")
+        Sc_explanation.setWordWrap(True)
+        grid_layout.addWidget(Sc_formula_label, 3, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Sc_explanation, 3, 1)
+
+        # Ib Formula
+        Ib_formula_label = QLabel("""
+            <html><body><p align="center" style="font-size:25px; font-weight:bold;">
+            I<sub>B</sub> = 0.547 ⋅ S<sub>c</sub> + 0.42</p></body></html>""")
+        Ib_explanation = QLabel("<b>Booster Station Cost (I<sub>B</sub>):</b><br>The investment cost for a booster station, calculated as a function of the required compressor power (S<sub>c</sub>).")
+        Ib_explanation.setWordWrap(True)
+        grid_layout.addWidget(Ib_formula_label, 4, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Ib_explanation, 4, 1)
+
+        # Itotal Formula
+        Itotal_formula_label = QLabel("""
+            <html><body><p align="center" style="font-size:25px; font-weight:bold;">
+            I<sub>total</sub> = ΣI<sub>p</sub> + ΣI<sub>B</sub></p></body></html>""")
+        Itotal_explanation = QLabel("<b>Total Pipeline Cost (I<sub>total</sub>):</b><br>The final cost, calculated as the sum of all pipeline segment costs (ΣI<sub>p</sub>) and all booster station costs (ΣI<sub>B</sub>).")
+        Itotal_explanation.setWordWrap(True)
+        grid_layout.addWidget(Itotal_formula_label, 5, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Itotal_explanation, 5, 1)
+
+        self.setLayout(grid_layout)
 
 

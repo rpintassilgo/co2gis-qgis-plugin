@@ -25,6 +25,13 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
     dialog.refRasterComboBox.clear()
     dialog.slopeLayerComboBox.clear()
 
+    # Price estimation dropdowns
+    dialog.pipelineVectorDropdown.clear()
+    dialog.landUseCostsDropdown.clear()
+    dialog.slopeCostsDropdown.clear()
+    dialog.corridorsCostsDropdown.clear()
+    dialog.crossingsCostsDropdown.clear()
+
     # Get all layers from the project
     layers = QgsProject.instance().mapLayers().values()
 
@@ -43,11 +50,18 @@ def populate_layer_step_by_step_dropdowns(dialog: 'StepByStepDialog'):
             dialog.resampleRasterComboBox.addItem(layer.name(), layer.id())
             dialog.refRasterComboBox.addItem(layer.name(), layer.id())
             dialog.slopeLayerComboBox.addItem(layer.name(), layer.id())
+            # Price estimation raster dropdowns
+            dialog.landUseCostsDropdown.addItem(layer.name(), layer.id())
+            dialog.slopeCostsDropdown.addItem(layer.name(), layer.id())
+            dialog.corridorsCostsDropdown.addItem(layer.name(), layer.id())
+            dialog.crossingsCostsDropdown.addItem(layer.name(), layer.id())
         elif isinstance(layer, QgsVectorLayer):
             # Add to vector dropdowns
             if layer.geometryType() == QgsWkbTypes.PointGeometry:
                 dialog.pointsComboBox.addItem(layer.name(), layer.id())
                 dialog.clipPointVectorComboBox.addItem(layer.name(), layer.id())
+            elif layer.geometryType() == QgsWkbTypes.LineGeometry:
+                dialog.pipelineVectorDropdown.addItem(layer.name(), layer.id())
             dialog.vectorComboBox.addItem(layer.name(), layer.id())
             dialog.vector2ComboBox.addItem(layer.name(), layer.id())
             dialog.vectorRasterComboBox.addItem(layer.name(), layer.id())

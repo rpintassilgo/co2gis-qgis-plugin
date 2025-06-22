@@ -4,11 +4,15 @@ from PyQt5.QtWidgets import (
     QFormLayout, QHeaderView, QTextEdit, QTabWidget, QGroupBox, QHBoxLayout, QFileDialog, QDialog, QSpinBox
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject
-from .ui import setup_ui
+from qgis.core import QgsProject, QgsApplication
+from .ui import setup_ui, update_resolution_field, update_pipeline_length, FormulaDialog
 from .dropdowns import populate_layer_step_by_step_dropdowns
-from .run_steps import run_step, run_step1_logic, run_step2_logic, run_step3_logic, run_step4_logic, run_step5_logic, run_step7_logic, run_step8_logic, run_step_resample
-from ..complete_dialog import populate_land_use_classes_table
+from .run_steps import (
+    run_step, run_step1_logic, run_step2_logic, run_step3_logic, 
+    run_step4_logic, run_step5_logic, run_step7_logic, run_step8_logic, 
+    run_step_resample, run_price_estimation_logic, run_slope_costs_logic
+)
+from .land_use import populate_land_use_classes_table
 
 if TYPE_CHECKING:
     from . import StepByStepDialog
@@ -65,11 +69,40 @@ class StepByStepDialog(QDialog):
         self.slopeCostsRasterPath: QLineEdit
         self.slopeCostsRasterBrowse: QPushButton
 
+        # Price Estimation widgets
+        self.pipelineVectorDropdown: QComboBox
+        self.landUseCostsDropdown: QComboBox
+        self.slopeCostsDropdown: QComboBox
+        self.corridorsCostsDropdown: QComboBox
+        self.crossingsCostsDropdown: QComboBox
+        self.landUseCostsResInput: QLineEdit
+        self.slopeCostsResInput: QLineEdit
+        self.corridorsCostsResInput: QLineEdit
+        self.crossingsCostsResInput: QLineEdit
+        self.pipelineLengthInput: QLineEdit
+        self.numInfrastructureInput: QLineEdit
+        self.standardizedCostFactorInput: QLineEdit
+        self.frictionFactorInput: QLineEdit
+        self.co2MassFlowRateInput: QLineEdit
+        self.co2densityInput: QLineEdit
+        self.pressureDropInput: QLineEdit
+        self.calculatePriceButton: QPushButton
+        self.show_formulas_button: QPushButton
+
+        self.land_use_populating_task = None
+
         # Setup UI and populate dropdowns
         setup_ui(self)
         populate_layer_step_by_step_dropdowns(self)
         QgsProject.instance().layersAdded.connect(lambda: populate_layer_step_by_step_dropdowns(self))
         setup_slope_cost_table_logic(self)
+
+        # Manually trigger updates for Price Estimation tab after population
+        update_pipeline_length(self)
+        update_resolution_field(self, self.landUseCostsDropdown, self.landUseCostsResInput)
+        update_resolution_field(self, self.slopeCostsDropdown, self.slopeCostsResInput)
+        update_resolution_field(self, self.corridorsCostsDropdown, self.corridorsCostsResInput)
+        update_resolution_field(self, self.crossingsCostsDropdown, self.crossingsCostsResInput)
 
         # Connect buttons to step execution functions
         self.terrainComboBox.currentIndexChanged.connect(lambda: populate_land_use_classes_table(self))
@@ -83,6 +116,28 @@ class StepByStepDialog(QDialog):
         self.clear_log_button.clicked.connect(self.clear_logs)
         self.runCombineVectorsButton.clicked.connect(lambda: run_step(self, 8, run_step8_logic))
         self.runCreateRasterFromVectorButton.clicked.connect(lambda: run_step(self, 7, run_step7_logic))
+        self.calculatePriceButton.clicked.connect(lambda: run_step(self, 10, run_price_estimation_logic))
+        self.show_formulas_button.clicked.connect(self.open_formulas_dialog)
+
+        # Connections for Price Estimation tab
+        self.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(self))
+        self.landUseCostsDropdown.currentIndexChanged.connect(
+            lambda: update_resolution_field(self, self.landUseCostsDropdown, self.landUseCostsResInput)
+        )
+        self.slopeCostsDropdown.currentIndexChanged.connect(
+            lambda: update_resolution_field(self, self.slopeCostsDropdown, self.slopeCostsResInput)
+        )
+        self.corridorsCostsDropdown.currentIndexChanged.connect(
+            lambda: update_resolution_field(self, self.corridorsCostsDropdown, self.corridorsCostsResInput)
+        )
+        self.crossingsCostsDropdown.currentIndexChanged.connect(
+            lambda: update_resolution_field(self, self.crossingsCostsDropdown, self.crossingsCostsResInput)
+        )
+
+    def open_formulas_dialog(self):
+        """Opens the dialog that displays the formulas."""
+        dialog = FormulaDialog(self)
+        dialog.exec_()
 
     def log_message(self, message: str):
         """Append a message to the log output."""
@@ -107,6 +162,15 @@ class StepByStepDialog(QDialog):
             intervals.append({"min": min_val, "max": max_val, "cost": cost})
 
         return intervals
+
+    def get_land_use_costs(self):
+        """Extracts land use class costs from the table."""
+        costs = {}
+        for row in range(self.classTable.rowCount()):
+            class_id = int(self.classTable.item(row, 0).text())
+            cost = float(self.classTable.item(row, 2).text())
+            costs[class_id] = cost
+        return costs
 
 def open_step_by_step_dialog(parent):
     """Opens the Step-by-Step Analysis dialog."""
