@@ -35,6 +35,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     dialog.slopeCostsDropdown.clear()
     dialog.corridorsCostsDropdown.clear()
     dialog.crossingsCostsDropdown.clear()
+    dialog.crossingsVectorDropdown.clear()
 
     # Get all layers from the project
     layers = QgsProject.instance().mapLayers().values()
@@ -69,6 +70,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
             dialog.vectorComboBox.addItem(layer.name(), layer.id())
             dialog.vector2ComboBox.addItem(layer.name(), layer.id())
             dialog.vectorRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.crossingsVectorDropdown.addItem(layer.name(), layer.id())
 
     # Logging messages if no layers are found
     if dialog.pointsComboBox.count() == 0:

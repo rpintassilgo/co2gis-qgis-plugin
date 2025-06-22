@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QVBoxLayout, QDialog, QGridLayout
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject, QgsRaster, QgsPointXY
+from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry
 
 from ..task_manager import run_analysis
 from ..utils import update_pipeline_length, update_resolution_field
@@ -89,14 +89,13 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     inputLayout.addRow(inputTitle)
     dialog.pipelineLengthInput = QLineEdit()
     dialog.pipelineLengthInput.setReadOnly(True)
-    dialog.numInfrastructureInput = QLineEdit()
+    dialog.crossingsVectorDropdown = QComboBox()
     dialog.standardizedCostFactorInput = QLineEdit()
     dialog.frictionFactorInput = QLineEdit()
     dialog.co2MassFlowRateInput = QLineEdit()
     dialog.co2densityInput = QLineEdit()
     dialog.pressureDropInput = QLineEdit()
     
-    dialog.numInfrastructureInput.setText("0")
     dialog.standardizedCostFactorInput.setText("1357")
     dialog.frictionFactorInput.setText("0.015")
     dialog.co2MassFlowRateInput.setText("1")
@@ -104,7 +103,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.pressureDropInput.setText("0.02")
     
     inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
-    inputLayout.addRow(QLabel("Number of infrastructure crossings (N):"), dialog.numInfrastructureInput)
+    inputLayout.addRow(QLabel("Select Infrastructure Crossings Vector (N):"), dialog.crossingsVectorDropdown)
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
     inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
     inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
@@ -147,12 +146,13 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         slope_layer = QgsProject.instance().mapLayer(dialog.slopeCostsDropdown.currentData())
         corridors_layer = QgsProject.instance().mapLayer(dialog.corridorsCostsDropdown.currentData())
         crossings_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
+        crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
         
-        if not all([pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer]):
+        if not all([pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer]):
             raise ValueError("All layers for price estimation must be selected.")
 
         full_raster_values = extract_raster_values_along_pipeline(
-            pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer
+            pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
         )
         if not full_raster_values:
             raise ValueError("No valid raster values found for the pipeline path. Check if the pipeline intersects with the cost rasters.")
@@ -162,7 +162,6 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         p = float(dialog.co2densityInput.text())
         Δp = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m
         Bc = float(dialog.standardizedCostFactorInput.text())
-        N = float(dialog.numInfrastructureInput.text())
         
         segment_costs = []
         booster_costs = []
@@ -173,10 +172,10 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         current_segment_cells = []
         current_segment_length = 0
         
-        pipeline_total_length = sum(cl for _, _, _, _, cl in full_raster_values)
+        pipeline_total_length = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
-        for Fc, Fs, Flu, Fci, cell_length in full_raster_values:
-            current_segment_cells.append((Fc, Fs, Flu, Fci, cell_length))
+        for Fc, Fs, Flu, Fci, N, cell_length in full_raster_values:
+            current_segment_cells.append((Fc, Fs, Flu, Fci, N, cell_length))
             total_length += cell_length
             current_segment_length += cell_length
 
@@ -188,8 +187,8 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                 D = ((8 * λ * M**2 * L_segment) / (np.pi**2 * p * Δp))**(1/5)
 
                 summation = sum(
-                    fc_i * fs_i * (flu_i * (1 - 0.1 * N) + 0.1 * N * fci_i) * cl_i
-                    for fc_i, fs_i, flu_i, fci_i, cl_i in current_segment_cells
+                    fc_i * fs_i * (flu_i * (1 - 0.1 * n_i) + 0.1 * n_i * fci_i) * cl_i
+                    for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_segment_cells
                 )
 
                 Ip = Bc * D * summation
@@ -216,17 +215,26 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
     except Exception as e:
         dialog.log_message(f"Price Estimation Failed: {str(e)}", "Price Estimation")
 
-def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer):
+def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
     """
     Extracts raster values at multiple points along each segment of the pipeline, returning the maximum value for each raster.
     """
     values = []
+    crossings_features = list(crossings_vector_layer.getFeatures())
+
     for feature in pipeline_layer.getFeatures():
         geom = feature.geometry()
         parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
         for line in parts:
             for i in range(len(line) - 1):
                 start, end = line[i], line[i + 1]
+                
+                segment_geom = QgsGeometry.fromPolylineXY([start, end])
+                num_intersections = 0
+                for crossing_feature in crossings_features:
+                    if segment_geom.intersects(crossing_feature.geometry()):
+                        num_intersections += 1
+
                 cell_length = start.distance(end)
                 sample_ratios = [0.0, 0.25, 0.5, 0.75, 1.0]
                 corridors_vals, land_use_vals, slope_vals, crossings_vals = [], [], [], []
@@ -246,7 +254,7 @@ def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_l
                     if Fci is not None: crossings_vals.append(Fci)
 
                 if all([land_use_vals, slope_vals, corridors_vals, crossings_vals]):
-                    values.append((max(corridors_vals), max(slope_vals), max(land_use_vals), max(crossings_vals), cell_length))
+                    values.append((max(corridors_vals), max(slope_vals), max(land_use_vals), max(crossings_vals), num_intersections, cell_length))
     return values
 
 def get_raster_value_at_point(raster_layer, point):

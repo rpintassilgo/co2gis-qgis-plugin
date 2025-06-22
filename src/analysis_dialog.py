@@ -92,6 +92,7 @@ class AnalysisDialog(QDialog):
         self.corridorsCostsResInput: QLineEdit
         self.crossingsCostsResInput: QLineEdit
         self.pipelineLengthInput: QLineEdit
+        self.crossingsVectorDropdown: QComboBox
         self.numInfrastructureInput: QLineEdit
         self.standardizedCostFactorInput: QLineEdit
         self.frictionFactorInput: QLineEdit
