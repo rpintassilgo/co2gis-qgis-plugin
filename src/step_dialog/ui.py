@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
     dialog.setWindowTitle("Step-by-Step Analysis")
-    dialog.setGeometry(0, 0, 800, 800)  # Adjusted size for tabbed layout
+    dialog.setGeometry(0, 0, 800, 850)  # Adjusted size for tabbed layout
 
     main_layout = QVBoxLayout()
     
