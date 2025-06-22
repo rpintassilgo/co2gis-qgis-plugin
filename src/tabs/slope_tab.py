@@ -1,0 +1,274 @@
+from typing import TYPE_CHECKING
+from PyQt5.QtWidgets import (
+    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
+    QGroupBox, QTableWidget, QHeaderView, QSpinBox, QCheckBox, QTableWidgetItem
+)
+from PyQt5.QtCore import Qt
+from qgis.core import QgsProject, QgsRasterLayer
+from qgis import processing
+
+from ..task_manager import run_analysis
+from ..utils import select_output_file
+
+if TYPE_CHECKING:
+    from ..analysis_dialog import AnalysisDialog
+
+def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+    """Sets up the Slope tab."""
+    createSlopeGroupBox = QGroupBox()
+    createSlopeGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    createSlopeLayout = QFormLayout()
+    
+    createSlopeTitle = QLabel("Create Slope from DEM")
+    createSlopeTitle.setAlignment(Qt.AlignCenter)
+    createSlopeTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    createSlopeLayout.addRow(createSlopeTitle)
+    
+    dialog.demComboBox = QComboBox()
+    createSlopeLayout.addRow(QLabel("Select DEM Layer:"), dialog.demComboBox)
+    
+    dialog.slopeRasterPath = QLineEdit()
+    dialog.slopeRasterPath.setPlaceholderText("Choose output path for Slope Raster")
+    dialog.slopeRasterBrowse = QPushButton("Browse")
+    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath, "tif"))
+    
+    slopeFileLayout = QHBoxLayout()
+    slopeFileLayout.addWidget(dialog.slopeRasterPath)
+    slopeFileLayout.addWidget(dialog.slopeRasterBrowse)
+    createSlopeLayout.addRow(slopeFileLayout)
+
+    dialog.create_slope_button = QPushButton("Create Slope Raster from DEM")
+    createSlopeLayout.addRow(dialog.create_slope_button)
+    
+    createSlopeGroupBox.setLayout(createSlopeLayout)
+    layout.addWidget(createSlopeGroupBox)
+
+    slopeCostsGroupBox = QGroupBox()
+    slopeCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    slopeCostsLayout = QFormLayout()
+    
+    slopeCostsTitle = QLabel("Create Slope Costs")
+    slopeCostsTitle.setAlignment(Qt.AlignCenter)
+    slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
+    slopeCostsLayout.addRow(slopeCostsTitle)
+
+    dialog.slopeLayerComboBox = QComboBox()
+    slopeCostsLayout.addRow(QLabel("Select Slope Layer:"), dialog.slopeLayerComboBox)
+
+    slopeCostsLayout.addRow(QLabel("Define Slope Cost Intervals:"))
+
+    dialog.slopeCostTable = QTableWidget()
+    dialog.slopeCostTable.setColumnCount(4)
+    dialog.slopeCostTable.setHorizontalHeaderLabels(["Min % Slope", "Max % Slope", "Cost", "No Upper Limit"])
+    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    slopeCostsLayout.addRow(dialog.slopeCostTable)
+
+    slopeTableButtonsLayout = QHBoxLayout()
+    dialog.addSlopeRowButton = QPushButton("Add Row")
+    dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
+    slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
+    slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
+    slopeCostsLayout.addRow(slopeTableButtonsLayout)
+
+    dialog.slopeCostsRasterPath = QLineEdit()
+    dialog.slopeCostsRasterPath.setPlaceholderText("Choose output path for Slope Costs Raster")
+    dialog.slopeCostsRasterBrowse = QPushButton("Browse")
+    dialog.slopeCostsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeCostsRasterPath, "tif"))
+    
+    slopeCostsFileLayout = QHBoxLayout()
+    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterPath)
+    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterBrowse)
+    slopeCostsLayout.addRow(slopeCostsFileLayout)
+
+    dialog.create_slope_costs_button = QPushButton("Create Slope Costs Raster")
+    slopeCostsLayout.addRow(dialog.create_slope_costs_button)
+
+    slopeCostsGroupBox.setLayout(slopeCostsLayout)
+    layout.addWidget(slopeCostsGroupBox)
+    
+    setup_slope_cost_table_logic(dialog)
+
+def connect_slope_signals(dialog: 'AnalysisDialog'):
+    """Connects signals for the Slope tab."""
+    dialog.create_slope_button.clicked.connect(lambda: run_analysis(dialog, run_slope_creation))
+    dialog.create_slope_costs_button.clicked.connect(lambda: run_analysis(dialog, run_slope_costs_creation))
+
+def _get_layer_id_from_widget(widget):
+    """Helper to get layer ID from a QComboBox."""
+    if not widget.currentData():
+        raise ValueError(f"No layer selected in {widget.objectName()}.")
+    return widget.currentData()
+
+def run_slope_creation(dialog: 'AnalysisDialog'):
+    """Create Slope Raster from DEM"""
+    try:
+        dem_layer = QgsProject.instance().mapLayer(_get_layer_id_from_widget(dialog.demComboBox))
+        output_path = dialog.slopeRasterPath.text()
+
+        if not dem_layer:
+            raise ValueError("No DEM layer selected.")
+        if not output_path:
+            raise ValueError("No output path specified for Slope Raster.")
+        
+        dialog.log_message("Creating Slope Raster from DEM...", "Slope")
+        create_slope_layer_from_dem(dem_layer, output_path)
+        dialog.log_message(f"Slope Raster created at: {output_path}", "Slope")
+
+        slope_layer = QgsRasterLayer(output_path, "slope_layer_from_dem")
+        if slope_layer.isValid():
+            QgsProject.instance().addMapLayer(slope_layer)
+        else:
+            dialog.log_message("Failed to load created slope layer.", "Slope")
+
+    except Exception as e:
+        dialog.log_message(f"Creating slope data failed: {e}", "Slope")
+
+def run_slope_costs_creation(dialog: 'AnalysisDialog'):
+    """Create slope costs raster based on defined intervals."""
+    try:
+        intervals = get_slope_cost_intervals(dialog)
+        slope_layer = QgsProject.instance().mapLayer(dialog.slopeLayerComboBox.currentData())
+        output_path = dialog.slopeCostsRasterPath.text()
+
+        if not slope_layer:
+            raise ValueError("No slope layer selected.")
+        if not output_path:
+            raise ValueError("No output path specified for Slope Costs Raster.")
+        if not intervals:
+            raise ValueError("No slope cost intervals defined.")
+        
+        dialog.log_message("Creating Slope Costs Raster...", "Slope")
+        create_slope_costs_from_slope(slope_layer, intervals, output_path)
+        dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}", "Slope")
+        
+        new_layer = QgsRasterLayer(output_path, "Slope Costs")
+        if new_layer.isValid():
+            QgsProject.instance().addMapLayer(new_layer)
+        else:
+            dialog.log_message("Failed to load created slope costs layer.", "Slope")
+            
+    except Exception as e:
+        dialog.log_message(f"Creating Slope Costs Raster Failed: {str(e)}", "Slope")
+
+def get_slope_cost_intervals(dialog: 'AnalysisDialog'):
+    """Extract slope intervals and costs from the table."""
+    intervals = []
+    for row in range(dialog.slopeCostTable.rowCount()):
+        min_spin = dialog.slopeCostTable.cellWidget(row, 0)
+        max_spin = dialog.slopeCostTable.cellWidget(row, 1)
+        cost_item = dialog.slopeCostTable.item(row, 2)
+        no_limit_checkbox = dialog.slopeCostTable.cellWidget(row, 3)
+
+        min_val = min_spin.value()
+        max_val = max_spin.value() if not no_limit_checkbox.isChecked() else None
+        
+        cost_text = cost_item.text() if cost_item else "1.0"
+        try:
+            cost = float(cost_text)
+        except (ValueError, TypeError):
+            cost = 1.0 # Default value if parsing fails
+            dialog.log_message(f"Invalid cost value '{cost_text}' in row {row+1}. Using default 1.0.", "Slope")
+
+        intervals.append({"min": min_val, "max": max_val, "cost": cost})
+
+    return intervals
+
+def setup_slope_cost_table_logic(dialog: 'AnalysisDialog'):
+    """Connects buttons to their functions for the slope cost table."""
+    dialog.addSlopeRowButton.clicked.connect(lambda: add_slope_row(dialog))
+    dialog.removeSlopeRowButton.clicked.connect(lambda: remove_selected_slope_row(dialog))
+    add_slope_row(dialog)  # Add initial row
+
+def add_slope_row(dialog: 'AnalysisDialog'):
+    """Add a new row to the slope cost table."""
+    row_position = dialog.slopeCostTable.rowCount()
+    dialog.slopeCostTable.insertRow(row_position)
+
+    min_spin = QSpinBox()
+    min_spin.setRange(0, 1000)
+    dialog.slopeCostTable.setCellWidget(row_position, 0, min_spin)
+
+    max_spin = QSpinBox()
+    max_spin.setRange(0, 1000)
+    dialog.slopeCostTable.setCellWidget(row_position, 1, max_spin)
+
+    cost_item = QTableWidgetItem("1.0")
+    dialog.slopeCostTable.setItem(row_position, 2, cost_item)
+
+    no_limit_checkbox = QCheckBox()
+    dialog.slopeCostTable.setCellWidget(row_position, 3, no_limit_checkbox)
+
+    def toggle_max_spin(state):
+        max_spin.setDisabled(state == Qt.Checked)
+        if state == Qt.Checked:
+            max_spin.setValue(0)
+
+    no_limit_checkbox.stateChanged.connect(toggle_max_spin)
+
+def remove_selected_slope_row(dialog: 'AnalysisDialog'):
+    """Remove selected rows from the slope cost table."""
+    selected_rows = set(idx.row() for idx in dialog.slopeCostTable.selectedIndexes())
+    for row in sorted(selected_rows, reverse=True):
+        dialog.slopeCostTable.removeRow(row)
+
+def create_slope_layer_from_dem(dem_layer: QgsRasterLayer, output_path: str):
+    """Creates a slope raster from a DEM layer using the qgis:slope algorithm."""
+    if not dem_layer:
+        raise ValueError("Input DEM layer is not valid.")
+    
+    params = {
+        'INPUT': dem_layer,
+        'Z_FACTOR': 1,
+        'UNITS': 1,  # Percent
+        'OUTPUT': output_path
+    }
+    result = processing.run("qgis:slope", params)
+    if not result or 'OUTPUT' not in result:
+        raise RuntimeError("Slope processing failed to return the expected output.")
+    return result['OUTPUT']
+
+def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, output_path: str):
+    """Creates a slope costs raster using the raster calculator based on intervals."""
+    if not slope_layer:
+        raise ValueError("Input slope layer is not valid.")
+
+    expression = ''
+    layer_name = slope_layer.name()
+    
+    for i, interval in enumerate(intervals):
+        min_slope = interval['min']
+        max_slope = interval['max']
+        cost = interval['cost']
+
+        if max_slope is not None:
+            condition = f'("{layer_name}@1" >= {min_slope} AND "{layer_name}@1" < {max_slope})'
+        else:
+            condition = f'("{layer_name}@1" >= {min_slope})'
+        
+        expression += f'{condition} * {cost} + '
+
+    # To avoid trailing '+', we remove it and handle cases where no intervals are matched
+    if expression.endswith(' + '):
+        expression = expression[:-3]
+    
+    # Fallback for areas not covered by any interval, assign a high cost
+    all_conditions = " OR ".join([
+        f'("{layer_name}@1" >= {iv["min"]} AND "{layer_name}@1" < {iv["max"]})' if iv["max"] is not None else f'("{layer_name}@1" >= {iv["min"]})'
+        for iv in intervals
+    ])
+    fallback_expression = f'NOT ({all_conditions}) * 9999' # High cost for undefined slopes
+    final_expression = f'({expression}) + ({fallback_expression})'
+
+    params = {
+        'EXPRESSION': final_expression,
+        'LAYERS': [slope_layer],
+        'CELLSIZE': 0, # Use reference layer's cell size
+        'EXTENT': slope_layer.extent(),
+        'CRS': slope_layer.crs(),
+        'OUTPUT': output_path
+    }
+    
+    result = processing.run("qgis:rastercalculator", params)
+    if not result or 'OUTPUT' not in result:
+        raise RuntimeError("Raster calculator for slope costs failed to return the expected output.")
+    return result['OUTPUT']
