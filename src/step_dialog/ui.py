@@ -14,6 +14,12 @@ def setup_ui(dialog: 'StepByStepDialog'):
     """Set up the UI for StepByStepDialog."""
     dialog.setWindowTitle("Step-by-Step Analysis")
     dialog.setGeometry(0, 0, 800, 850)  # Adjusted size for tabbed layout
+    dialog.setStyleSheet("""
+        QPushButton { color: white; }
+        QLabel { color: white; }
+        QComboBox { color: white; }
+        QHeaderView::section { color: white; }
+    """)
 
     main_layout = QVBoxLayout()
     
