@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QFormLayout, QTextEdit, QTabWidget, QWidget, QPushButton
+    QVBoxLayout, QFormLayout, QTextEdit, QTabWidget, QWidget, QPushButton, QComboBox
 )
 
 from .tabs.land_use_tab import setup_land_use_tab
@@ -19,6 +19,12 @@ def setup_ui(dialog: 'AnalysisDialog'):
     dialog.setGeometry(0, 0, 800, 780)
     dialog.setStyleSheet("""
         QLabel, QComboBox, QPushButton, QGroupBox::title, QHeaderView::section {
+            color: white;
+        }
+        QPushButton#populateCometButton:disabled {
+            color: #808080;
+        }
+        QPushButton#populateCometButton {
             color: white;
         }
     """)
@@ -58,6 +64,9 @@ def setup_ui(dialog: 'AnalysisDialog'):
     aux_tab.setLayout(aux_main_layout)
     lcp_tab.setLayout(lcp_layout)
     price_estimation_tab.setLayout(price_estimation_layout)
+
+    # Instantiate widgets that are shared or needed before tab setup
+    dialog.landUseComboBox = QComboBox()
 
     # Setup content for each tab
     setup_land_use_tab(dialog, land_use_layout)

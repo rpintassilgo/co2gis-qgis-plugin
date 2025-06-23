@@ -66,10 +66,10 @@ def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     slopeTableButtonsLayout = QHBoxLayout()
     dialog.addSlopeRowButton = QPushButton("Add Row")
     dialog.removeSlopeRowButton = QPushButton("Remove Selected Row")
-    dialog.populateCometButton = QPushButton("Populate according to COMET")
+    dialog.slopePopulateCometButton = QPushButton("Populate according to COMET")
     slopeTableButtonsLayout.addWidget(dialog.addSlopeRowButton)
     slopeTableButtonsLayout.addWidget(dialog.removeSlopeRowButton)
-    slopeTableButtonsLayout.addWidget(dialog.populateCometButton)
+    slopeTableButtonsLayout.addWidget(dialog.slopePopulateCometButton)
     slopeCostsLayout.addRow(slopeTableButtonsLayout)
 
     dialog.slopeCostsRasterPath = QLineEdit()
@@ -179,7 +179,7 @@ def setup_slope_cost_table_logic(dialog: 'AnalysisDialog'):
     """Connects buttons to their functions for the slope cost table."""
     dialog.addSlopeRowButton.clicked.connect(lambda: add_slope_row(dialog))
     dialog.removeSlopeRowButton.clicked.connect(lambda: remove_selected_slope_row(dialog))
-    dialog.populateCometButton.clicked.connect(lambda: populate_slope_table_with_comet_defaults(dialog))
+    dialog.slopePopulateCometButton.clicked.connect(lambda: populate_slope_table_with_comet_defaults(dialog))
     
     add_slope_row(dialog) # Add a single empty row to start
 

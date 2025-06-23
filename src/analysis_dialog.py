@@ -16,10 +16,12 @@ class AnalysisDialog(QDialog):
         super().__init__(parent)
 
         # Explicitly declare attributes for widgets to aid type hinting and readability
-        self.terrainComboBox: QComboBox
-        self.classTable: QTableWidget
-        self.costsRasterPath: QLineEdit
-        self.costsRasterBrowse: QPushButton
+        self.landUseComboBox: QComboBox
+        self.landUseCostTable: QTableWidget
+        self.showCometValuesButton: QPushButton
+        self.populateCometButton: QPushButton
+        self.landUseCostsRasterPath: QLineEdit
+        self.landUseBrowse: QPushButton
         self.create_land_use_costs_button: QPushButton
         
         self.demComboBox: QComboBox

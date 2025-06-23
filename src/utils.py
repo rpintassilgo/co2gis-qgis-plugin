@@ -12,7 +12,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     """Populate all dropdowns with available layers."""
     # ... (code from dropdowns.py)
     # Clear all dropdowns first
-    dialog.terrainComboBox.clear()
+    dialog.landUseComboBox.clear()
     dialog.demComboBox.clear()
     dialog.combineLandUseDropdown.clear()
     dialog.combineSlopeDropdown.clear()
@@ -44,7 +44,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     for layer in layers:
         if isinstance(layer, QgsRasterLayer):
             # Add to raster dropdowns
-            dialog.terrainComboBox.addItem(layer.name(), layer.id())
+            dialog.landUseComboBox.addItem(layer.name(), layer.id())
             dialog.demComboBox.addItem(layer.name(), layer.id())
             dialog.combineLandUseDropdown.addItem(layer.name(), layer.id())
             dialog.combineSlopeDropdown.addItem(layer.name(), layer.id())
@@ -77,7 +77,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
         dialog.log_message("No point vector layers found.", "System")
     if dialog.demComboBox.count() == 0:
         dialog.log_message("No raster layers found for DEM.", "System")
-    if dialog.terrainComboBox.count() == 0:
+    if dialog.landUseComboBox.count() == 0:
         dialog.log_message("No raster layers found for Land Use.", "System")
     if dialog.combineLandUseDropdown.count() == 0:
         dialog.log_message("No raster layers found for Land Use Costs Raster.", "System")
