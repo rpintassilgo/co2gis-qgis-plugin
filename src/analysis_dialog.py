@@ -6,7 +6,6 @@ from .ui_manager import setup_ui
 from .utils import populate_layer_dropdowns, update_pipeline_length, update_resolution_field
 from .tabs.land_use_tab import connect_land_use_signals
 from .tabs.slope_tab import connect_slope_signals
-from .tabs.vectors_tab import connect_vectors_signals
 from .tabs.aux_tab import connect_aux_signals
 from .tabs.lcp_tab import connect_lcp_signals
 from .tabs.price_estimation_tab import connect_price_estimation_signals, open_formulas_dialog
@@ -130,7 +129,6 @@ class AnalysisDialog(QDialog):
         """Connect all signals to their respective slots."""
         connect_land_use_signals(self)
         connect_slope_signals(self)
-        connect_vectors_signals(self)
         connect_aux_signals(self)
         connect_lcp_signals(self)
         connect_price_estimation_signals(self)

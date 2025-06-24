@@ -5,10 +5,11 @@ from PyQt5.QtWidgets import (
 
 from .tabs.land_use_tab import setup_land_use_tab
 from .tabs.slope_tab import setup_slope_tab
-from .tabs.vectors_tab import setup_vectors_tab
 from .tabs.aux_tab import setup_aux_tab
 from .tabs.lcp_tab import setup_lcp_tab
 from .tabs.price_estimation_tab import setup_price_estimation_tab
+from .tabs.crossings_tab import setup_crossings_tab
+from .tabs.corridors_tab import setup_corridors_tab
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
@@ -36,7 +37,8 @@ def setup_ui(dialog: 'AnalysisDialog'):
     # Create tab widgets
     land_use_tab = QWidget()
     slope_tab = QWidget()
-    vectors_tab = QWidget()
+    crossings_tab = QWidget()
+    corridors_tab = QWidget()
     aux_tab = QWidget()
     lcp_tab = QWidget()
     price_estimation_tab = QWidget()
@@ -44,7 +46,8 @@ def setup_ui(dialog: 'AnalysisDialog'):
     # Add tabs to the tab widget
     dialog.tabs.addTab(land_use_tab, "Land Use")
     dialog.tabs.addTab(slope_tab, "Slope")
-    dialog.tabs.addTab(vectors_tab, "Corridors and Crossings")
+    dialog.tabs.addTab(crossings_tab, "Crossings")
+    dialog.tabs.addTab(corridors_tab, "Corridors")
     dialog.tabs.addTab(aux_tab, "Aux")
     dialog.tabs.addTab(lcp_tab, "LCP")
     dialog.tabs.addTab(price_estimation_tab, "Price Estimation")
@@ -52,7 +55,8 @@ def setup_ui(dialog: 'AnalysisDialog'):
     # Create layouts for each tab
     land_use_layout = QFormLayout()
     slope_layout = QFormLayout()
-    vectors_layout = QFormLayout()
+    crossings_layout = QFormLayout()
+    corridors_layout = QFormLayout()
     aux_main_layout = QVBoxLayout()
     lcp_layout = QFormLayout()
     price_estimation_layout = QVBoxLayout()
@@ -60,7 +64,8 @@ def setup_ui(dialog: 'AnalysisDialog'):
     # Set layouts for each tab
     land_use_tab.setLayout(land_use_layout)
     slope_tab.setLayout(slope_layout)
-    vectors_tab.setLayout(vectors_layout)
+    crossings_tab.setLayout(crossings_layout)
+    corridors_tab.setLayout(corridors_layout)
     aux_tab.setLayout(aux_main_layout)
     lcp_tab.setLayout(lcp_layout)
     price_estimation_tab.setLayout(price_estimation_layout)
@@ -71,7 +76,8 @@ def setup_ui(dialog: 'AnalysisDialog'):
     # Setup content for each tab
     setup_land_use_tab(dialog, land_use_layout)
     setup_slope_tab(dialog, slope_layout)
-    setup_vectors_tab(dialog, vectors_layout)
+    setup_crossings_tab(dialog, crossings_layout)
+    setup_corridors_tab(dialog, corridors_layout)
     setup_aux_tab(dialog, aux_main_layout)
     setup_lcp_tab(dialog, lcp_layout)
     setup_price_estimation_tab(dialog, price_estimation_layout)

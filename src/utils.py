@@ -25,8 +25,6 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     dialog.resampleRasterComboBox.clear()
     dialog.vectorComboBox.clear()
     dialog.vector2ComboBox.clear()
-    dialog.vectorRasterComboBox.clear()
-    dialog.refRasterComboBox.clear()
     dialog.slopeLayerComboBox.clear()
 
     # Price estimation dropdowns
@@ -36,6 +34,12 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     dialog.corridorsCostsDropdown.clear()
     dialog.crossingsCostsDropdown.clear()
     dialog.crossingsVectorDropdown.clear()
+
+    # New crossings/corridors combo boxes
+    dialog.crossingComboBox.clear()
+    dialog.crossingRefRasterComboBox.clear()
+    dialog.corridorComboBox.clear()
+    dialog.corridorRefRasterComboBox.clear()
 
     # Get all layers from the project
     layers = QgsProject.instance().mapLayers().values()
@@ -53,13 +57,14 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
             dialog.clipRasterInputDropdown.addItem(layer.name(), layer.id())
             dialog.lcpInputDropdown.addItem(layer.name(), layer.id())
             dialog.resampleRasterComboBox.addItem(layer.name(), layer.id())
-            dialog.refRasterComboBox.addItem(layer.name(), layer.id())
             dialog.slopeLayerComboBox.addItem(layer.name(), layer.id())
             # Price estimation raster dropdowns
             dialog.landUseCostsDropdown.addItem(layer.name(), layer.id())
             dialog.slopeCostsDropdown.addItem(layer.name(), layer.id())
             dialog.corridorsCostsDropdown.addItem(layer.name(), layer.id())
             dialog.crossingsCostsDropdown.addItem(layer.name(), layer.id())
+            dialog.crossingRefRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.corridorRefRasterComboBox.addItem(layer.name(), layer.id())
         elif isinstance(layer, QgsVectorLayer):
             # Add to vector dropdowns
             if layer.geometryType() == QgsWkbTypes.PointGeometry:
@@ -69,7 +74,8 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
                 dialog.pipelineVectorDropdown.addItem(layer.name(), layer.id())
             dialog.vectorComboBox.addItem(layer.name(), layer.id())
             dialog.vector2ComboBox.addItem(layer.name(), layer.id())
-            dialog.vectorRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.crossingComboBox.addItem(layer.name(), layer.id())
+            dialog.corridorComboBox.addItem(layer.name(), layer.id())
             dialog.crossingsVectorDropdown.addItem(layer.name(), layer.id())
 
     # Logging messages if no layers are found
