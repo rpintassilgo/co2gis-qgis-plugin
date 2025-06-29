@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import select_output_file
 
 if TYPE_CHECKING:

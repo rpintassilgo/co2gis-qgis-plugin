@@ -8,7 +8,7 @@ from qgis.core import QgsProject, QgsRasterLayer, QgsPalettedRasterRenderer
 from qgis import processing
 from functools import partial
 
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import select_output_file
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ def connect_land_use_signals(dialog: 'AnalysisDialog'):
         lambda: on_land_use_layer_changed(dialog),
         Qt.QueuedConnection
     )
-    dialog.create_land_use_costs_button.clicked.connect(lambda: run_analysis(dialog, run_land_use_cost_creation))
+    dialog.create_land_use_costs_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_land_use_cost_creation(dialog)))
     dialog.showCometValuesButton.clicked.connect(lambda: open_comet_values_dialog(dialog))
 
     populate_handler = partial(populate_land_use_table_with_comet_defaults, dialog)

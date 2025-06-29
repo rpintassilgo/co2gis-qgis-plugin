@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry
 
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import update_pipeline_length, update_resolution_field
 
 if TYPE_CHECKING:
@@ -119,7 +119,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
 
 def connect_price_estimation_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Price Estimation tab."""
-    dialog.calculatePriceButton.clicked.connect(lambda: run_analysis(dialog, run_price_estimation))
+    dialog.calculatePriceButton.clicked.connect(lambda: run_in_background(dialog, lambda: run_price_estimation(dialog)))
     dialog.show_formulas_button.clicked.connect(lambda: open_formulas_dialog(dialog))
     
     dialog.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))

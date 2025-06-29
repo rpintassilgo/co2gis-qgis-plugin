@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer
 import processing
 
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import select_output_file, update_original_resolution, apply_symbology, get_layer_path
 
 if TYPE_CHECKING:
@@ -122,10 +122,10 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
 
 def connect_aux_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Aux tab."""
-    dialog.runCombineVectorsButton.clicked.connect(lambda: run_analysis(dialog, run_vector_combination))
+    dialog.runCombineVectorsButton.clicked.connect(lambda: run_in_background(dialog, lambda: run_vector_combination(dialog)))
     dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
-    dialog.runResampleButton.clicked.connect(lambda: run_analysis(dialog, run_raster_resampling))
-    dialog.clip_button.clicked.connect(lambda: run_analysis(dialog, run_raster_clipping))
+    dialog.runResampleButton.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_resampling(dialog)))
+    dialog.clip_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_clipping(dialog)))
 
 def run_vector_combination(dialog: 'AnalysisDialog'):
     """Combine two vector layers into one"""

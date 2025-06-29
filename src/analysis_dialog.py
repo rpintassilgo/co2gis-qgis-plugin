@@ -1,4 +1,5 @@
 from PyQt5.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox
+from PyQt5.QtCore import Qt, QMetaObject, Q_ARG
 from qgis.core import QgsProject
 from typing import Optional
 
@@ -135,13 +136,22 @@ class AnalysisDialog(QDialog):
         self.clear_log_button.clicked.connect(self.clear_logs)
 
     def log_message(self, message: str, tab_name: Optional[str] = None):
-        """Append a message to the log output."""
-        if tab_name:
-            self.log_output.append(f"[{tab_name}] {message}")
-        else:
-            self.log_output.append(message)
-        
+        """Thread-safe method to append a message to the log output."""
+        if hasattr(self, 'log_output'):
+            formatted_message = f"[{tab_name}] {message}" if tab_name else message
+            QMetaObject.invokeMethod(
+                self.log_output,
+                "append",
+                Qt.QueuedConnection,
+                Q_ARG(str, formatted_message)
+            )
+
     def clear_logs(self):
         """Clear the log output."""
-        self.log_output.clear()
+        if hasattr(self, 'log_output'):
+            QMetaObject.invokeMethod(
+                self.log_output,
+                "clear",
+                Qt.QueuedConnection
+            )
 

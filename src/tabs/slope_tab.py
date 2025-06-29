@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import select_output_file
 
 if TYPE_CHECKING:
@@ -92,8 +92,8 @@ def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 
 def connect_slope_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Slope tab."""
-    dialog.create_slope_button.clicked.connect(lambda: run_analysis(dialog, run_slope_creation))
-    dialog.create_slope_costs_button.clicked.connect(lambda: run_analysis(dialog, run_slope_costs_creation))
+    dialog.create_slope_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_slope_creation(dialog)))
+    dialog.create_slope_costs_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_slope_costs_creation(dialog)))
 
 def _get_layer_id_from_widget(widget):
     """Helper to get layer ID from a QComboBox."""

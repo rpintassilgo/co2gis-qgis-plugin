@@ -7,7 +7,7 @@ from PyQt5.QtCore import Qt
 from qgis.core import QgsProject
 from qgis import processing
 
-from ..task_manager import run_analysis
+from ..task_manager import run_in_background
 from ..utils import select_output_file, get_layer_path
 
 
@@ -97,8 +97,8 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 
 def connect_lcp_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the LCP tab."""
-    dialog.combine_button.clicked.connect(lambda: run_analysis(dialog, run_raster_combination))
-    dialog.final_button.clicked.connect(lambda: run_analysis(dialog, run_lcp_creation))
+    dialog.combine_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_combination(dialog)))
+    dialog.final_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_lcp_creation(dialog)))
 
 def run_raster_combination(dialog: 'AnalysisDialog'):
     """Combine Land Use and Slope Rasters"""

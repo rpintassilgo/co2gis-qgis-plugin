@@ -8,7 +8,7 @@ from .tabs.slope_tab import setup_slope_tab
 from .tabs.aux_tab import setup_aux_tab
 from .tabs.lcp_tab import setup_lcp_tab
 from .tabs.price_estimation_tab import setup_price_estimation_tab
-from .tabs.crossings_tab import setup_crossings_tab
+from .tabs.crossings_tab import setup_crossings_tab, connect_crossings_signals
 from .tabs.corridors_tab import setup_corridors_tab
 
 if TYPE_CHECKING:
@@ -81,6 +81,9 @@ def setup_ui(dialog: 'AnalysisDialog'):
     setup_aux_tab(dialog, aux_main_layout)
     setup_lcp_tab(dialog, lcp_layout)
     setup_price_estimation_tab(dialog, price_estimation_layout)
+
+    # Connect signals
+    connect_crossings_signals(dialog)
 
     # Log output widget
     dialog.log_output = QTextEdit()
