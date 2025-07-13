@@ -10,7 +10,7 @@ class Task(QgsTask):
     
     def __init__(self, dialog: 'AnalysisDialog', run_logic: Callable, description: str):
         super().__init__(description, QgsTask.CanCancel)
-        self.dialog = dialog
+        self.dialog: 'AnalysisDialog' = dialog
         self.run_logic = run_logic
         self.error = None
         self.exception = None
@@ -18,24 +18,25 @@ class Task(QgsTask):
     def run(self):
         """Execute the function in background."""
         try:
-            self.dialog.log_message(f"Starting task: {self.description()}", "Threads")
             self.run_logic(self.dialog)
-            self.dialog.log_message(f"Task completed: {self.description()}", "Threads")
             return True
         except Exception as e:
             self.exception = e
             self.error = str(e)
-            self.dialog.log_message(f"Task failed: {self.error}", "Threads")
             return False
 
-    def finished(self, result: bool):
-        """Handle task completion."""
+    def finished(self, result):
+        """Called when the task is complete."""
         if result:
-            self.dialog.log_message(f"Task completed successfully: {self.description()}", "Threads")
-        else:
-            error_msg = f"Task failed: {self.error}" if self.error else "Task failed with unknown error"
-            self.dialog.log_message(error_msg, "Threads")
-            QMessageBox.critical(self.dialog, "Error", error_msg)
+            self.dialog.log_message(f"Task '{self.description()}' completed successfully", "Task Manager")
+        elif self.error:
+            self.dialog.log_message(f"Task '{self.description()}' failed: {self.error}", "Task Manager")
+            QMessageBox.critical(self.dialog, "Error", f"Task failed: {self.error}")
+
+    def cancel(self):
+        """Called when the task is cancelled."""
+        self.dialog.log_message(f"Task '{self.description()}' was cancelled", "Task Manager")
+        super().cancel()
 
 def run_in_background(dialog: 'AnalysisDialog', run_logic: Callable):
     """Run a function as a background task with proper logging."""
@@ -45,14 +46,10 @@ def run_in_background(dialog: 'AnalysisDialog', run_logic: Callable):
         
         # Create and configure the task
         task = Task(dialog, run_logic, f"Running {name}")
-        
-        # Add task to QGIS task manager
         QgsApplication.taskManager().addTask(task)
-        
-        # Log that we've started the task
-        dialog.log_message(f"Added task to queue: {name}", "Threads")
+        dialog.log_message(f"Started task: {name}", "Task Manager")
         
     except Exception as e:
         error_msg = f"Failed to start task: {str(e)}"
-        dialog.log_message(error_msg, "Threads")
+        dialog.log_message(error_msg, "Task Manager")
         QMessageBox.critical(dialog, "Error", error_msg)
