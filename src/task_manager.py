@@ -38,14 +38,41 @@ class Task(QgsTask):
         self.dialog.log_message(f"Task '{self.description()}' was cancelled", "Task Manager")
         super().cancel()
 
+# Keep track of running tasks to prevent duplicates
+_running_tasks = {}
+
 def run_in_background(dialog: 'AnalysisDialog', run_logic: Callable):
     """Run a function as a background task with proper logging."""
     try:
         # Get a more readable name for the task
         name = run_logic.__name__.replace('_', ' ').title()
         
+        # Check if this task is already running
+        task_key = f"{name}_{id(dialog)}"
+        if task_key in _running_tasks:
+            existing_task = _running_tasks[task_key]
+            if not existing_task.isFinished():
+                dialog.log_message(f"Task '{name}' is already running", "Task Manager")
+                return
+            else:
+                # Clean up finished task
+                del _running_tasks[task_key]
+        
         # Create and configure the task
         task = Task(dialog, run_logic, f"Running {name}")
+        
+        # Store the task reference
+        _running_tasks[task_key] = task
+        
+        # Add cleanup on completion - no result parameter needed
+        def cleanup():
+            if task_key in _running_tasks:
+                del _running_tasks[task_key]
+        
+        task.taskCompleted.connect(cleanup)
+        task.taskTerminated.connect(cleanup)
+        
+        # Add the task to QGIS task manager
         QgsApplication.taskManager().addTask(task)
         dialog.log_message(f"Started task: {name}", "Task Manager")
         

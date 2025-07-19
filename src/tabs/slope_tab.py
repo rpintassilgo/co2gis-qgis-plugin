@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
+from osgeo import gdal
+import numpy as np
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
@@ -92,8 +94,8 @@ def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 
 def connect_slope_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Slope tab."""
-    dialog.create_slope_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_slope_creation(dialog)))
-    dialog.create_slope_costs_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_slope_costs_creation(dialog)))
+    dialog.create_slope_button.clicked.connect(lambda checked: run_in_background(dialog, run_slope_creation))
+    dialog.create_slope_costs_button.clicked.connect(lambda checked: run_in_background(dialog, run_slope_costs_creation))
 
 def _get_layer_id_from_widget(widget):
     """Helper to get layer ID from a QComboBox."""
@@ -253,47 +255,63 @@ def create_slope_layer_from_dem(dem_layer: QgsRasterLayer, output_path: str):
     return result['OUTPUT']
 
 def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, output_path: str):
-    """Creates a slope costs raster using the raster calculator based on intervals."""
-    if not slope_layer:
-        raise ValueError("Input slope layer is not valid.")
-
-    expression = ''
-    layer_name = slope_layer.name()
+    """Creates a slope cost raster from a slope layer and interval definitions."""
+    # Open the input raster
+    input_ds = gdal.Open(slope_layer.source())
+    if not input_ds:
+        raise RuntimeError("Could not open input raster with GDAL")
+        
+    # Read the input band
+    band = input_ds.GetRasterBand(1)
+    slope_data = band.ReadAsArray()
     
-    for i, interval in enumerate(intervals):
+    # Create output array with same shape
+    output_data = np.zeros_like(slope_data, dtype=np.float32)
+    
+    # Apply costs using numpy operations
+    # First set the default cost for slopes above the last interval
+    if intervals:
+        output_data.fill(intervals[-1]['cost'])
+    
+    # Then apply each interval's cost
+    for interval in reversed(intervals):  # Process in reverse to handle overlapping ranges correctly
         min_slope = interval['min']
         max_slope = interval['max']
         cost = interval['cost']
-
-        if max_slope is not None:
-            condition = f'("{layer_name}@1" >= {min_slope} AND "{layer_name}@1" < {max_slope})'
-        else:
-            condition = f'("{layer_name}@1" >= {min_slope})'
         
-        expression += f'{condition} * {cost} + '
-
-    # To avoid trailing '+', we remove it and handle cases where no intervals are matched
-    if expression.endswith(' + '):
-        expression = expression[:-3]
+        # Create mask for values in this interval
+        if max_slope is None:
+            mask = slope_data >= min_slope
+        else:
+            mask = (slope_data >= min_slope) & (slope_data < max_slope)
+            
+        # Apply cost to masked areas
+        output_data[mask] = cost
     
-    # Fallback for areas not covered by any interval, assign a high cost
-    all_conditions = " OR ".join([
-        f'("{layer_name}@1" >= {iv["min"]} AND "{layer_name}@1" < {iv["max"]})' if iv["max"] is not None else f'("{layer_name}@1" >= {iv["min"]})'
-        for iv in intervals
-    ])
-    fallback_expression = f'NOT ({all_conditions}) * 9999' # High cost for undefined slopes
-    final_expression = f'({expression}) + ({fallback_expression})'
-
-    params = {
-        'EXPRESSION': final_expression,
-        'LAYERS': [slope_layer],
-        'CELLSIZE': 0, # Use reference layer's cell size
-        'EXTENT': slope_layer.extent(),
-        'CRS': slope_layer.crs(),
-        'OUTPUT': output_path
-    }
+    # Create output raster
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(output_path, 
+                          input_ds.RasterXSize, 
+                          input_ds.RasterYSize, 
+                          1, 
+                          gdal.GDT_Float32,
+                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
     
-    result = processing.run("qgis:rastercalculator", params)
-    if not result or 'OUTPUT' not in result:
-        raise RuntimeError("Raster calculator for slope costs failed to return the expected output.")
-    return result['OUTPUT']
+    # Copy projection and geotransform
+    out_ds.SetProjection(input_ds.GetProjection())
+    out_ds.SetGeoTransform(input_ds.GetGeoTransform())
+    
+    # Write data
+    out_band = out_ds.GetRasterBand(1)
+    out_band.WriteArray(output_data)
+    
+    # Clean up
+    out_ds = None
+    input_ds = None
+    
+    # Load the result into QGIS
+    new_layer = QgsRasterLayer(output_path, "Slope Costs")
+    if new_layer.isValid():
+        QgsProject.instance().addMapLayer(new_layer)
+    else:
+        raise RuntimeError("Failed to load the created Slope Costs raster.")

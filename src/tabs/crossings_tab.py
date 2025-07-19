@@ -38,7 +38,7 @@ def setup_crossings_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 def connect_crossings_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Crossings tab."""
     dialog.runCreateRasterFromCrossingButton.clicked.connect(
-        lambda: run_in_background(dialog, lambda: run_crossings_cost_creation(dialog))
+        lambda checked: run_in_background(dialog, run_crossings_cost_creation)
     )
 
 def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
@@ -54,24 +54,30 @@ def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
             raise ValueError("All inputs must be specified.")
 
         dialog.log_message("Creating Crossings Costs Raster...", "Crossings")
+        
+        # First create a raster with crossing presence (1) or absence (0)
         params = {
             'INPUT': crossing_layer,
-            'INPUT_RASTER': ref_layer,
-            'BURN_VALUE': crossing_cost,
-            'NODATA_VALUE': no_crossing_cost,
+            'EXTENT': ref_layer,
+            'TR': ref_layer,  # Use reference raster for target resolution
+            'BURN': crossing_cost,  # Burn the actual crossing cost
+            'INIT': no_crossing_cost,  # Initialize with no-crossing cost
+            'ADD': False,  # Don't add to existing raster values
             'OUTPUT': output_path
         }
+        
         result = processing.run("gdal:rasterize", params)
         
-        if result and 'OUTPUT' in result:
-            new_layer = QgsRasterLayer(output_path, "Crossings Costs")
-            if new_layer.isValid():
-                QgsProject.instance().addMapLayer(new_layer)
-                dialog.log_message(f"Crossings Costs Raster created successfully at: {output_path}", "Crossings")
-            else:
-                dialog.log_message("Failed to load created crossings costs layer.", "Crossings")
+        if not result or 'OUTPUT' not in result:
+            raise RuntimeError("Crossings rasterization failed.")
+
+        # Load the result into QGIS
+        new_layer = QgsRasterLayer(output_path, "Crossings Costs")
+        if new_layer.isValid():
+            QgsProject.instance().addMapLayer(new_layer)
+            dialog.log_message(f"Crossings Costs Raster created successfully at: {output_path}", "Crossings")
         else:
-            raise RuntimeError("Rasterization failed to return the expected output.")
+            raise RuntimeError("Failed to load the created crossings costs layer.")
 
     except Exception as e:
         dialog.log_message(f"Creating Crossings Costs Raster Failed: {str(e)}", "Crossings") 

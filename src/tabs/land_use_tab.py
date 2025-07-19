@@ -10,6 +10,8 @@ from functools import partial
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
+from osgeo import gdal
+import numpy as np
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -51,7 +53,9 @@ def connect_land_use_signals(dialog: 'AnalysisDialog'):
         lambda: on_land_use_layer_changed(dialog),
         Qt.QueuedConnection
     )
-    dialog.create_land_use_costs_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_land_use_cost_creation(dialog)))
+    dialog.create_land_use_costs_button.clicked.connect(
+        lambda checked: run_in_background(dialog, run_land_use_cost_creation)
+    )
     dialog.showCometValuesButton.clicked.connect(lambda: open_comet_values_dialog(dialog))
 
     populate_handler = partial(populate_land_use_table_with_comet_defaults, dialog)
@@ -97,47 +101,57 @@ def get_land_use_costs(dialog: 'AnalysisDialog'):
     return costs
 
 def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRasterLayer, class_costs: dict, output_path: str):
-    """Creates a land use cost raster from a layer and a dictionary of costs."""
-    
-    expression_parts = []
-    max_cost = 0
-    if class_costs:
-        max_cost = max(class_costs.values())
-    undefined_cost = max_cost + 1
-
-    for class_id, cost in class_costs.items():
-        expression_parts.append(f'("{land_use_layer.name()}@1" = {class_id}) * {cost}')
-    
-    combined_expression = " + ".join(expression_parts)
-    
-    undefined_conditions = " * ".join(
-        [f'("{land_use_layer.name()}@1" != {class_id})' for class_id in class_costs]
-    )
-    
-    final_expression = f"({combined_expression}) + (({undefined_conditions}) * {undefined_cost})"
-    
-    params = {
-        'EXPRESSION': final_expression,
-        'LAYERS': [land_use_layer],
-        'CELLSIZE': 0,
-        'EXTENT': land_use_layer.extent(),
-        'CRS': land_use_layer.crs(),
-        'OUTPUT': output_path
-    }
-
-    try:
-        result = processing.run("qgis:rastercalculator", params)
-        if not result or 'OUTPUT' not in result:
-            raise RuntimeError("Raster calculator failed to return the expected output.")
+    """Creates a land use cost raster from a layer and a dictionary of costs."""    
+    # Open the input raster
+    input_ds = gdal.Open(land_use_layer.source())
+    if not input_ds:
+        raise RuntimeError("Could not open input raster with GDAL")
         
-        new_layer = QgsRasterLayer(result['OUTPUT'], "Land Use Costs")
-        if new_layer.isValid():
-            QgsProject.instance().addMapLayer(new_layer)
-        else:
-            dialog.log_message("Failed to load the created Land Use Costs raster.", "Land Use")
-
-    except Exception as e:
-        raise RuntimeError(f"Raster calculator failed: {str(e)}")
+    # Read the input band
+    band = input_ds.GetRasterBand(1)
+    input_data = band.ReadAsArray()
+    
+    # Create output array with same shape
+    output_data = np.zeros_like(input_data, dtype=np.float32)
+    
+    # Calculate max cost for undefined values
+    max_cost = max(class_costs.values()) if class_costs else 0
+    undefined_cost = max_cost + 1
+    
+    # Set undefined cost as default
+    output_data.fill(undefined_cost)
+    
+    # Apply costs using numpy operations (much faster than pixel-by-pixel)
+    for class_id, cost in class_costs.items():
+        output_data[input_data == class_id] = cost
+        
+    # Create output raster
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(output_path, 
+                          input_ds.RasterXSize, 
+                          input_ds.RasterYSize, 
+                          1, 
+                          gdal.GDT_Float32,
+                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
+    
+    # Copy projection and geotransform
+    out_ds.SetProjection(input_ds.GetProjection())
+    out_ds.SetGeoTransform(input_ds.GetGeoTransform())
+    
+    # Write data
+    out_band = out_ds.GetRasterBand(1)
+    out_band.WriteArray(output_data)
+    
+    # Clean up
+    out_ds = None
+    input_ds = None
+    
+    # Load the result into QGIS
+    new_layer = QgsRasterLayer(output_path, "Land Use Costs")
+    if new_layer.isValid():
+        QgsProject.instance().addMapLayer(new_layer)
+    else:
+        dialog.log_message("Failed to load the created Land Use Costs raster.", "Land Use")
 
 def populate_land_use_table(dialog: 'AnalysisDialog', layer_id: str):
     """Populates the table with unique land use classes from the selected raster's symbology."""

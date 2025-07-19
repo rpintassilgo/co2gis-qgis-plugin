@@ -10,6 +10,8 @@ from .tabs.slope_tab import connect_slope_signals
 from .tabs.aux_tab import connect_aux_signals
 from .tabs.lcp_tab import connect_lcp_signals
 from .tabs.price_estimation_tab import connect_price_estimation_signals, open_formulas_dialog
+from .tabs.crossings_tab import connect_crossings_signals
+from .tabs.corridors_tab import connect_corridors_signals
 
 class AnalysisDialog(QDialog):
     def __init__(self, parent=None):
@@ -133,6 +135,8 @@ class AnalysisDialog(QDialog):
         connect_aux_signals(self)
         connect_lcp_signals(self)
         connect_price_estimation_signals(self)
+        connect_crossings_signals(self)
+        connect_corridors_signals(self)
         self.clear_log_button.clicked.connect(self.clear_logs)
 
     def log_message(self, message: str, tab_name: Optional[str] = None):

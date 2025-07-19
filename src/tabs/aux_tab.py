@@ -122,10 +122,10 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
 
 def connect_aux_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Aux tab."""
-    dialog.runCombineVectorsButton.clicked.connect(lambda: run_in_background(dialog, lambda: run_vector_combination(dialog)))
+    dialog.runCombineVectorsButton.clicked.connect(lambda checked: run_in_background(dialog, run_vector_combination))
     dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
-    dialog.runResampleButton.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_resampling(dialog)))
-    dialog.clip_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_clipping(dialog)))
+    dialog.runResampleButton.clicked.connect(lambda checked: run_in_background(dialog, run_raster_resampling))
+    dialog.clip_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_clipping))
 
 def run_vector_combination(dialog: 'AnalysisDialog'):
     """Combine two vector layers into one"""
@@ -137,21 +137,26 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
         if not all([layer1, layer2, output_path]):
             raise ValueError("Both vector layers and an output path must be specified.")
 
-        fields = layer1.fields()
-        writer = QgsVectorFileWriter(output_path, 'UTF-8', fields, layer1.wkbType(), layer1.crs(), 'ESRI Shapefile')
-        if writer.hasError() != QgsVectorFileWriter.NoError:
-            raise IOError(f"Failed to create shapefile writer: {writer.errorMessage()}")
-
-        for layer in [layer1, layer2]:
-            for feature in layer.getFeatures():
-                writer.addFeature(QgsFeature(feature))
+        dialog.log_message("Combining vector layers...", "Aux")
         
-        del writer
-        dialog.log_message("Vectors combined and saved successfully.", "Aux")
+        # Use the modern QGIS processing algorithm for merging vectors
+        params = {
+            'LAYERS': [layer1, layer2],
+            'OUTPUT': output_path
+        }
         
-        combined_layer = QgsVectorLayer(output_path, "Combined Vectors", "ogr")
+        result = processing.run("native:mergevectorlayers", params)
+        
+        if not result or 'OUTPUT' not in result:
+            raise RuntimeError("Vector merge processing failed to return the expected output.")
+        
+        dialog.log_message("Vectors combined successfully.", "Aux")
+        
+        # Load the combined layer
+        combined_layer = QgsVectorLayer(result['OUTPUT'], "Combined Vectors", "ogr")
         if combined_layer.isValid():
             QgsProject.instance().addMapLayer(combined_layer)
+            dialog.log_message(f"Combined vector layer loaded with {combined_layer.featureCount()} features.", "Aux")
         else:
             dialog.log_message("Failed to load combined vector layer.", "Aux")
 

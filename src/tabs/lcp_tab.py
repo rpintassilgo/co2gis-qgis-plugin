@@ -4,8 +4,10 @@ from PyQt5.QtWidgets import (
     QGroupBox, QSlider, QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsProcessingFeedback
 from qgis import processing
+from osgeo import gdal
+import numpy as np
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file, get_layer_path
@@ -97,8 +99,8 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 
 def connect_lcp_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the LCP tab."""
-    dialog.combine_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_raster_combination(dialog)))
-    dialog.final_button.clicked.connect(lambda: run_in_background(dialog, lambda: run_lcp_creation(dialog)))
+    dialog.combine_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_combination))
+    dialog.final_button.clicked.connect(lambda checked: run_in_background(dialog, run_lcp_creation))
 
 def run_raster_combination(dialog: 'AnalysisDialog'):
     """Combine Land Use and Slope Rasters"""
@@ -125,10 +127,10 @@ def run_raster_combination(dialog: 'AnalysisDialog'):
 
         dialog.log_message("Combining Cost Rasters...", "LCP")
         combine_rasters_with_qgis_raster_calculator(
-            get_layer_path(costs_layer), get_layer_path(slope_layer),
-            get_layer_path(corridors_layer), get_layer_path(crossings_layer),
-            occupancy_weight, dem_weight, corridors_weight, crossings_weight,
-            output_path
+            [costs_layer, slope_layer, corridors_layer, crossings_layer],
+            [occupancy_weight, dem_weight, corridors_weight, crossings_weight],
+            output_path,
+            dialog
         )
         dialog.log_message(f"Combined Raster created successfully at: {output_path}", "LCP")
 
@@ -223,26 +225,70 @@ def validate_weight_sum(dialog: 'AnalysisDialog'):
         slider.setStyleSheet(style)
 
 def combine_rasters_with_qgis_raster_calculator(
-    costs_path, slope_path, corridors_path, crossings_path,
-    occupancy_weight, dem_weight, corridors_weight, crossings_weight,
-    output_path
-):
-    """Combines rasters using QGIS Raster Calculator."""
-    expression = (
-        f'("{costs_path}@1" * {occupancy_weight}) + ("{slope_path}@1" * {dem_weight}) + '
-        f'("{corridors_path}@1" * {corridors_weight}) + ("{crossings_path}@1" * {crossings_weight})'
-    )
+    raster_layers: list,
+    weights: list,
+    output_path: str,
+    dialog: 'AnalysisDialog'
+) -> str:
+    """Combines multiple rasters using weighted sum."""
+    if not raster_layers or not weights or len(raster_layers) != len(weights):
+        raise ValueError("Invalid input: raster layers and weights must be non-empty and of equal length")
+
+    # Open first raster to get dimensions and georeference info
+    first_ds = gdal.Open(raster_layers[0].source())
+    if not first_ds:
+        raise RuntimeError("Could not open first raster with GDAL")
+
+    # Create output array
+    output_data = np.zeros((first_ds.RasterYSize, first_ds.RasterXSize), dtype=np.float32)
     
-    params = {
-        'EXPRESSION': expression,
-        'LAYERS': [costs_path, slope_path, corridors_path, crossings_path],
-        'CELLSIZE': 0,
-        'EXTENT': None,
-        'CRS': None,
-        'OUTPUT': output_path
-    }
+    # Process each raster
+    for layer, weight in zip(raster_layers, weights):
+        ds = gdal.Open(layer.source())
+        if not ds:
+            raise RuntimeError(f"Could not open raster {layer.name()} with GDAL")
+            
+        # Check dimensions match
+        if (ds.RasterXSize != first_ds.RasterXSize or 
+            ds.RasterYSize != first_ds.RasterYSize):
+            raise RuntimeError(f"Raster {layer.name()} has different dimensions")
+            
+        # Read and add weighted data
+        data = ds.GetRasterBand(1).ReadAsArray()
+        output_data += data * weight
+        
+        # Clean up
+        ds = None
     
-    processing.run("qgis:rastercalculator", params)
+    # Create output raster
+    driver = gdal.GetDriverByName('GTiff')
+    out_ds = driver.Create(output_path, 
+                          first_ds.RasterXSize, 
+                          first_ds.RasterYSize, 
+                          1, 
+                          gdal.GDT_Float32,
+                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
+    
+    # Copy projection and geotransform from first raster
+    out_ds.SetProjection(first_ds.GetProjection())
+    out_ds.SetGeoTransform(first_ds.GetGeoTransform())
+    
+    # Write data
+    out_band = out_ds.GetRasterBand(1)
+    out_band.WriteArray(output_data)
+    
+    # Clean up
+    out_ds = None
+    first_ds = None
+    
+    # Load the result into QGIS
+    new_layer = QgsRasterLayer(output_path, "Combined Costs")
+    if new_layer.isValid():
+        QgsProject.instance().addMapLayer(new_layer)
+        dialog.log_message("Successfully created and loaded combined cost raster", "LCP")
+        return output_path
+    else:
+        raise RuntimeError("Failed to load the combined cost raster")
 
 def run_r_cost(input_raster, points_layer, cost_output, direction_output):
     """Runs the r.cost GRASS algorithm."""
