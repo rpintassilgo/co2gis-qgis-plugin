@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout
 )
-from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 from ..task_manager import run_in_background
@@ -42,42 +41,52 @@ def connect_crossings_signals(dialog: 'AnalysisDialog'):
     )
 
 def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
-    """Create Crossings Cost Raster"""
+    """Create a single-band cost raster from a vector, aligned to a reference raster"""
     try:
+        # Get selected layers and parameters
         crossing_layer = QgsProject.instance().mapLayer(dialog.crossingComboBox.currentData())
         ref_layer = QgsProject.instance().mapLayer(dialog.crossingRefRasterComboBox.currentData())
         output_path = dialog.crossingOutputPath.text().strip()
         crossing_cost = float(dialog.crossingCostInput.text())
         no_crossing_cost = float(dialog.crossingNoCostInput.text())
 
-        if not all([crossing_layer, ref_layer, output_path]):
-            raise ValueError("All inputs must be specified.")
+        if not crossing_layer or not ref_layer or not output_path:
+            raise ValueError("Please specify vector, reference raster and output path.")
 
         dialog.log_message("Creating Crossings Costs Raster...", "Crossings")
-        
-        # First create a raster with crossing presence (1) or absence (0)
+
+        # Rasterize: initialize all cells with no_crossing_cost, then burn crossing_cost where features exist
         params = {
             'INPUT': crossing_layer,
-            'EXTENT': ref_layer,
-            'TR': ref_layer,  # Use reference raster for target resolution
-            'BURN': crossing_cost,  # Burn the actual crossing cost
-            'INIT': no_crossing_cost,  # Initialize with no-crossing cost
-            'ADD': False,  # Don't add to existing raster values
+            'FIELD': None,
+            'BURN': crossing_cost,
+            'USE_Z': False,
+            'UNITS': 0,             # Pixel units for width/height
+            'WIDTH': ref_layer.width(),
+            'HEIGHT': ref_layer.height(),
+            'EXTENT': ref_layer.extent(),
+            'INIT': no_crossing_cost,
+            'DATA_TYPE': 5,         # Float32 for single band
+            'EXTRA': '',            # Extra GDAL flags if needed
             'OUTPUT': output_path
         }
+        # Use GDAL rasterize for explicit single-band control
+        result = processing.run('gdal:rasterize', params)
         
-        result = processing.run("gdal:rasterize", params)
-        
+        # Validate and load
         if not result or 'OUTPUT' not in result:
-            raise RuntimeError("Crossings rasterization failed.")
+            raise RuntimeError("Rasterization failed to return output.")
+            
+        output_raster = result['OUTPUT']
+        if not output_raster:
+            raise RuntimeError("Rasterization returned no output.")
 
-        # Load the result into QGIS
-        new_layer = QgsRasterLayer(output_path, "Crossings Costs")
-        if new_layer.isValid():
-            QgsProject.instance().addMapLayer(new_layer)
-            dialog.log_message(f"Crossings Costs Raster created successfully at: {output_path}", "Crossings")
-        else:
-            raise RuntimeError("Failed to load the created crossings costs layer.")
+        new_layer = QgsRasterLayer(output_raster, "Crossings Cost")
+        if not new_layer.isValid():
+            raise RuntimeError("Failed to load the resulting raster layer.")
+
+        QgsProject.instance().addMapLayer(new_layer)
+        dialog.log_message(f"Raster created at {output_path}", "Crossings")
 
     except Exception as e:
-        dialog.log_message(f"Creating Crossings Costs Raster Failed: {str(e)}", "Crossings") 
+        dialog.log_message(f"Crossings raster creation failed: {e}", "Crossings")

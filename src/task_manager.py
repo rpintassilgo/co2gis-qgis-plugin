@@ -51,7 +51,8 @@ def run_in_background(dialog: 'AnalysisDialog', run_logic: Callable):
         task_key = f"{name}_{id(dialog)}"
         if task_key in _running_tasks:
             existing_task = _running_tasks[task_key]
-            if not existing_task.isFinished():
+            # Use the correct QGIS task status checking method
+            if existing_task.status() in [QgsTask.Running, QgsTask.Queued]:
                 dialog.log_message(f"Task '{name}' is already running", "Task Manager")
                 return
             else:
