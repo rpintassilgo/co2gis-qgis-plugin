@@ -8,6 +8,7 @@ from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsProcessingF
 from qgis import processing
 from osgeo import gdal
 import numpy as np
+import os
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file, get_layer_path
@@ -230,56 +231,91 @@ def combine_rasters_with_qgis_raster_calculator(
     output_path: str,
     dialog: 'AnalysisDialog'
 ) -> str:
-    """Combines multiple rasters using weighted sum."""
+    """Combines multiple rasters using weighted sum via resampling + numpy (handles different dimensions)."""
     if not raster_layers or not weights or len(raster_layers) != len(weights):
         raise ValueError("Invalid input: raster layers and weights must be non-empty and of equal length")
 
-    # Open first raster to get dimensions and georeference info
-    first_ds = gdal.Open(raster_layers[0].source())
-    if not first_ds:
-        raise RuntimeError("Could not open first raster with GDAL")
+    # Debug: Check layer validity and names
+    dialog.log_message("Debug: Checking input layers...", "LCP")
+    for idx, layer in enumerate(raster_layers):
+        dialog.log_message(f"  Layer {idx+1}: {layer.name()} - Valid: {layer.isValid()} - Source: {layer.source()}", "LCP")
+        if not layer.isValid():
+            raise RuntimeError(f"Invalid raster layer: {layer.name()}")
 
-    # Create output array
-    output_data = np.zeros((first_ds.RasterYSize, first_ds.RasterXSize), dtype=np.float32)
+    # Step 1: Resample all rasters to match the reference raster's grid
+    reference_layer = raster_layers[0]
+    resampled_paths = []
     
-    # Process each raster
-    for layer, weight in zip(raster_layers, weights):
-        ds = gdal.Open(layer.source())
+    dialog.log_message("Step 1: Resampling rasters to match reference grid...", "LCP")
+    for idx, layer in enumerate(raster_layers):
+        if layer == reference_layer:
+            # Reference layer doesn't need resampling
+            resampled_paths.append(layer.source())
+            continue
+            
+        # Resample to match reference
+        resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{idx}.tif')
+        params = {
+            'INPUT': layer,
+            'SOURCE_CRS': layer.crs(),
+            'TARGET_CRS': reference_layer.crs(),
+            'RESAMPLING': 0,  # Nearest neighbor
+            'NODATA': None,
+            'TARGET_RESOLUTION': reference_layer.rasterUnitsPerPixelX(),
+            'OUTPUT': resampled_path
+        }
+        
+        # Set extent to match reference
+        extent = reference_layer.extent()
+        params['TARGET_EXTENT'] = f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()}"
+        
+        dialog.log_message(f"  Resampling {layer.name()}...", "LCP")
+        result = processing.run('gdal:warpreproject', params)
+        if result and 'OUTPUT' in result:
+            resampled_paths.append(result['OUTPUT'])
+        else:
+            raise RuntimeError(f"Failed to resample {layer.name()}")
+    
+    # Step 2: Combine resampled rasters using numpy
+    dialog.log_message("Step 2: Combining resampled rasters...", "LCP")
+    
+    # Read reference raster to get dimensions
+    ref_ds = gdal.Open(reference_layer.source())
+    width = ref_ds.RasterXSize
+    height = ref_ds.RasterYSize
+    geotrans = ref_ds.GetGeoTransform()
+    proj = ref_ds.GetProjection()
+    
+    # Create output array
+    output_data = np.zeros((height, width), dtype=np.float32)
+    
+    # Process each resampled raster
+    for idx, (resampled_path, weight) in enumerate(zip(resampled_paths, weights)):
+        ds = gdal.Open(resampled_path)
         if not ds:
-            raise RuntimeError(f"Could not open raster {layer.name()} with GDAL")
-            
-        # Check dimensions match
-        if (ds.RasterXSize != first_ds.RasterXSize or 
-            ds.RasterYSize != first_ds.RasterYSize):
-            raise RuntimeError(f"Raster {layer.name()} has different dimensions")
-            
-        # Read and add weighted data
+            raise RuntimeError(f"Could not open resampled raster: {resampled_path}")
+        
+        # Read data and add weighted contribution
         data = ds.GetRasterBand(1).ReadAsArray()
         output_data += data * weight
-        
-        # Clean up
         ds = None
     
-    # Create output raster
+    # Write final output
     driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, 
-                          first_ds.RasterXSize, 
-                          first_ds.RasterYSize, 
-                          1, 
-                          gdal.GDT_Float32,
-                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
-    
-    # Copy projection and geotransform from first raster
-    out_ds.SetProjection(first_ds.GetProjection())
-    out_ds.SetGeoTransform(first_ds.GetGeoTransform())
-    
-    # Write data
-    out_band = out_ds.GetRasterBand(1)
-    out_band.WriteArray(output_data)
-    
-    # Clean up
+    out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW'])
+    out_ds.SetGeoTransform(geotrans)
+    out_ds.SetProjection(proj)
+    out_ds.GetRasterBand(1).WriteArray(output_data)
     out_ds = None
-    first_ds = None
+    ref_ds = None
+    
+    # Clean up temporary files
+    for idx, resampled_path in enumerate(resampled_paths):
+        if idx > 0 and resampled_path != reference_layer.source():  # Skip reference layer
+            try:
+                os.remove(resampled_path)
+            except:
+                pass
     
     # Load the result into QGIS
     new_layer = QgsRasterLayer(output_path, "Combined Costs")
