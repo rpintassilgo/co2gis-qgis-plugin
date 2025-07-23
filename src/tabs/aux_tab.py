@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QCheckBox, QVBoxLayout
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer
+from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer, QgsRectangle
 import processing
 
 from ..task_manager import run_in_background
@@ -227,15 +227,28 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Clipping Raster Failed: {str(e)}", "Aux")
 
 def clip_raster_to_vector(raster_path, vector_layer, output_path):
-    """Clips a raster to the extent of a vector layer."""
+    """Clips a raster to the extent of a vector layer with a buffer to ensure points are within the raster."""
     if not all([raster_path, vector_layer, output_path]):
         raise ValueError("Raster path, vector layer, and output path must be provided.")
 
+    # Get the original extent
     extent = vector_layer.extent()
+    
+    # Add a buffer around the extent to ensure points are well within the clipped raster
+    # Use 10% of the extent size as buffer, with a minimum of 1000 units
+    buffer_distance = max(extent.width() * 0.1, 1000)
+    
+    # Expand the extent by the buffer distance
+    buffered_extent = QgsRectangle(
+        extent.xMinimum() - buffer_distance,
+        extent.yMinimum() - buffer_distance,
+        extent.xMaximum() + buffer_distance,
+        extent.yMaximum() + buffer_distance
+    )
 
     params = {
         'INPUT': raster_path,
-        'PROJWIN': extent,
+        'PROJWIN': buffered_extent,
         'NODATA': None,
         'OUTPUT': output_path,
     }
