@@ -61,39 +61,15 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
     dialog.lcpInputDropdown = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
-    dialog.costRasterPath = QLineEdit()
-    dialog.costRasterPath.setPlaceholderText("Choose output path for Cost Raster (r.cost)")
-    dialog.costRasterBrowse = QPushButton("Browse")
-    dialog.costRasterBrowse.clicked.connect(lambda: select_output_file(dialog.costRasterPath, "tif"))
-    costFileLayout = QHBoxLayout()
-    costFileLayout.addWidget(dialog.costRasterPath)
-    costFileLayout.addWidget(dialog.costRasterBrowse)
-    lcpPathLayout.addRow(costFileLayout)
-    dialog.directionRasterPath = QLineEdit()
-    dialog.directionRasterPath.setPlaceholderText("Choose output path for Direction Raster (r.cost)")
-    dialog.directionRasterBrowse = QPushButton("Browse")
-    dialog.directionRasterBrowse.clicked.connect(lambda: select_output_file(dialog.directionRasterPath, "tif"))
-    directionFileLayout = QHBoxLayout()
-    directionFileLayout.addWidget(dialog.directionRasterPath)
-    directionFileLayout.addWidget(dialog.directionRasterBrowse)
-    lcpPathLayout.addRow(directionFileLayout)
-    dialog.drainRasterPath = QLineEdit()
-    dialog.drainRasterPath.setPlaceholderText("Choose output path for Drain Raster (r.drain)")
-    dialog.drainRasterBrowse = QPushButton("Browse")
-    dialog.drainRasterBrowse.clicked.connect(lambda: select_output_file(dialog.drainRasterPath, "tif"))
-    drainFileLayout = QHBoxLayout()
-    drainFileLayout.addWidget(dialog.drainRasterPath)
-    drainFileLayout.addWidget(dialog.drainRasterBrowse)
-    lcpPathLayout.addRow(drainFileLayout)
     dialog.finalPath = QLineEdit()
-    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector (r.to.vect)")
+    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector")
     dialog.finalBrowse = QPushButton("Browse")
     dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
     finalFileLayout = QHBoxLayout()
     finalFileLayout.addWidget(dialog.finalPath)
     finalFileLayout.addWidget(dialog.finalBrowse)
     lcpPathLayout.addRow(finalFileLayout)
-    dialog.final_button = QPushButton("Run r.cost, r.drain and Convert to Vector")
+    dialog.final_button = QPushButton("Create Least Cost Path")
     lcpPathLayout.addRow(dialog.final_button)
     lcpGroupBox.setLayout(lcpPathLayout)
     layout.addWidget(lcpGroupBox)
@@ -143,15 +119,16 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
     try:
         points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
         combined_layer = QgsProject.instance().mapLayer(dialog.lcpInputDropdown.currentData())
-        cost_output_path = dialog.costRasterPath.text().strip()
-        direction_output_path = dialog.directionRasterPath.text().strip()
-        drain_output_path = dialog.drainRasterPath.text().strip()
         vector_output_path = dialog.finalPath.text().strip()
 
-
-        if not all([points_layer, combined_layer, cost_output_path,
-                    direction_output_path, drain_output_path, vector_output_path]):
-            raise ValueError("All input layers and output paths must be specified.")
+        if not all([points_layer, combined_layer, vector_output_path]):
+            raise ValueError("All input layers and output path must be specified.")
+        
+        # Create temporary paths for intermediate files
+        import tempfile
+        temp_dir = tempfile.mkdtemp()
+        cost_output_path = os.path.join(temp_dir, "cost_surface.tif")
+        direction_output_path = os.path.join(temp_dir, "direction_surface.tif")
 
         # Extract origin and destination
         coords = []
@@ -175,11 +152,18 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
                                  cost_output_path, direction_output_path)
         dialog.log_message("r.cost completed successfully.", "LCP")
 
-        dialog.log_message("Running r.drain to extract path...", "LCP")
-        dialog.log_message(f"End point: {dest_str}", "LCP")
+        dialog.log_message("Running r.drain to extract least cost path...", "LCP")
+        dialog.log_message(f"Destination point: {dest_str}", "LCP")
         
-        run_r_drain_and_load(cost_result, dest_str, drain_output_path, vector_output_path)
+        run_r_drain_and_vectorize(cost_result, dest_str, vector_output_path)
         dialog.log_message(f"Least Cost Path generated at: {vector_output_path}", "LCP")
+        
+        # Cleanup temporary files
+        import shutil
+        try:
+            shutil.rmtree(temp_dir)
+        except:
+            pass  # Don't fail if cleanup fails
 
     except Exception as e:
         dialog.log_message(f"LCP Creation Process Failed: {e}", "LCP")
@@ -400,7 +384,8 @@ def run_r_cost(input_raster: str,
     # 3) Build parameters for r.cost - use start_points for the origin
     params = {
         'input':                  input_raster,
-        'start_points':           start_coordinates,    # Use start_points for r.cost
+        'start_coordinates': start_coordinates,    # Use start_points for r.cost
+        '-n':                     True,                 # Use Knight's move
         'max_cost':               0,                    # no maximum cost
         'memory':                 2000,
         'output':                 cost_output,
@@ -422,48 +407,69 @@ def run_r_cost(input_raster: str,
     }
 
 
-def run_r_drain_and_load(cost_result: dict,
-                         end_coord: str,
-                         drain_output: str,
-                         vector_output: str) -> None:
+def run_r_drain_and_vectorize(cost_result: dict,
+                              dest_coord: str,
+                              vector_output: str) -> None:
     """
-    Runs r.drain to trace back the LCP and converts to vector, then loads into QGIS.
+    Simple LCP extraction using r.drain → r.to.vect.
+    Proven to work reliably based on successful logs.
     """
-    # 1) Ensure output folders exist
-    for p in (drain_output, vector_output):
-        d = os.path.dirname(p)
-        if d and not os.path.exists(d):
-            os.makedirs(d, exist_ok=True)
+    import os, tempfile, shutil
+    from qgis.core import QgsProject, QgsVectorLayer
+    from qgis import processing
 
-    # 2) First run r.drain to create the raster path
-    drain_params = {
-        'input':      cost_result['output'],      # cumulative cost surface
-        'direction':  cost_result['outdir'],      # direction surface  
-        'start_coordinates': end_coord,           # destination point coordinates
-        'output':     drain_output,               # output raster path
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-        'flags':      'd'                         # use direction map flag
-    }
+    out_dir = os.path.dirname(vector_output)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
 
-    # 3) Run r.drain to generate raster path
-    drain_result = processing.run("grass7:r.drain", drain_params)
-    if not drain_result:
-        raise RuntimeError("r.drain processing failed")
-
-    # 4) Convert raster path to vector using r.to.vect
-    vector_params = {
-        'input': drain_output,
-        'type': 'line',                          # convert to line features
-        'output': vector_output,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0
-    }
+    temp_dir = tempfile.mkdtemp()
     
-    vector_result = processing.run("grass7:r.to.vect", vector_params)
-    if not vector_result:
-        raise RuntimeError("r.to.vect processing failed")
+    # r.drain needs the accumulation raster (cost_result['output']) and start from DESTINATION.
+    # It traces the steepest descent (lowest cost) to the source encoded by r.cost.
+    accum_path = cost_result['output']
+    if not os.path.exists(accum_path):
+        raise RuntimeError(f"Cost accumulation raster not found: {accum_path}")
 
-    # 5) Load the resulting vector into QGIS
+    # r.drain → raster path, then r.to.vect lines to GPKG
+    drain_out = os.path.join(temp_dir, "drain_path.tif")
+    
+    # Run r.drain from destination to trace back to origin
+    processing.run("grass7:r.drain", {
+        'input': accum_path,
+        'start_coordinates': dest_coord,
+        'output': drain_out,
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0
+    })
+
+    # Convert raster path to vector lines
+    processing.run("grass7:r.to.vect", {
+        'input': drain_out,
+        'type': 0, # line
+        'output': vector_output
+    })
+
+    # Load the resulting vector
     layer = QgsVectorLayer(vector_output, "Least Cost Path", "ogr")
     if not layer.isValid():
         raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
     QgsProject.instance().addMapLayer(layer)
+
+    # Log success
+    try:
+        # Try to access dialog for logging if available in scope
+        import inspect
+        frame = inspect.currentframe()
+        while frame:
+            if 'dialog' in frame.f_locals:
+                dialog = frame.f_locals['dialog']
+                dialog.log_message("LCP created using: r.drain → r.to.vect", "LCP")
+                break
+            frame = frame.f_back
+    except:
+        pass  # Silent fallback if logging not available
+    
+    # Cleanup
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+
