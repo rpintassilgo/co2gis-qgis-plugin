@@ -148,20 +148,41 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
         drain_output_path = dialog.drainRasterPath.text().strip()
         vector_output_path = dialog.finalPath.text().strip()
 
-        if not all([points_layer, combined_layer, cost_output_path, direction_output_path, drain_output_path, vector_output_path]):
+
+        if not all([points_layer, combined_layer, cost_output_path,
+                    direction_output_path, drain_output_path, vector_output_path]):
             raise ValueError("All input layers and output paths must be specified.")
 
-        dialog.log_message("Running r.cost to compute cost surface...", "LCP")
-        cost_result = run_r_cost(combined_layer, points_layer, cost_output_path, direction_output_path)
-        dialog.log_message(f"r.cost completed successfully.", "LCP")
+        # Extract origin and destination
+        coords = []
+        for feat in points_layer.getFeatures():
+            geom = feat.geometry()
+            pt = geom.asPoint() if not geom.isMultipart() else geom.asMultiPoint()[0]
+            coords.append((pt.x(), pt.y()))
+        if len(coords) < 2:
+            raise ValueError("Need at least two points (origin, destination) for LCP.")
 
-        dialog.log_message("Running r.drain and converting to vector...", "LCP")
-        run_r_drain_and_load(cost_result, points_layer, drain_output_path, vector_output_path)
-        dialog.log_message(f"Least Cost Path Vector generated successfully at: {vector_output_path}", "LCP")
+        origin_str = f"{coords[0][0]:.6f},{coords[0][1]:.6f}"
+        dest_str   = f"{coords[1][0]:.6f},{coords[1][1]:.6f}"
+        dialog.log_message(f"Using origin: {origin_str}", "LCP")
+        dialog.log_message(f"Using destination: {dest_str}", "LCP")
+
+        dialog.log_message("Running r.cost to compute cost surface...", "LCP")
+        dialog.log_message(f"Cost raster: {combined_layer.source()}", "LCP")
+        dialog.log_message(f"Start point: {origin_str}", "LCP")
+        
+        cost_result = run_r_cost(combined_layer.source(), origin_str,
+                                 cost_output_path, direction_output_path)
+        dialog.log_message("r.cost completed successfully.", "LCP")
+
+        dialog.log_message("Running r.drain to extract path...", "LCP")
+        dialog.log_message(f"End point: {dest_str}", "LCP")
+        
+        run_r_drain_and_load(cost_result, dest_str, drain_output_path, vector_output_path)
+        dialog.log_message(f"Least Cost Path generated at: {vector_output_path}", "LCP")
 
     except Exception as e:
-        dialog.log_message(f"LCP Creation Process Failed: {str(e)}", "LCP")
-
+        dialog.log_message(f"LCP Creation Process Failed: {e}", "LCP")
 def setup_weight_sliders(dialog: 'AnalysisDialog', layout: QFormLayout):
     """Adds sliders and spin boxes for weight input with validation feedback."""
     dialog.weight_sliders = []
@@ -295,10 +316,40 @@ def combine_rasters_with_qgis_raster_calculator(
         if not ds:
             raise RuntimeError(f"Could not open resampled raster: {resampled_path}")
         
-        # Read data and add weighted contribution
-        data = ds.GetRasterBand(1).ReadAsArray()
+        # Read data and normalize to 0-1 range before weighting
+        data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+        
+        # Handle nodata values
+        nodata = ds.GetRasterBand(1).GetNoDataValue()
+        if nodata is not None:
+            mask = data != nodata
+            if np.any(mask):
+                # Normalize only valid data to 0-1 range
+                valid_data = data[mask]
+                min_val, max_val = np.min(valid_data), np.max(valid_data)
+                if max_val > min_val:
+                    data[mask] = (valid_data - min_val) / (max_val - min_val)
+                else:
+                    data[mask] = 0.5  # constant value case
+        else:
+            # Normalize entire array
+            min_val, max_val = np.min(data), np.max(data)
+            if max_val > min_val:
+                data = (data - min_val) / (max_val - min_val)
+            else:
+                data = np.full_like(data, 0.5)
+        
+        # Add weighted contribution
         output_data += data * weight
         ds = None
+    
+    # Post-process the combined cost surface for better LCP results
+    # Scale by cell resolution to improve r.drain performance
+    cell_size = abs(geotrans[1])  # pixel width
+    output_data = output_data * cell_size
+    
+    # Ensure minimum cost > 0 (avoid zero costs that can cause issues)
+    output_data = np.maximum(output_data, 0.001)
     
     # Write final output
     driver = gdal.GetDriverByName('GTiff')
@@ -326,41 +377,93 @@ def combine_rasters_with_qgis_raster_calculator(
     else:
         raise RuntimeError("Failed to load the combined cost raster")
 
-def run_r_cost(input_raster, points_layer, cost_output, direction_output):
-    """Runs the r.cost GRASS algorithm."""
-    points_coords = [f"{p.x()},{p.y()}" for p in points_layer.getFeatures()]
-    start_points_str = ",".join(points_coords)
+def run_r_cost(input_raster: str,
+               start_coordinates: str,
+               cost_output: str,
+               direction_output: str) -> dict:
+    """
+    Runs the r.cost GRASS algorithm using start coordinates.
+    """
+    # 1) Make sure output folders exist
+    for path in (cost_output, direction_output):
+        d = os.path.dirname(path)
+        if d and not os.path.exists(d):
+            os.makedirs(d, exist_ok=True)
 
+    # 2) Read the raster to set the GRASS region
+    rlayer = QgsRasterLayer(input_raster, "temp")
+    if not rlayer.isValid():
+        raise RuntimeError(f"Invalid cost raster: {input_raster}")
+    ext = rlayer.extent()
+    region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
+
+    # 3) Build parameters for r.cost - use start_points for the origin
     params = {
-        'input': input_raster,
-        'start_points': start_points_str,
-        'output': cost_output,
-        'outdir': direction_output,
-        'nearest': True,
-        'knight': 'I',
-        'null_cost': 1.0
+        'input':                  input_raster,
+        'start_points':           start_coordinates,    # Use start_points for r.cost
+        'max_cost':               0,                    # no maximum cost
+        'memory':                 2000,
+        'output':                 cost_output,
+        'outdir':                 direction_output,
+        'GRASS_REGION_PARAMETER': region,
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0
     }
-    
+
+    # 4) Run r.cost to generate cost accumulation and direction surfaces
     result = processing.run("grass7:r.cost", params)
-    if not result or 'output' not in result:
-        raise RuntimeError("r.cost processing failed to return the expected output.")
-    return result['output']
-
-def run_r_drain_and_load(cost_raster, points_layer, drain_output, vector_output):
-    """Runs r.drain to create the LCP."""
-    start_points_features = list(points_layer.getFeatures())
-    if len(start_points_features) < 2:
-        raise ValueError("Points layer must contain at least two points for r.drain.")
     
-    start_point = start_points_features[0].geometry().asPoint()
-    end_point = start_points_features[1].geometry().asPoint()
+    if not result:
+        raise RuntimeError("r.cost processing failed")
 
-    params = {
-        'input': cost_raster,
-        'start_point': f'{start_point.x()},{start_point.y()}',
-        'drain': drain_output,
+    # 5) Return the result for downstream use
+    return {
+        'output': cost_output,
+        'outdir': direction_output
+    }
+
+
+def run_r_drain_and_load(cost_result: dict,
+                         end_coord: str,
+                         drain_output: str,
+                         vector_output: str) -> None:
+    """
+    Runs r.drain to trace back the LCP and converts to vector, then loads into QGIS.
+    """
+    # 1) Ensure output folders exist
+    for p in (drain_output, vector_output):
+        d = os.path.dirname(p)
+        if d and not os.path.exists(d):
+            os.makedirs(d, exist_ok=True)
+
+    # 2) First run r.drain to create the raster path
+    drain_params = {
+        'input':      cost_result['output'],      # cumulative cost surface
+        'direction':  cost_result['outdir'],      # direction surface  
+        'start_coordinates': end_coord,           # destination point coordinates
+        'output':     drain_output,               # output raster path
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
+        'flags':      'd'                         # use direction map flag
+    }
+
+    # 3) Run r.drain to generate raster path
+    drain_result = processing.run("grass7:r.drain", drain_params)
+    if not drain_result:
+        raise RuntimeError("r.drain processing failed")
+
+    # 4) Convert raster path to vector using r.to.vect
+    vector_params = {
+        'input': drain_output,
+        'type': 'line',                          # convert to line features
         'output': vector_output,
-        'points': [f'{end_point.x()},{end_point.y()}']
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0
     }
     
-    processing.run("grass7:r.drain", params)
+    vector_result = processing.run("grass7:r.to.vect", vector_params)
+    if not vector_result:
+        raise RuntimeError("r.to.vect processing failed")
+
+    # 5) Load the resulting vector into QGIS
+    layer = QgsVectorLayer(vector_output, "Least Cost Path", "ogr")
+    if not layer.isValid():
+        raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
+    QgsProject.instance().addMapLayer(layer)
