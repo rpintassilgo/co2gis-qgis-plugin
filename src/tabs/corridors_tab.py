@@ -24,7 +24,9 @@ def setup_corridors_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     layout.addRow(QLabel("Select Reference Raster:"), dialog.corridorRefRasterComboBox)
     
     # Corridor buffer distance
-    dialog.corridorBufferInput = QLineEdit("1000")
+    # Note: this can be edited if you want, if you want to consider a wider area for the corridor.
+    # For example, if we set it to 100, we're saying 100 meters around the corridor will have that cheaper cost.
+    dialog.corridorBufferInput = QLineEdit("25")
     layout.addRow(QLabel("Corridor Buffer Distance (meters):"), dialog.corridorBufferInput)
 
     # Cost inputs
@@ -171,11 +173,11 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
         buffer_params = {
             'INPUT': corridor_layer,
             'DISTANCE': buffer_distance,
-            'SEGMENTS': 10,
+            'SEGMENTS': 5,
             'END_CAP_STYLE': 0,  # Round
             'JOIN_STYLE': 0,  # Round
             'MITER_LIMIT': 2,
-            'DISSOLVE': True,  # Dissolve overlapping buffers
+            'DISSOLVE': False,  # Dissolve overlapping buffers
             'OUTPUT': temp_buffered_corridors
         }
         
