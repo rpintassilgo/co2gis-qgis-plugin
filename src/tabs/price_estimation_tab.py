@@ -31,10 +31,10 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
             <body>
                 <p style="text-align:justify; font-size:11px; color:lightgrey;">
                     ⓘ This submenu calculates the total pipeline cost (<b>I<sub>total</sub></b>) based on its length.
-                    If the pipeline is <b>150 km or less</b>, the cost is calculated using a single <b>I<sub>P</sub></b>
-                    with the total length in the <b>D</b> equation. <br> If the pipeline is longer than <b>150 km</b>, 
-                    it is split into <b>segments of up to 150 km</b>, and multiple <b>I<sub>P</sub></b> values are calculated. <br>
-                    In these calculations, <b>L<sub>segment</sub></b> is the length of each segment (max 150 km), while 
+                    The pipeline diameter (<b>D</b>) is calculated using the total pipeline length (<b>L</b>). <br>
+                    If the pipeline is <b>150 km or less</b>, the cost is calculated using a single <b>I<sub>P</sub></b>. <br> 
+                    If the pipeline is longer than <b>150 km</b>, it is split into <b>segments of up to 150 km</b>, 
+                    and multiple <b>I<sub>P</sub></b> values are calculated. <br>
                     <b>L<sub>cell</sub></b> represents the pipeline length inside each GIS cell. <br>
                     Booster stations are added after every 150 km, and their costs (<b>I<sub>B</sub></b>)
                     are included in <b>I<sub>total</sub></b>.
@@ -174,6 +174,29 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         
         pipeline_total_length = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
+        # Calculate diameter D once for the entire pipeline using total length
+        dialog.log_message(f"DEBUG D CALC - λ (lambda): {λ}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - M (mass flow): {M} kg/s", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - M²: {M**2}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Total Pipeline Length: {pipeline_total_length} m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - ρ (rho/density): {p} kg/m³", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Δp (delta_p): {Δp} Pa/m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - π²: {np.pi**2}", "Price Estimation")
+        
+        # Calculate step by step
+        numerator = 8 * λ * M**2 * pipeline_total_length
+        denominator = np.pi**2 * p * Δp
+        fraction = numerator / denominator
+        
+        dialog.log_message(f"DEBUG D CALC - Numerator (8*λ*M²*L): {numerator:,.2f}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Denominator (π²*ρ*Δp): {denominator:,.2f}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Fraction (num/den): {fraction:.8f}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Fraction^(1/5): {fraction**(1/5):.6f}", "Price Estimation")
+        
+        D = ((8 * λ * M**2 * pipeline_total_length) / (np.pi**2 * p * Δp))**(1/5)
+        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m (constant for entire pipeline)", "Price Estimation")
+        dialog.log_message(f"--------------------------------------------------", "Price Estimation")
+
         for Fc, Fs, Flu, Fci, N, cell_length in full_raster_values:
             current_segment_cells.append((Fc, Fs, Flu, Fci, N, cell_length))
             total_length += cell_length
@@ -184,16 +207,31 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
 
             if segment_complete or final_segment:
                 L_segment = current_segment_length
-                D = ((8 * λ * M**2 * L_segment) / (np.pi**2 * p * Δp))**(1/5)
 
                 summation = sum(
                     fc_i * fs_i * (flu_i * (1 - 0.1 * n_i) + 0.1 * n_i * fci_i) * cl_i
                     for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_segment_cells
                 )
 
+                # Debug logging for F factor values
+                if current_segment_cells:
+                    sample_fc, sample_fs, sample_flu, sample_fci, sample_n, sample_cl = current_segment_cells[0]
+                    dialog.log_message(f"DEBUG - Sample F values: Fc={sample_fc:.2f}, Fs={sample_fs:.2f}, Flu={sample_flu:.2f}, Fci={sample_fci:.2f}, N={sample_n}, L_cell={sample_cl:.2f}", "Price Estimation")
+                    
+                dialog.log_message(f"DEBUG - Summation value: {summation:,.2f}", "Price Estimation")
+                dialog.log_message(f"DEBUG - Bc={Bc}, D={D:.4f}m (constant), Segment_length={L_segment:.2f}m", "Price Estimation")
+                
+                # Show min/max F values across all cells in segment
+                all_fc = [fc for fc, _, _, _, _, _ in current_segment_cells]
+                all_fs = [fs for _, fs, _, _, _, _ in current_segment_cells]
+                all_flu = [flu for _, _, flu, _, _, _ in current_segment_cells]
+                all_fci = [fci for _, _, _, fci, _, _ in current_segment_cells]
+                
+                dialog.log_message(f"DEBUG - F ranges: Fc={min(all_fc):.2f}-{max(all_fc):.2f}, Fs={min(all_fs):.2f}-{max(all_fs):.2f}, Flu={min(all_flu):.2f}-{max(all_flu):.2f}, Fci={min(all_fci):.2f}-{max(all_fci):.2f}", "Price Estimation")
+
                 Ip = Bc * D * summation
                 segment_costs.append(Ip)
-                dialog.log_message(f"Segment {segment_index+1}: D = {D:.4f} m, Cost (Ip) = {Ip:,.2f} €", "Price Estimation")
+                dialog.log_message(f"Segment {segment_index+1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €", "Price Estimation")
 
                 if not final_segment:
                     Beff = 0.75
@@ -289,9 +327,9 @@ class FormulaDialog(QDialog):
         D_formula_label = QLabel("""
             <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
             <tr><td style="font-size:25px; font-weight:bold; text-align:right;">D</td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td style="font-size:40px; font-weight:bold; text-align:center;">(</td><td>
-            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L<sub>segment</sub></td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ Δp</td></tr></table>
+            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ Δp</td></tr></table>
             </td><td style="font-size:40px; font-weight:bold; text-align:center;">)</td><td style="font-size:22px; font-weight:bold; text-align:center;"><sup>1/5</sup></td></tr></table></body></html>""")
-        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), and pressure drop (Δp) over a segment length (L).")
+        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), and pressure drop (Δp) over the total pipeline length (L).")
         D_explanation.setWordWrap(True)
         grid_layout.addWidget(D_formula_label, 1, 0, Qt.AlignCenter)
         grid_layout.addWidget(D_explanation, 1, 1)
