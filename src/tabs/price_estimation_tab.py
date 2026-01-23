@@ -160,7 +160,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.co2MassFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
-        Δp = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
+        Δp_per_length_unit = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
         Bc = float(dialog.standardizedCostFactorInput.text())
         
         segment_costs = []
@@ -175,7 +175,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         pipeline_total_length = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
         # Calculate total pressure drop for the entire pipeline
-        ΔP = Δp * pipeline_total_length  # Pa (total pressure drop)
+        ΔP = Δp_per_length_unit * pipeline_total_length  # Pa (total pressure drop)
         
         # Calculate diameter D once for the entire pipeline using total length
         dialog.log_message(f"DEBUG D CALC - λ (lambda): {λ}", "Price Estimation")
@@ -238,11 +238,14 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                 dialog.log_message(f"Segment {segment_index+1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €", "Price Estimation")
 
                 if not final_segment:
+                    # Booster stations are placed every 150 km
+                    # Calculate pressure drop for 150 km segment
+                    ΔP_booster_segment = Δp_per_length_unit * 150000  # Pa (pressure drop over 150 km)
                     Beff = 0.75
-                    Sc = (M * Δp * L_segment) / (p * Beff)
+                    Sc = (M * ΔP_booster_segment) / (p * Beff)
                     Ib = (0.547 * Sc + 0.42) * 1e6 # Convert M€ to €
                     booster_costs.append(Ib)
-                    dialog.log_message(f"Booster Cost (Ib) added: {Ib:,.2f} €", "Price Estimation")
+                    dialog.log_message(f"Booster Station after 150 km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc:.2f} W, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
 
                 current_segment_cells = []
                 current_segment_length = 0
@@ -333,7 +336,7 @@ class FormulaDialog(QDialog):
             <tr><td style="font-size:25px; font-weight:bold; text-align:right;">D</td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td style="font-size:40px; font-weight:bold; text-align:center;">(</td><td>
             <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ ΔP</td></tr></table>
             </td><td style="font-size:40px; font-weight:bold; text-align:center;">)</td><td style="font-size:22px; font-weight:bold; text-align:center;"><sup>1/5</sup></td></tr></table></body></html>""")
-        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), total pipeline length (L), and total pressure drop (ΔP = Δp × L), where Δp is the admissible pressure drop per unit length.")
+        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), total pipeline length (L), and admissable pressure drop (ΔP)")
         D_explanation.setWordWrap(True)
         grid_layout.addWidget(D_formula_label, 1, 0, Qt.AlignCenter)
         grid_layout.addWidget(D_explanation, 1, 1)
@@ -349,9 +352,9 @@ class FormulaDialog(QDialog):
         Sc_formula_label = QLabel("""
             <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
             <tr><td style="font-size:25px; font-weight:bold; text-align:right;">S<sub>c</sub></td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td>
-            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">M ⋅ Δp</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">&#961; ⋅ B<sub>eff</sub></td></tr></table>
+            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">M ⋅ ΔP</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">&#961; ⋅ B<sub>eff</sub></td></tr></table>
             </td></tr></table></body></html>""")
-        Sc_explanation = QLabel("<b>Compressor Power (S<sub>c</sub>):</b><br>Represents the power required for a booster station, based on flow rate (M), pressure drop (Δp), and fluid density (ρ).")
+        Sc_explanation = QLabel("<b>Compressor Power (S<sub>c</sub>):</b><br>Represents the power required for a booster station, based on flow rate (M), total pressure drop over 150 km segment (ΔP = Δp/L × 150,000 m), fluid density (ρ), and booster efficiency (B<sub>eff</sub> = 0.75).")
         Sc_explanation.setWordWrap(True)
         grid_layout.addWidget(Sc_formula_label, 3, 0, Qt.AlignCenter)
         grid_layout.addWidget(Sc_explanation, 3, 1)
