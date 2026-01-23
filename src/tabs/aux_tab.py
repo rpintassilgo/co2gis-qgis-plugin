@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
-    QGroupBox, QCheckBox, QVBoxLayout
+    QGroupBox, QCheckBox, QVBoxLayout, QRadioButton, QButtonGroup
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer, QgsRectangle
@@ -104,6 +104,24 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     clipLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.clipPointVectorComboBox)
     dialog.clipRasterInputDropdown = QComboBox()
     clipLayout.addRow(QLabel("Select Raster To Clip:"), dialog.clipRasterInputDropdown)
+    
+    # Clip mode radio buttons
+    clipModeLabel = QLabel("Clip Mode:")
+    dialog.clipModeButtonGroup = QButtonGroup()
+    dialog.clipModeXY = QRadioButton("Clip in X and Y")
+    dialog.clipModeX = QRadioButton("Clip in X only")
+    dialog.clipModeY = QRadioButton("Clip in Y only")
+    dialog.clipModeXY.setChecked(True)  # Default
+    dialog.clipModeButtonGroup.addButton(dialog.clipModeXY, 0)
+    dialog.clipModeButtonGroup.addButton(dialog.clipModeX, 1)
+    dialog.clipModeButtonGroup.addButton(dialog.clipModeY, 2)
+    
+    clipModeLayout = QHBoxLayout()
+    clipModeLayout.addWidget(dialog.clipModeXY)
+    clipModeLayout.addWidget(dialog.clipModeX)
+    clipModeLayout.addWidget(dialog.clipModeY)
+    clipLayout.addRow(clipModeLabel, clipModeLayout)
+    
     dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
     dialog.copySymbologyCheckbox.setChecked(False)
     clipLayout.addRow(dialog.copySymbologyCheckbox)
@@ -208,8 +226,14 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
         if not all([points_layer, raster_to_clip, output_path]):
             raise ValueError("Points layer, raster to clip, and output path must be specified.")
 
-        dialog.log_message("Clipping Raster...", "Aux")
-        clip_raster_to_vector(get_layer_path(raster_to_clip), points_layer, output_path)
+        # Get clip mode from radio buttons
+        clip_mode_id = dialog.clipModeButtonGroup.checkedId()
+        clip_modes = {0: "xy", 1: "x", 2: "y"}
+        clip_mode = clip_modes.get(clip_mode_id, "xy")
+        
+        mode_names = {"xy": "X and Y", "x": "X only", "y": "Y only"}
+        dialog.log_message(f"Clipping Raster (mode: {mode_names[clip_mode]})...", "Aux")
+        clip_raster_to_vector(get_layer_path(raster_to_clip), points_layer, output_path, clip_mode)
         dialog.log_message(f"Clipped Raster created successfully at: {output_path}", "Aux")
         
         clipped_layer = QgsRasterLayer(output_path, "Clipped Raster")
@@ -226,29 +250,75 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
     except Exception as e:
         dialog.log_message(f"Clipping Raster Failed: {str(e)}", "Aux")
 
-def clip_raster_to_vector(raster_path, vector_layer, output_path):
-    """Clips a raster to the extent of a vector layer with a buffer to ensure points are within the raster."""
+def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"):
+    """
+    Clips a raster to the extent of a vector layer with a buffer to ensure points are within the raster.
+    
+    Args:
+        raster_path: Path to the raster to clip
+        vector_layer: Vector layer defining the extent
+        output_path: Output path for clipped raster
+        clip_mode: "xy" (clip both dimensions), "x" (clip X only, keep full Y), "y" (clip Y only, keep full X)
+    """
     if not all([raster_path, vector_layer, output_path]):
         raise ValueError("Raster path, vector layer, and output path must be provided.")
 
-    # Get the original extent
-    extent = vector_layer.extent()
+    # Get the raster's original extent
+    from osgeo import gdal
+    raster_ds = gdal.Open(raster_path)
+    if not raster_ds:
+        raise RuntimeError(f"Could not open raster: {raster_path}")
+    
+    raster_geotrans = raster_ds.GetGeoTransform()
+    raster_width = raster_ds.RasterXSize
+    raster_height = raster_ds.RasterYSize
+    
+    # Calculate raster extent
+    raster_xmin = raster_geotrans[0]
+    raster_ymax = raster_geotrans[3]
+    raster_xmax = raster_xmin + raster_width * raster_geotrans[1]
+    raster_ymin = raster_ymax + raster_height * raster_geotrans[5]  # geotrans[5] is negative
+    
+    raster_ds = None
+    
+    # Get the vector extent
+    vector_extent = vector_layer.extent()
     
     # Add a buffer around the extent to ensure points are well within the clipped raster
     # Use 10% of the extent size as buffer, with a minimum of 1000 units
-    buffer_distance = max(extent.width() * 0.1, 1000)
+    buffer_distance = max(vector_extent.width() * 0.1, 1000)
     
-    # Expand the extent by the buffer distance
-    buffered_extent = QgsRectangle(
-        extent.xMinimum() - buffer_distance,
-        extent.yMinimum() - buffer_distance,
-        extent.xMaximum() + buffer_distance,
-        extent.yMaximum() + buffer_distance
-    )
+    # Build the clipping extent based on mode
+    if clip_mode == "xy":
+        # Clip both X and Y (default behavior)
+        clipped_extent = QgsRectangle(
+            vector_extent.xMinimum() - buffer_distance,
+            vector_extent.yMinimum() - buffer_distance,
+            vector_extent.xMaximum() + buffer_distance,
+            vector_extent.yMaximum() + buffer_distance
+        )
+    elif clip_mode == "x":
+        # Clip X only, keep full Y extent from original raster
+        clipped_extent = QgsRectangle(
+            vector_extent.xMinimum() - buffer_distance,
+            raster_ymin,  # Use full raster Y extent
+            vector_extent.xMaximum() + buffer_distance,
+            raster_ymax
+        )
+    elif clip_mode == "y":
+        # Clip Y only, keep full X extent from original raster
+        clipped_extent = QgsRectangle(
+            raster_xmin,  # Use full raster X extent
+            vector_extent.yMinimum() - buffer_distance,
+            raster_xmax,
+            vector_extent.yMaximum() + buffer_distance
+        )
+    else:
+        raise ValueError(f"Invalid clip_mode: {clip_mode}. Must be 'xy', 'x', or 'y'.")
 
     params = {
         'INPUT': raster_path,
-        'PROJWIN': buffered_extent,
+        'PROJWIN': clipped_extent,
         'NODATA': None,
         'OUTPUT': output_path,
     }
