@@ -108,7 +108,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
     inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
     inputLayout.addRow(QLabel("CO2 Density (ρ, in kg/m³):"), dialog.co2densityInput)
-    inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp, in MPa/km):"), dialog.pressureDropInput)
+    inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, in MPa/km):"), dialog.pressureDropInput)
     inputGroupBox.setLayout(inputLayout)
     right_layout.addWidget(inputGroupBox)
     
@@ -160,7 +160,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.co2MassFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
-        Δp = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m
+        Δp = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
         Bc = float(dialog.standardizedCostFactorInput.text())
         
         segment_costs = []
@@ -174,27 +174,31 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         
         pipeline_total_length = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
+        # Calculate total pressure drop for the entire pipeline
+        ΔP = Δp * pipeline_total_length  # Pa (total pressure drop)
+        
         # Calculate diameter D once for the entire pipeline using total length
         dialog.log_message(f"DEBUG D CALC - λ (lambda): {λ}", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - M (mass flow): {M} kg/s", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - M²: {M**2}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Total Pipeline Length: {pipeline_total_length} m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Total Pipeline Length (L): {pipeline_total_length} m", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - ρ (rho/density): {p} kg/m³", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Δp (delta_p): {Δp} Pa/m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Δp (pressure drop per meter): {Δp} Pa/m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - ΔP (total pressure drop, Δp×L): {ΔP:,.0f} Pa = {ΔP/1e6:.2f} MPa", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - π²: {np.pi**2}", "Price Estimation")
         
         # Calculate step by step
         numerator = 8 * λ * M**2 * pipeline_total_length
-        denominator = np.pi**2 * p * Δp
+        denominator = np.pi**2 * p * ΔP
         fraction = numerator / denominator
         
         dialog.log_message(f"DEBUG D CALC - Numerator (8*λ*M²*L): {numerator:,.2f}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Denominator (π²*ρ*Δp): {denominator:,.2f}", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Denominator (π²*ρ*ΔP): {denominator:,.2f}", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - Fraction (num/den): {fraction:.8f}", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - Fraction^(1/5): {fraction**(1/5):.6f}", "Price Estimation")
         
-        D = ((8 * λ * M**2 * pipeline_total_length) / (np.pi**2 * p * Δp))**(1/5)
-        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m (constant for entire pipeline)", "Price Estimation")
+        D = ((8 * λ * M**2 * pipeline_total_length) / (np.pi**2 * p * ΔP))**(1/5)
+        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D*1000:.0f} mm (constant for entire pipeline)", "Price Estimation")
         dialog.log_message(f"--------------------------------------------------", "Price Estimation")
 
         for Fc, Fs, Flu, Fci, N, cell_length in full_raster_values:
@@ -327,9 +331,9 @@ class FormulaDialog(QDialog):
         D_formula_label = QLabel("""
             <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
             <tr><td style="font-size:25px; font-weight:bold; text-align:right;">D</td><td style="font-size:25px; font-weight:bold; text-align:center;">=</td><td style="font-size:40px; font-weight:bold; text-align:center;">(</td><td>
-            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ Δp</td></tr></table>
+            <table align="center" border="0" cellspacing="0" cellpadding="0"><tr><td style="text-align:center; font-size:18px; padding-bottom:2px;">8 ⋅ λ ⋅ M² ⋅ L</td></tr><tr><td style="border-top: 2px solid white; text-align:center; font-size:18px; padding-top:2px;">π² ⋅ &#961; ⋅ ΔP</td></tr></table>
             </td><td style="font-size:40px; font-weight:bold; text-align:center;">)</td><td style="font-size:22px; font-weight:bold; text-align:center;"><sup>1/5</sup></td></tr></table></body></html>""")
-        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), and pressure drop (Δp) over the total pipeline length (L).")
+        D_explanation = QLabel("<b>Pipeline Diameter (D):</b><br>Calculated based on flow rate (M), fluid properties (λ, ρ), total pipeline length (L), and total pressure drop (ΔP = Δp × L), where Δp is the admissible pressure drop per unit length.")
         D_explanation.setWordWrap(True)
         grid_layout.addWidget(D_formula_label, 1, 0, Qt.AlignCenter)
         grid_layout.addWidget(D_explanation, 1, 1)
