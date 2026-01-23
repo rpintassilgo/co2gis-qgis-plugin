@@ -427,15 +427,21 @@ def run_r_drain_and_vectorize(cost_result: dict,
     # r.drain needs the accumulation raster (cost_result['output']) and start from DESTINATION.
     # It traces the steepest descent (lowest cost) to the source encoded by r.cost.
     accum_path = cost_result['output']
+    direction_path = cost_result['outdir']
+    
     if not os.path.exists(accum_path):
         raise RuntimeError(f"Cost accumulation raster not found: {accum_path}")
+    if not os.path.exists(direction_path):
+        raise RuntimeError(f"Direction raster not found: {direction_path}")
 
     # r.drain → raster path, then r.to.vect lines to GPKG
     drain_out = os.path.join(temp_dir, "drain_path.tif")
     
     # Run r.drain from destination to trace back to origin
+    # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
     processing.run("grass7:r.drain", {
         'input': accum_path,
+        'direction': direction_path,
         'start_coordinates': dest_coord,
         'output': drain_out,
         'GRASS_REGION_CELLSIZE_PARAMETER': 0
