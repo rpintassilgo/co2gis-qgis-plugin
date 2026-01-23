@@ -247,52 +247,78 @@ def combine_rasters_with_qgis_raster_calculator(
         if not layer.isValid():
             raise RuntimeError(f"Invalid raster layer: {layer.name()}")
 
-    # Step 1: Resample all rasters to match the reference raster's grid
+    # Step 1: Calculate the INTERSECTION of all raster extents
+    # This ensures we only work with pixels that have data from ALL 4 rasters
+    dialog.log_message("Step 1: Calculating common extent (intersection of all rasters)...", "LCP")
+    
+    from qgis.core import QgsRectangle
+    
+    # Start with the first raster's extent
+    common_extent = raster_layers[0].extent()
+    dialog.log_message(f"  Layer 1 ({raster_layers[0].name()}): [{common_extent.xMinimum():.2f}, {common_extent.xMaximum():.2f}, {common_extent.yMinimum():.2f}, {common_extent.yMaximum():.2f}]", "LCP")
+    
+    # Intersect with all other rasters
+    for idx, layer in enumerate(raster_layers[1:], start=2):
+        layer_extent = layer.extent()
+        dialog.log_message(f"  Layer {idx} ({layer.name()}): [{layer_extent.xMinimum():.2f}, {layer_extent.xMaximum():.2f}, {layer_extent.yMinimum():.2f}, {layer_extent.yMaximum():.2f}]", "LCP")
+        common_extent = common_extent.intersect(layer_extent)
+    
+    if common_extent.isEmpty():
+        raise ValueError("No common extent found - rasters do not overlap!")
+    
+    dialog.log_message(f"Common extent: [{common_extent.xMinimum():.2f}, {common_extent.xMaximum():.2f}, {common_extent.yMinimum():.2f}, {common_extent.yMaximum():.2f}]", "LCP")
+    
+    # Use the first raster as reference for resolution
     reference_layer = raster_layers[0]
+    ref_resolution = reference_layer.rasterUnitsPerPixelX()
+    
+    dialog.log_message(f"Using resolution from {reference_layer.name()}: {ref_resolution:.2f}", "LCP")
+    dialog.log_message("Step 2: Resampling all rasters to common extent...", "LCP")
+    
     resampled_paths = []
     
-    dialog.log_message("Step 1: Resampling rasters to match reference grid...", "LCP")
+    # Resample ALL rasters (including reference) to the common extent
     for idx, layer in enumerate(raster_layers):
-        if layer == reference_layer:
-            # Reference layer doesn't need resampling
-            resampled_paths.append(layer.source())
-            continue
-            
-        # Resample to match reference
         resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{idx}.tif')
+        
         params = {
             'INPUT': layer,
             'SOURCE_CRS': layer.crs(),
             'TARGET_CRS': reference_layer.crs(),
             'RESAMPLING': 0,  # Nearest neighbor
             'NODATA': None,
-            'TARGET_RESOLUTION': reference_layer.rasterUnitsPerPixelX(),
+            'TARGET_RESOLUTION': ref_resolution,
+            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
             'OUTPUT': resampled_path
         }
         
-        # Set extent to match reference
-        extent = reference_layer.extent()
-        params['TARGET_EXTENT'] = f"{extent.xMinimum()},{extent.xMaximum()},{extent.yMinimum()},{extent.yMaximum()}"
-        
-        dialog.log_message(f"  Resampling {layer.name()}...", "LCP")
+        dialog.log_message(f"  Resampling {layer.name()} to common extent...", "LCP")
         result = processing.run('gdal:warpreproject', params)
+        
         if result and 'OUTPUT' in result:
+            check_ds = gdal.Open(result['OUTPUT'])
+            dialog.log_message(f"  ✓ {layer.name()} resampled to {check_ds.RasterXSize}x{check_ds.RasterYSize}", "LCP")
+            check_ds = None
             resampled_paths.append(result['OUTPUT'])
         else:
             raise RuntimeError(f"Failed to resample {layer.name()}")
     
-    # Step 2: Combine resampled rasters using numpy
-    dialog.log_message("Step 2: Combining resampled rasters...", "LCP")
+    # Step 3: Combine resampled rasters using numpy
+    dialog.log_message("Step 3: Combining resampled rasters...", "LCP")
     
-    # Read reference raster to get dimensions
-    ref_ds = gdal.Open(reference_layer.source())
+    # Read first resampled raster to get dimensions (all should be the same now)
+    ref_ds = gdal.Open(resampled_paths[0])
     width = ref_ds.RasterXSize
     height = ref_ds.RasterYSize
     geotrans = ref_ds.GetGeoTransform()
     proj = ref_ds.GetProjection()
+    ref_ds = None
     
-    # Create output array
+    dialog.log_message(f"Combined raster will be {width}x{height} pixels", "LCP")
+    
+    # Create output array and global valid mask
     output_data = np.zeros((height, width), dtype=np.float32)
+    global_valid_mask = np.ones((height, width), dtype=bool)  # Track pixels valid in ALL layers
     
     # Process each resampled raster
     for idx, (resampled_path, weight) in enumerate(zip(resampled_paths, weights)):
@@ -300,40 +326,75 @@ def combine_rasters_with_qgis_raster_calculator(
         if not ds:
             raise RuntimeError(f"Could not open resampled raster: {resampled_path}")
         
+        # Verify dimensions match
+        if ds.RasterXSize != width or ds.RasterYSize != height:
+            raise RuntimeError(f"Dimension mismatch in {resampled_path}: {ds.RasterXSize}x{ds.RasterYSize} vs expected {width}x{height}")
+        
         # Read data and normalize to 0-1 range before weighting
         data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
         
-        # Handle nodata values
+        # Handle nodata values if present
         nodata = ds.GetRasterBand(1).GetNoDataValue()
+        
         if nodata is not None:
-            mask = data != nodata
-            if np.any(mask):
-                # Normalize only valid data to 0-1 range
-                valid_data = data[mask]
-                min_val, max_val = np.min(valid_data), np.max(valid_data)
-                if max_val > min_val:
-                    data[mask] = (valid_data - min_val) / (max_val - min_val)
-                else:
-                    data[mask] = 0.5  # constant value case
+            # Create mask for valid pixels
+            layer_valid_mask = (data != nodata) & np.isfinite(data)
+            num_invalid = np.sum(~layer_valid_mask)
+            if num_invalid > 0:
+                dialog.log_message(f"  Layer {idx+1} ({raster_layers[idx].name()}): {num_invalid:,} NoData pixels found", "LCP")
+            
+            # Update global mask
+            global_valid_mask &= layer_valid_mask
+            
+            # Only normalize valid data
+            valid_data = data[layer_valid_mask]
         else:
-            # Normalize entire array
-            min_val, max_val = np.min(data), np.max(data)
-            if max_val > min_val:
-                data = (data - min_val) / (max_val - min_val)
-            else:
-                data = np.full_like(data, 0.5)
+            # No NoData value - all pixels should be valid (since we're using common extent)
+            layer_valid_mask = np.isfinite(data)
+            global_valid_mask &= layer_valid_mask
+            valid_data = data[layer_valid_mask]
+        
+        if len(valid_data) == 0:
+            dialog.log_message(f"  ⚠️  Layer {idx+1} has no valid data!", "LCP")
+            continue
+        
+        # Normalize to 0-1 range
+        min_val, max_val = np.min(valid_data), np.max(valid_data)
+        
+        if max_val > min_val:
+            # Normal case: normalize to 0-1
+            normalized = np.zeros_like(data)
+            normalized[layer_valid_mask] = (valid_data - min_val) / (max_val - min_val)
+            data = normalized
+        else:
+            # Constant value case
+            data = np.full_like(data, 0.5)
         
         # Add weighted contribution
         output_data += data * weight
+        
+        dialog.log_message(f"  ✓ Layer {idx+1} ({raster_layers[idx].name()}): range [{min_val:.2f}, {max_val:.2f}]", "LCP")
         ds = None
     
-    # Post-process the combined cost surface for better LCP results
-    # Scale by cell resolution to improve r.drain performance
-    cell_size = abs(geotrans[1])  # pixel width
-    output_data = output_data * cell_size
+    # Log global mask statistics
+    global_valid_pct = np.sum(global_valid_mask) / global_valid_mask.size * 100
+    dialog.log_message(f"Pixels valid in ALL layers: {np.sum(global_valid_mask):,}/{global_valid_mask.size:,} ({global_valid_pct:.1f}%)", "LCP")
     
-    # Ensure minimum cost > 0 (avoid zero costs that can cause issues)
-    output_data = np.maximum(output_data, 0.001)
+    # CRITICAL: Handle invalid pixels (where not all layers have data)
+    invalid_mask = ~global_valid_mask
+    if np.any(invalid_mask):
+        num_invalid = np.sum(invalid_mask)
+        dialog.log_message(f"⚠️  Setting {num_invalid:,} invalid pixels to very high cost (will be avoided by LCP)", "LCP")
+        # These pixels will have extremely high cost, forcing LCP to avoid them
+        output_data[invalid_mask] = 999999.0
+    
+    # Post-process the combined cost surface for better LCP results
+    # Scale by cell resolution to improve r.drain performance (only for valid pixels)
+    cell_size = abs(geotrans[1])  # pixel width
+    output_data[global_valid_mask] = output_data[global_valid_mask] * cell_size
+    
+    # Ensure minimum cost > 0 for valid pixels (avoid zero costs that can cause issues)
+    output_data[global_valid_mask] = np.maximum(output_data[global_valid_mask], 0.001)
     
     # Write final output
     driver = gdal.GetDriverByName('GTiff')
@@ -344,13 +405,13 @@ def combine_rasters_with_qgis_raster_calculator(
     out_ds = None
     ref_ds = None
     
-    # Clean up temporary files
-    for idx, resampled_path in enumerate(resampled_paths):
-        if idx > 0 and resampled_path != reference_layer.source():  # Skip reference layer
-            try:
+    # Clean up temporary resampled files
+    for resampled_path in resampled_paths:
+        try:
+            if os.path.exists(resampled_path):
                 os.remove(resampled_path)
-            except:
-                pass
+        except:
+            pass
     
     # Load the result into QGIS
     new_layer = QgsRasterLayer(output_path, "Combined Costs")
