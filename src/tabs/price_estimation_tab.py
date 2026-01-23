@@ -183,7 +183,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"DEBUG D CALC - M²: {M**2}", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - Total Pipeline Length (L): {pipeline_total_length} m", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - ρ (rho/density): {p} kg/m³", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Δp (pressure drop per meter): {Δp} Pa/m", "Price Estimation")
+        dialog.log_message(f"DEBUG D CALC - Δp (pressure drop per meter): {Δp_per_length_unit} Pa/m", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - ΔP (total pressure drop, Δp×L): {ΔP:,.0f} Pa = {ΔP/1e6:.2f} MPa", "Price Estimation")
         dialog.log_message(f"DEBUG D CALC - π²: {np.pi**2}", "Price Estimation")
         
