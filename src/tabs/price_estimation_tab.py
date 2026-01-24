@@ -242,10 +242,11 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                     # Calculate pressure drop for 150 km segment
                     ΔP_booster_segment = Δp_per_length_unit * 150000  # Pa (pressure drop over 150 km)
                     Beff = 0.75
-                    Sc = (M * ΔP_booster_segment) / (p * Beff)
-                    Ib = (0.547 * Sc + 0.42) * 1e6 # Convert M€ to €
+                    Sc_W = (M * ΔP_booster_segment) / (p * Beff) #W (compressor power)
+                    Sc_MW = Sc_W / 1e6 # converted to MW
+                    Ib = (0.547 * Sc_MW + 0.42) * 1e6 # Convert M€ to €
                     booster_costs.append(Ib)
-                    dialog.log_message(f"Booster Station after 150 km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc:.2f} W, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
+                    dialog.log_message(f"Booster Station after 150 km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
 
                 current_segment_cells = []
                 current_segment_length = 0
