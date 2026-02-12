@@ -358,14 +358,22 @@ def combine_rasters_with_qgis_raster_calculator(
             dialog.log_message(f"  ⚠️  Layer {idx+1} has no valid data!", "LCP")
             continue
         
-        # Calculate min/max for logging purposes
+        # Normalize to 0-1 range
         min_val, max_val = np.min(valid_data), np.max(valid_data)
         
-        # Weighted sum approach - preserving original COMET values (NO normalization)
-        # This approach was validated as producing the most cost-effective routes
+        if max_val > min_val:
+            # Normal case: normalize to 0-1
+            normalized = np.zeros_like(data)
+            normalized[layer_valid_mask] = (valid_data - min_val) / (max_val - min_val)
+            data = normalized
+        else:
+            # Constant value case
+            data = np.full_like(data, 0.5)
+        
+        # Add weighted contribution
         output_data += data * weight
         
-        dialog.log_message(f"  ✓ Layer {idx+1} ({raster_layers[idx].name()}): range [{min_val:.2f}, {max_val:.2f}], weight={weight:.3f}", "LCP")
+        dialog.log_message(f"  ✓ Layer {idx+1} ({raster_layers[idx].name()}): range [{min_val:.2f}, {max_val:.2f}]", "LCP")
         ds = None
     
     # Log global mask statistics
