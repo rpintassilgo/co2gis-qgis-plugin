@@ -69,6 +69,7 @@ class AnalysisDialog(QDialog):
         self.combineSlopeDropdown: QComboBox
         self.combineCorridorsDropdown: QComboBox
         self.combineCrossingsDropdown: QComboBox
+        self.combineNRasterDropdown: QComboBox
         self.weight_sliders: list
         self.weight_spinboxes: list
         self.combinedRasterPath: QLineEdit

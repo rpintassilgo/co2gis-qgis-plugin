@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
-    QGroupBox, QSlider, QDoubleSpinBox
+    QGroupBox
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsProcessingFeedback
@@ -31,11 +31,12 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     dialog.combineSlopeDropdown = QComboBox()
     dialog.combineCorridorsDropdown = QComboBox()
     dialog.combineCrossingsDropdown = QComboBox()
-    combinedCostsLayout.addRow(QLabel("Select Land Use Costs Raster:"), dialog.combineLandUseDropdown)
-    combinedCostsLayout.addRow(QLabel("Select Slope Costs Raster:"), dialog.combineSlopeDropdown)
-    combinedCostsLayout.addRow(QLabel("Select Corridors Costs Raster:"), dialog.combineCorridorsDropdown)
-    combinedCostsLayout.addRow(QLabel("Select Crossings Costs Raster:"), dialog.combineCrossingsDropdown)
-    setup_weight_sliders(dialog, combinedCostsLayout)
+    dialog.combineNRasterDropdown = QComboBox()
+    combinedCostsLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.combineLandUseDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.combineSlopeDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.combineCorridorsDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.combineCrossingsDropdown)
+    combinedCostsLayout.addRow(QLabel("Select Number of Crossings Raster (N):"), dialog.combineNRasterDropdown)
     dialog.combinedRasterPath = QLineEdit()
     dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
     dialog.combinedRasterBrowse = QPushButton("Browse")
@@ -80,32 +81,22 @@ def connect_lcp_signals(dialog: 'AnalysisDialog'):
     dialog.final_button.clicked.connect(lambda checked: run_in_background(dialog, run_lcp_creation))
 
 def run_raster_combination(dialog: 'AnalysisDialog'):
-    """Combine Land Use and Slope Rasters"""
+    """Combine Cost Rasters using COMET formula with N factor"""
     try:
-        occupancy_weight = dialog.weight_spinboxes[0].value()
-        dem_weight = dialog.weight_spinboxes[1].value()
-        corridors_weight = dialog.weight_spinboxes[2].value()
-        crossings_weight = dialog.weight_spinboxes[3].value()
-
-        total_weight = occupancy_weight + dem_weight + corridors_weight + crossings_weight
-        if abs(total_weight - 1.0) > 0.001:
-            raise ValueError("The sum of all weights must be equal to 1.0.")
-        if any(w < 0 for w in [occupancy_weight, dem_weight, corridors_weight, crossings_weight]):
-            raise ValueError("All weights must be non-negative.")
-
+        # Load all layers
         costs_layer = QgsProject.instance().mapLayer(dialog.combineLandUseDropdown.currentData())
         slope_layer = QgsProject.instance().mapLayer(dialog.combineSlopeDropdown.currentData())
         corridors_layer = QgsProject.instance().mapLayer(dialog.combineCorridorsDropdown.currentData())
         crossings_layer = QgsProject.instance().mapLayer(dialog.combineCrossingsDropdown.currentData())
+        N_layer = QgsProject.instance().mapLayer(dialog.combineNRasterDropdown.currentData())
         output_path = dialog.combinedRasterPath.text().strip()
 
-        if not all([costs_layer, slope_layer, corridors_layer, crossings_layer, output_path]):
-            raise ValueError("All raster layers and an output path must be specified.")
+        if not output_path:
+            raise ValueError("Output path must be specified.")
 
-        dialog.log_message("Combining Cost Rasters...", "LCP")
-        combine_rasters_with_qgis_raster_calculator(
-            [costs_layer, slope_layer, corridors_layer, crossings_layer],
-            [occupancy_weight, dem_weight, corridors_weight, crossings_weight],
+        dialog.log_message("Combining Cost Rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]", "LCP")
+        combine_rasters_with_comet_formula(
+            costs_layer, slope_layer, corridors_layer, crossings_layer, N_layer,
             output_path,
             dialog
         )
@@ -167,234 +158,159 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
 
     except Exception as e:
         dialog.log_message(f"LCP Creation Process Failed: {e}", "LCP")
-def setup_weight_sliders(dialog: 'AnalysisDialog', layout: QFormLayout):
-    """Adds sliders and spin boxes for weight input with validation feedback."""
-    dialog.weight_sliders = []
-    dialog.weight_spinboxes = []
-    dialog._is_updating_weights = False
 
-    labels = ["Land Use Costs Weight:", "Slope Costs Weight:", "Corridors Costs Weight:", "Crossings Costs Weight:"]
-    initial_values = [0.250, 0.250, 0.250, 0.250]
-
-    for i, label_text in enumerate(labels):
-        slider = QSlider(Qt.Horizontal)
-        slider.setRange(0, 1000)
-        slider.setValue(int(initial_values[i] * 1000))
-
-        spinbox = QDoubleSpinBox()
-        spinbox.setRange(0.0, 1.0)
-        spinbox.setDecimals(3)
-        spinbox.setSingleStep(0.01)
-        spinbox.setValue(initial_values[i])
-
-        dialog.weight_sliders.append(slider)
-        dialog.weight_spinboxes.append(spinbox)
-
-        row_layout = QHBoxLayout()
-        row_layout.addWidget(QLabel(label_text))
-        row_layout.addWidget(slider)
-        row_layout.addWidget(spinbox)
-        layout.addRow(row_layout)
-
-        slider.valueChanged.connect(lambda value, s=slider: sync_and_validate_weights(dialog, changed_widget=s))
-        spinbox.valueChanged.connect(lambda value, sb=spinbox: sync_and_validate_weights(dialog, changed_widget=sb))
-    
-    validate_weight_sum(dialog)
-
-def sync_and_validate_weights(dialog: 'AnalysisDialog', changed_widget):
-    """Syncs a slider with its spinbox and validates the total sum."""
-    if dialog._is_updating_weights:
-        return
-    dialog._is_updating_weights = True
-
-    if isinstance(changed_widget, QSlider):
-        changed_index = dialog.weight_sliders.index(changed_widget)
-        new_value = changed_widget.value()
-        dialog.weight_spinboxes[changed_index].setValue(new_value / 1000.0)
-    else: # QDoubleSpinBox
-        changed_index = dialog.weight_spinboxes.index(changed_widget)
-        new_value = changed_widget.value()
-        dialog.weight_sliders[changed_index].setValue(int(new_value * 1000))
-
-    validate_weight_sum(dialog)
-    dialog._is_updating_weights = False
-
-def validate_weight_sum(dialog: 'AnalysisDialog'):
-    """Checks if the sum of weights is 1.0 and updates slider handle colors."""
-    total_weight = sum(sb.value() for sb in dialog.weight_spinboxes)
-    
-    is_valid = abs(total_weight - 1.0) < 0.001
-    color = "#5cb85c" if is_valid else "#d9534f" # Green if valid, Red if not
-    style = f"QSlider::handle:horizontal {{ background-color: {color}; border-radius: 9px; }}"
-
-    for slider in dialog.weight_sliders:
-        slider.setStyleSheet(style)
-
-def combine_rasters_with_qgis_raster_calculator(
-    raster_layers: list,
-    weights: list,
+def combine_rasters_with_comet_formula(
+    land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer,
     output_path: str,
     dialog: 'AnalysisDialog'
 ) -> str:
-    """Combines multiple rasters using weighted sum via resampling + numpy (handles different dimensions)."""
-    if not raster_layers or not weights or len(raster_layers) != len(weights):
-        raise ValueError("Invalid input: raster layers and weights must be non-empty and of equal length")
-
-    # Debug: Check layer validity and names
-    dialog.log_message("Debug: Checking input layers...", "LCP")
-    for idx, layer in enumerate(raster_layers):
-        dialog.log_message(f"  Layer {idx+1}: {layer.name()} - Valid: {layer.isValid()} - Source: {layer.source()}", "LCP")
-        if not layer.isValid():
-            raise RuntimeError(f"Invalid raster layer: {layer.name()}")
-
-    # Step 1: Calculate the INTERSECTION of all raster extents
-    # This ensures we only work with pixels that have data from ALL 4 rasters
-    dialog.log_message("Step 1: Calculating common extent (intersection of all rasters)...", "LCP")
+    """
+    Combines rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]
     
+    Parameters:
+        land_use_layer: Flu (land use costs)
+        slope_layer: Fs (slope costs)
+        corridors_layer: Fc (corridor costs)
+        crossings_layer: Fci (crossing costs)
+        N_layer: N (number of infrastructure crossings per cell)
+        
+    Any layer can be None - will be treated as constant 1.0 (neutral)
+    N is capped at 10 to avoid negative Flu coefficients and numerical instability
+    """
     from qgis.core import QgsRectangle
     
-    # Start with the first raster's extent
-    common_extent = raster_layers[0].extent()
-    dialog.log_message(f"  Layer 1 ({raster_layers[0].name()}): [{common_extent.xMinimum():.2f}, {common_extent.xMaximum():.2f}, {common_extent.yMinimum():.2f}, {common_extent.yMaximum():.2f}]", "LCP")
+    # Collect valid layers
+    all_layers = []
+    layer_names = ['Land Use (Flu)', 'Slope (Fs)', 'Corridors (Fc)', 'Crossings (Fci)', 'N (count)']
+    layer_map = {}
     
-    # Intersect with all other rasters
-    for idx, layer in enumerate(raster_layers[1:], start=2):
-        layer_extent = layer.extent()
-        dialog.log_message(f"  Layer {idx} ({layer.name()}): [{layer_extent.xMinimum():.2f}, {layer_extent.xMaximum():.2f}, {layer_extent.yMinimum():.2f}, {layer_extent.yMaximum():.2f}]", "LCP")
-        common_extent = common_extent.intersect(layer_extent)
+    for idx, (layer, name) in enumerate(zip(
+        [land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer],
+        layer_names
+    )):
+        if layer and layer.isValid():
+            all_layers.append(layer)
+            layer_map[name] = idx
+            dialog.log_message(f"  {name}: {layer.name()} - Valid", "LCP")
+        else:
+            dialog.log_message(f"  ⚠️ {name}: Not selected - will use constant 1.0", "LCP")
+    
+    if not all_layers:
+        raise ValueError("At least one cost raster must be provided!")
+    
+    # Calculate common extent
+    dialog.log_message("Step 1: Calculating common extent...", "LCP")
+    common_extent = all_layers[0].extent()
+    for layer in all_layers[1:]:
+        common_extent = common_extent.intersect(layer.extent())
     
     if common_extent.isEmpty():
         raise ValueError("No common extent found - rasters do not overlap!")
     
-    dialog.log_message(f"Common extent: [{common_extent.xMinimum():.2f}, {common_extent.xMaximum():.2f}, {common_extent.yMinimum():.2f}, {common_extent.yMaximum():.2f}]", "LCP")
-    
-    # Use the first raster as reference for resolution
-    reference_layer = raster_layers[0]
+    # Use first valid layer as reference for resolution
+    reference_layer = all_layers[0]
     ref_resolution = reference_layer.rasterUnitsPerPixelX()
+    dialog.log_message(f"Using resolution: {ref_resolution:.2f}m from {reference_layer.name()}", "LCP")
     
-    dialog.log_message(f"Using resolution from {reference_layer.name()}: {ref_resolution:.2f}", "LCP")
-    dialog.log_message("Step 2: Resampling all rasters to common extent...", "LCP")
+    # Resample all valid layers
+    dialog.log_message("Step 2: Resampling rasters...", "LCP")
+    resampled_data = {}
     
-    resampled_paths = []
+    for layer, name in zip(
+        [land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer],
+        layer_names
+    ):
+        if layer and layer.isValid():
+            resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{name.replace(" ", "_")}.tif')
+            
+            params = {
+                'INPUT': layer,
+                'SOURCE_CRS': layer.crs(),
+                'TARGET_CRS': reference_layer.crs(),
+                'RESAMPLING': 0,
+                'NODATA': None,
+                'TARGET_RESOLUTION': ref_resolution,
+                'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+                'OUTPUT': resampled_path
+            }
+            
+            result = processing.run('gdal:warpreproject', params)
+            
+            if result and 'OUTPUT' in result:
+                ds = gdal.Open(result['OUTPUT'])
+                data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+                
+                # Get dimensions from first raster
+                if not resampled_data:
+                    width = ds.RasterXSize
+                    height = ds.RasterYSize
+                    geotrans = ds.GetGeoTransform()
+                    proj = ds.GetProjection()
+                    resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans, 'proj': proj}
+                
+                resampled_data[name] = data
+                ds = None
+                
+                # Clean up temp file
+                try:
+                    os.remove(result['OUTPUT'])
+                except:
+                    pass
+            else:
+                raise RuntimeError(f"Failed to resample {layer.name()}")
     
-    # Resample ALL rasters (including reference) to the common extent
-    for idx, layer in enumerate(raster_layers):
-        resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{idx}.tif')
-        
-        params = {
-            'INPUT': layer,
-            'SOURCE_CRS': layer.crs(),
-            'TARGET_CRS': reference_layer.crs(),
-            'RESAMPLING': 0,  # Nearest neighbor
-            'NODATA': None,
-            'TARGET_RESOLUTION': ref_resolution,
-            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            'OUTPUT': resampled_path
-        }
-        
-        dialog.log_message(f"  Resampling {layer.name()} to common extent...", "LCP")
-        result = processing.run('gdal:warpreproject', params)
-        
-        if result and 'OUTPUT' in result:
-            check_ds = gdal.Open(result['OUTPUT'])
-            dialog.log_message(f"  ✓ {layer.name()} resampled to {check_ds.RasterXSize}x{check_ds.RasterYSize}", "LCP")
-            check_ds = None
-            resampled_paths.append(result['OUTPUT'])
-        else:
-            raise RuntimeError(f"Failed to resample {layer.name()}")
-    
-    # Step 3: Combine resampled rasters using numpy
-    dialog.log_message("Step 3: Combining resampled rasters...", "LCP")
-    
-    # Read first resampled raster to get dimensions (all should be the same now)
-    ref_ds = gdal.Open(resampled_paths[0])
-    width = ref_ds.RasterXSize
-    height = ref_ds.RasterYSize
-    geotrans = ref_ds.GetGeoTransform()
-    proj = ref_ds.GetProjection()
-    ref_ds = None
+    # Get dimensions
+    meta = resampled_data['_meta']
+    width, height = meta['width'], meta['height']
+    geotrans, proj = meta['geotrans'], meta['proj']
     
     dialog.log_message(f"Combined raster will be {width}x{height} pixels", "LCP")
+    dialog.log_message("Step 3: Applying COMET formula...", "LCP")
     
-    # Create output array and global valid mask
-    output_data = np.zeros((height, width), dtype=np.float32)
-    global_valid_mask = np.ones((height, width), dtype=bool)  # Track pixels valid in ALL layers
+    # Create arrays with default value 1.0 for missing layers
+    Flu = resampled_data.get('Land Use (Flu)', np.ones((height, width), dtype=np.float32))
+    Fs = resampled_data.get('Slope (Fs)', np.ones((height, width), dtype=np.float32))
+    Fc = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
+    Fci = resampled_data.get('Crossings (Fci)', np.ones((height, width), dtype=np.float32))
+    N = resampled_data.get('N (count)', np.ones((height, width), dtype=np.float32))
     
-    # Process each resampled raster
-    for idx, (resampled_path, weight) in enumerate(zip(resampled_paths, weights)):
-        ds = gdal.Open(resampled_path)
-        if not ds:
-            raise RuntimeError(f"Could not open resampled raster: {resampled_path}")
-        
-        # Verify dimensions match
-        if ds.RasterXSize != width or ds.RasterYSize != height:
-            raise RuntimeError(f"Dimension mismatch in {resampled_path}: {ds.RasterXSize}x{ds.RasterYSize} vs expected {width}x{height}")
-        
-        # Read data and normalize to 0-1 range before weighting
-        data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-        
-        # Handle nodata values if present
-        nodata = ds.GetRasterBand(1).GetNoDataValue()
-        
-        if nodata is not None:
-            # Create mask for valid pixels
-            layer_valid_mask = (data != nodata) & np.isfinite(data)
-            num_invalid = np.sum(~layer_valid_mask)
-            if num_invalid > 0:
-                dialog.log_message(f"  Layer {idx+1} ({raster_layers[idx].name()}): {num_invalid:,} NoData pixels found", "LCP")
-            
-            # Update global mask
-            global_valid_mask &= layer_valid_mask
-            
-            # Only normalize valid data
-            valid_data = data[layer_valid_mask]
-        else:
-            # No NoData value - all pixels should be valid (since we're using common extent)
-            layer_valid_mask = np.isfinite(data)
-            global_valid_mask &= layer_valid_mask
-            valid_data = data[layer_valid_mask]
-        
-        if len(valid_data) == 0:
-            dialog.log_message(f"  ⚠️  Layer {idx+1} has no valid data!", "LCP")
-            continue
-        
-        # Normalize to 0-1 range
-        min_val, max_val = np.min(valid_data), np.max(valid_data)
-        
-        if max_val > min_val:
-            # Normal case: normalize to 0-1
-            normalized = np.zeros_like(data)
-            normalized[layer_valid_mask] = (valid_data - min_val) / (max_val - min_val)
-            data = normalized
-        else:
-            # Constant value case
-            data = np.full_like(data, 0.5)
-        
-        # Add weighted contribution
-        output_data += data * weight
-        
-        dialog.log_message(f"  ✓ Layer {idx+1} ({raster_layers[idx].name()}): range [{min_val:.2f}, {max_val:.2f}]", "LCP")
-        ds = None
+    # Log warnings for missing layers
+    if 'Land Use (Flu)' not in resampled_data:
+        dialog.log_message("  ⚠️ Land Use (Flu) not selected - assuming Flu=1.0 (neutral)", "LCP")
+    if 'Slope (Fs)' not in resampled_data:
+        dialog.log_message("  ⚠️ Slope (Fs) not selected - assuming Fs=1.0 (neutral)", "LCP")
+    if 'Corridors (Fc)' not in resampled_data:
+        dialog.log_message("  ⚠️ Corridors (Fc) not selected - assuming Fc=1.0 (neutral)", "LCP")
+    if 'Crossings (Fci)' not in resampled_data:
+        dialog.log_message("  ⚠️ Crossings (Fci) not selected - assuming Fci=1.0 (neutral)", "LCP")
+    if 'N (count)' not in resampled_data:
+        dialog.log_message("  ⚠️ N (count) not selected - assuming N=1.0 (one infrastructure per cell)", "LCP")
     
-    # Log global mask statistics
-    global_valid_pct = np.sum(global_valid_mask) / global_valid_mask.size * 100
-    dialog.log_message(f"Pixels valid in ALL layers: {np.sum(global_valid_mask):,}/{global_valid_mask.size:,} ({global_valid_pct:.1f}%)", "LCP")
+    # Log value ranges
+    dialog.log_message(f"  Flu range: [{np.min(Flu):.2f}, {np.max(Flu):.2f}]", "LCP")
+    dialog.log_message(f"  Fs range: [{np.min(Fs):.2f}, {np.max(Fs):.2f}]", "LCP")
+    dialog.log_message(f"  Fc range: [{np.min(Fc):.2f}, {np.max(Fc):.2f}]", "LCP")
+    dialog.log_message(f"  Fci range: [{np.min(Fci):.2f}, {np.max(Fci):.2f}]", "LCP")
+    dialog.log_message(f"  N range (before cap): [{np.min(N):.2f}, {np.max(N):.2f}]", "LCP")
     
-    # CRITICAL: Handle invalid pixels (where not all layers have data)
-    invalid_mask = ~global_valid_mask
-    if np.any(invalid_mask):
-        num_invalid = np.sum(invalid_mask)
-        dialog.log_message(f"⚠️  Setting {num_invalid:,} invalid pixels to very high cost (will be avoided by LCP)", "LCP")
-        # These pixels will have extremely high cost, forcing LCP to avoid them
-        output_data[invalid_mask] = 999999.0
+    # Cap N at 10 (critical for formula stability)
+    N_capped = np.minimum(N, 10)
     
-    # Post-process the combined cost surface for better LCP results
-    # Scale by cell resolution to improve r.drain performance (only for valid pixels)
-    cell_size = abs(geotrans[1])  # pixel width
-    output_data[global_valid_mask] = output_data[global_valid_mask] * cell_size
+    if np.max(N) > 10:
+        num_capped = np.sum(N > 10)
+        dialog.log_message(f"  ⚠️ {num_capped:,} pixels had N > 10 and were capped to 10", "LCP")
     
-    # Ensure minimum cost > 0 for valid pixels (avoid zero costs that can cause issues)
-    output_data[global_valid_mask] = np.maximum(output_data[global_valid_mask], 0.001)
+    dialog.log_message(f"  N range (after cap): [{np.min(N_capped):.2f}, {np.max(N_capped):.2f}]", "LCP")
+    
+    # Apply COMET formula: Fc × Fs × [Flu × (1 - 0.1N) + 0.1N × Fci]
+    inner_term = Flu * (1 - 0.1 * N_capped) + 0.1 * N_capped * Fci
+    output_data = Fc * Fs * inner_term
+    
+    # Log final cost range
+    dialog.log_message(f"  Combined cost range: [{np.min(output_data):.2f}, {np.max(output_data):.2f}]", "LCP")
+    
+    # Ensure minimum cost > 0 (avoid issues with r.drain)
+    output_data = np.maximum(output_data, 0.001)
     
     # Write final output
     driver = gdal.GetDriverByName('GTiff')
@@ -403,21 +319,12 @@ def combine_rasters_with_qgis_raster_calculator(
     out_ds.SetProjection(proj)
     out_ds.GetRasterBand(1).WriteArray(output_data)
     out_ds = None
-    ref_ds = None
     
-    # Clean up temporary resampled files
-    for resampled_path in resampled_paths:
-        try:
-            if os.path.exists(resampled_path):
-                os.remove(resampled_path)
-        except:
-            pass
-    
-    # Load the result into QGIS
-    new_layer = QgsRasterLayer(output_path, "Combined Costs")
+    # Load result into QGIS
+    new_layer = QgsRasterLayer(output_path, "Combined Costs (COMET)")
     if new_layer.isValid():
         QgsProject.instance().addMapLayer(new_layer)
-        dialog.log_message("Successfully created and loaded combined cost raster", "LCP")
+        dialog.log_message("Successfully created combined cost raster using COMET formula", "LCP")
         return output_path
     else:
         raise RuntimeError("Failed to load the combined cost raster")
