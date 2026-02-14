@@ -39,6 +39,8 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     # New crossings/corridors combo boxes
     dialog.crossingComboBox.clear()
     dialog.crossingRefRasterComboBox.clear()
+    dialog.nCrossingVectorComboBox.clear()
+    dialog.nCrossingRefRasterComboBox.clear()
     dialog.corridorComboBox.clear()
     dialog.corridorRefRasterComboBox.clear()
 
@@ -66,6 +68,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
             dialog.corridorsCostsDropdown.addItem(layer.name(), layer.id())
             dialog.crossingsCostsDropdown.addItem(layer.name(), layer.id())
             dialog.crossingRefRasterComboBox.addItem(layer.name(), layer.id())
+            dialog.nCrossingRefRasterComboBox.addItem(layer.name(), layer.id())
             dialog.corridorRefRasterComboBox.addItem(layer.name(), layer.id())
         elif isinstance(layer, QgsVectorLayer):
             # Add to vector dropdowns
@@ -77,6 +80,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
             dialog.vectorComboBox.addItem(layer.name(), layer.id())
             dialog.vector2ComboBox.addItem(layer.name(), layer.id())
             dialog.crossingComboBox.addItem(layer.name(), layer.id())
+            dialog.nCrossingVectorComboBox.addItem(layer.name(), layer.id())
             dialog.corridorComboBox.addItem(layer.name(), layer.id())
             dialog.crossingsVectorDropdown.addItem(layer.name(), layer.id())
 
