@@ -46,6 +46,22 @@ class AnalysisDialog(QDialog):
         self.vectorRasterBrowse: QPushButton
         self.runCreateRasterFromVectorButton: QPushButton
 
+        # Crossings tab - Section 1: Crossings Costs
+        self.crossingComboBox: QComboBox
+        self.crossingRefRasterComboBox: QComboBox
+        self.crossingCostInput: QLineEdit
+        self.crossingNoCostInput: QLineEdit
+        self.crossingOutputPath: QLineEdit
+        self.crossingBrowse: QPushButton
+        self.runCreateRasterFromCrossingButton: QPushButton
+        
+        # Crossings tab - Section 2: Number of Crossings (N)
+        self.nCrossingVectorComboBox: QComboBox
+        self.nCrossingRefRasterComboBox: QComboBox
+        self.nCrossingOutputPath: QLineEdit
+        self.nCrossingBrowse: QPushButton
+        self.runCreateNRasterButton: QPushButton
+
         self.vectorComboBox: QComboBox
         self.vector2ComboBox: QComboBox
         self.vectorsOutputPath: QLineEdit
