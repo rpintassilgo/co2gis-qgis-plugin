@@ -9,6 +9,7 @@ from qgis import processing
 from osgeo import gdal
 import numpy as np
 import os
+import gc
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file, get_layer_path
@@ -239,7 +240,11 @@ def combine_rasters_with_comet_formula(
             
             if result and 'OUTPUT' in result:
                 ds = gdal.Open(result['OUTPUT'])
-                data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+                if ds is None:
+                    raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
+                    
+                band = ds.GetRasterBand(1)
+                data = band.ReadAsArray().astype(np.float32)
                 
                 # Get dimensions from first raster
                 if not resampled_data:
@@ -250,13 +255,17 @@ def combine_rasters_with_comet_formula(
                     resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans, 'proj': proj}
                 
                 resampled_data[name] = data
+                
+                # Properly close GDAL dataset
+                band = None
                 ds = None
                 
                 # Clean up temp file
                 try:
-                    os.remove(result['OUTPUT'])
-                except:
-                    pass
+                    if os.path.exists(result['OUTPUT']):
+                        os.remove(result['OUTPUT'])
+                except Exception as cleanup_error:
+                    dialog.log_message(f"Warning: Could not delete temp file {result['OUTPUT']}: {cleanup_error}", "LCP")
             else:
                 raise RuntimeError(f"Failed to resample {layer.name()}")
     
@@ -314,13 +323,31 @@ def combine_rasters_with_comet_formula(
     output_data = np.maximum(output_data, 0.001)
     
     # Write final output
+    dialog.log_message("Step 4: Writing output raster...", "LCP")
     driver = gdal.GetDriverByName('GTiff')
     out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
     out_ds.SetGeoTransform(geotrans)
     out_ds.SetProjection(proj)
-    out_ds.GetRasterBand(1).WriteArray(output_data)
+    out_band = out_ds.GetRasterBand(1)
+    out_band.WriteArray(output_data)
+    out_band.FlushCache()
+    out_band = None
+    out_ds.FlushCache()
     out_ds = None
     
+    # Force memory cleanup
+    output_data = None
+    Flu = None
+    Fs = None
+    Fc = None
+    Fci = None
+    N = None
+    N_capped = None
+    inner_term = None
+    resampled_data = None
+    gc.collect()
+    
+    dialog.log_message("Step 5: Loading result into QGIS...", "LCP")
     # Load result into QGIS
     layer_name = os.path.splitext(os.path.basename(output_path))[0]
     new_layer = QgsRasterLayer(output_path, layer_name)
