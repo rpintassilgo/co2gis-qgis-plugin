@@ -162,7 +162,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.co2MassFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
-        Δp_per_length_unit = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
+        Δp_Ltotal = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
         Bc = float(dialog.standardizedCostFactorInput.text())
         
         segment_costs = []
@@ -174,23 +174,20 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         current_segment_cells = []
         current_segment_length = 0
         
-        pipeline_total_length = sum(cl for _, _, _, _, _, cl in full_raster_values)
-
-        # Calculate total pressure drop for the entire pipeline
-        ΔP = Δp_per_length_unit * pipeline_total_length  # Pa (total pressure drop)
+        Ltotal = sum(cl for _, _, _, _, _, cl in full_raster_values)
         
         # Calculate diameter D once for the entire pipeline using total length
-        D = ((8 * λ * M**2 * pipeline_total_length) / (np.pi**2 * p * ΔP))**(1/5)
+        D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal))**(1/5)
         dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D*1000:.2f} mm", "Price Estimation")
         dialog.log_message(f"--------------------------------------------------", "Price Estimation")
 
-        for Fc, Fs, Flu, Fci, N, cell_length in full_raster_values:
-            current_segment_cells.append((Fc, Fs, Flu, Fci, N, cell_length))
-            total_length += cell_length
-            current_segment_length += cell_length
+        for Fc, Fs, Flu, Fci, N, Lcell in full_raster_values:
+            current_segment_cells.append((Fc, Fs, Flu, Fci, N, Lcell))
+            total_length += Lcell
+            current_segment_length += Lcell
 
             segment_complete = current_segment_length >= max_segment_length
-            final_segment = total_length >= pipeline_total_length
+            final_segment = total_length >= Ltotal
 
             if segment_complete or final_segment:
                 L_segment = current_segment_length
@@ -207,7 +204,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                 if not final_segment:
                     # Booster stations are placed every 150 km
                     # Calculate pressure drop for 150 km segment
-                    ΔP_booster_segment = Δp_per_length_unit * 150000  # Pa (pressure drop over 150 km)
+                    ΔP_booster_segment = Δp_Ltotal * 150000  # Pa (pressure drop over 150 km)
                     Beff = 0.75
                     Sc_W = (M * ΔP_booster_segment) / (p * Beff) #W (compressor power)
                     Sc_MW = Sc_W / 1e6 # converted to MW
