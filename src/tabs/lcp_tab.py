@@ -217,64 +217,71 @@ def combine_rasters_with_comet_formula(
     dialog.log_message("Step 2: Resampling rasters...", "LCP")
     resampled_data = {}
     
-    for layer, name in zip(
+    valid_layers_to_resample = [(layer, name) for layer, name in zip(
         [land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer],
         layer_names
-    ):
-        if layer and layer.isValid():
-            resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{name.replace(" ", "_")}.tif')
+    ) if layer and layer.isValid()]
+    
+    total_layers = len(valid_layers_to_resample)
+    current_layer = 0
+    
+    for layer, name in valid_layers_to_resample:
+        current_layer += 1
+        dialog.log_message(f"  Resampling {current_layer}/{total_layers}: {name}...", "LCP")
+        
+        resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{name.replace(" ", "_")}.tif')
+        
+        params = {
+            'INPUT': layer,
+            'SOURCE_CRS': layer.crs(),
+            'TARGET_CRS': reference_layer.crs(),
+            'RESAMPLING': 0,
+            'NODATA': None,
+            'TARGET_RESOLUTION': ref_resolution,
+            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+            'OUTPUT': resampled_path,
+            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
+        }
+        
+        result = processing.run('gdal:warpreproject', params)
+        
+        if result and 'OUTPUT' in result:
+            ds = gdal.Open(result['OUTPUT'])
+            if ds is None:
+                raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
+                
+            band = ds.GetRasterBand(1)
+            data = band.ReadAsArray().astype(np.float32)
             
-            params = {
-                'INPUT': layer,
-                'SOURCE_CRS': layer.crs(),
-                'TARGET_CRS': reference_layer.crs(),
-                'RESAMPLING': 0,
-                'NODATA': None,
-                'TARGET_RESOLUTION': ref_resolution,
-                'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-                'OUTPUT': resampled_path,
-                'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
-            }
+            # Get dimensions from first raster
+            if not resampled_data:
+                width = ds.RasterXSize
+                height = ds.RasterYSize
+                geotrans = ds.GetGeoTransform()
+                proj = ds.GetProjection()
+                resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans, 'proj': proj}
+                dialog.log_message(f"  Target grid: {width}x{height} pixels ({width*height:,} total cells)", "LCP")
             
-            result = processing.run('gdal:warpreproject', params)
+            resampled_data[name] = data
             
-            if result and 'OUTPUT' in result:
-                ds = gdal.Open(result['OUTPUT'])
-                if ds is None:
-                    raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
-                    
-                band = ds.GetRasterBand(1)
-                data = band.ReadAsArray().astype(np.float32)
-                
-                # Get dimensions from first raster
-                if not resampled_data:
-                    width = ds.RasterXSize
-                    height = ds.RasterYSize
-                    geotrans = ds.GetGeoTransform()
-                    proj = ds.GetProjection()
-                    resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans, 'proj': proj}
-                
-                resampled_data[name] = data
-                
-                # Properly close GDAL dataset
-                band = None
-                ds = None
-                
-                # Clean up temp file
-                try:
-                    if os.path.exists(result['OUTPUT']):
-                        os.remove(result['OUTPUT'])
-                except Exception as cleanup_error:
-                    dialog.log_message(f"Warning: Could not delete temp file {result['OUTPUT']}: {cleanup_error}", "LCP")
-            else:
-                raise RuntimeError(f"Failed to resample {layer.name()}")
+            # Properly close GDAL dataset
+            band = None
+            ds = None
+            
+            # Clean up temp file
+            try:
+                if os.path.exists(result['OUTPUT']):
+                    os.remove(result['OUTPUT'])
+            except Exception as cleanup_error:
+                dialog.log_message(f"  ⚠️ Could not delete temp file: {cleanup_error}", "LCP")
+        else:
+            raise RuntimeError(f"Failed to resample {layer.name()}")
     
     # Get dimensions
     meta = resampled_data['_meta']
     width, height = meta['width'], meta['height']
     geotrans, proj = meta['geotrans'], meta['proj']
     
-    dialog.log_message(f"Combined raster will be {width}x{height} pixels", "LCP")
     dialog.log_message("Step 3: Applying COMET formula...", "LCP")
     
     # Create arrays with default value 1.0 for missing layers
@@ -313,8 +320,10 @@ def combine_rasters_with_comet_formula(
     dialog.log_message(f"  N range (after cap): [{np.min(N_capped):.2f}, {np.max(N_capped):.2f}]", "LCP")
     
     # Apply COMET formula: Fc × Fs × [Flu × (1 - 0.1N) + 0.1N × Fci]
+    dialog.log_message(f"  Calculating formula for {width*height:,} pixels...", "LCP")
     inner_term = Flu * (1 - 0.1 * N_capped) + 0.1 * N_capped * Fci
     output_data = Fc * Fs * inner_term
+    dialog.log_message(f"  ✓ Formula applied successfully", "LCP")
     
     # Log final cost range
     dialog.log_message(f"  Combined cost range: [{np.min(output_data):.2f}, {np.max(output_data):.2f}]", "LCP")
@@ -334,8 +343,10 @@ def combine_rasters_with_comet_formula(
     out_band = None
     out_ds.FlushCache()
     out_ds = None
+    dialog.log_message(f"  ✓ Raster written to: {os.path.basename(output_path)}", "LCP")
     
     # Force memory cleanup
+    dialog.log_message("  Cleaning up memory...", "LCP")
     output_data = None
     Flu = None
     Fs = None
@@ -353,7 +364,7 @@ def combine_rasters_with_comet_formula(
     new_layer = QgsRasterLayer(output_path, layer_name)
     if new_layer.isValid():
         QgsProject.instance().addMapLayer(new_layer)
-        dialog.log_message("Successfully created combined cost raster using COMET formula", "LCP")
+        dialog.log_message("✓ Successfully created combined cost raster using COMET formula", "LCP")
         return output_path
     else:
         raise RuntimeError("Failed to load the combined cost raster")
