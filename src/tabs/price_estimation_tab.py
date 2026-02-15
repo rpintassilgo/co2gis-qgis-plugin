@@ -309,7 +309,8 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
             'NODATA': None,
             'TARGET_RESOLUTION': ref_resolution,
             'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            'OUTPUT': resampled_path
+            'OUTPUT': resampled_path,
+            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
         }
         
         result = processing.run('gdal:warpreproject', params)

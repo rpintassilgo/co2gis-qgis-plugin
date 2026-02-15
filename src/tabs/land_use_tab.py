@@ -133,7 +133,7 @@ def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRas
                           input_ds.RasterYSize, 
                           1, 
                           gdal.GDT_Float32,
-                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
+                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS', 'BIGTIFF=YES'])
     
     # Copy projection and geotransform
     out_ds.SetProjection(input_ds.GetProjection())

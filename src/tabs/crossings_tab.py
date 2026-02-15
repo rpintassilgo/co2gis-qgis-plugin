@@ -274,7 +274,7 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         dialog.log_message("  Writing output raster...", "Crossings")
         
         driver = gdal.GetDriverByName('GTiff')
-        out_ds = driver.Create(output_path, ref_width, ref_height, 1, gdal.GDT_Int32, options=['COMPRESS=LZW'])
+        out_ds = driver.Create(output_path, ref_width, ref_height, 1, gdal.GDT_Int32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
         
         # Set geotransform and projection
         geotransform = [

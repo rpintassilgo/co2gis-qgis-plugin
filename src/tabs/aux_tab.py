@@ -204,7 +204,8 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
             'INPUT': raster_layer,
             'TARGET_RESOLUTION': target_resolution,
             'RESAMPLING': resampling_method,
-            'OUTPUT': output_path
+            'OUTPUT': output_path,
+            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
         }
         processing.run("gdal:warpreproject", params)
         dialog.log_message(f"Resampled raster saved successfully at: {output_path}", "Aux")

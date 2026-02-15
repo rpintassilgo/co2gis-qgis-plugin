@@ -231,7 +231,8 @@ def combine_rasters_with_comet_formula(
                 'NODATA': None,
                 'TARGET_RESOLUTION': ref_resolution,
                 'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-                'OUTPUT': resampled_path
+                'OUTPUT': resampled_path,
+                'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
             }
             
             result = processing.run('gdal:warpreproject', params)
@@ -314,7 +315,7 @@ def combine_rasters_with_comet_formula(
     
     # Write final output
     driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW'])
+    out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
     out_ds.SetGeoTransform(geotrans)
     out_ds.SetProjection(proj)
     out_ds.GetRasterBand(1).WriteArray(output_data)

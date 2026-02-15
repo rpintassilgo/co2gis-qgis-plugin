@@ -200,7 +200,8 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
             'NODATA': None,
             'TARGET_RESOLUTION': abs(geotrans[1]),
             'TARGET_EXTENT': f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-            'OUTPUT': temp_lu_path
+            'OUTPUT': temp_lu_path,
+            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
         }
         
         processing.run('gdal:warpreproject', resample_params)
@@ -261,7 +262,7 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
         
         # Step 6: Write final raster
         driver = gdal.GetDriverByName('GTiff')
-        out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW'])
+        out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
         out_ds.SetGeoTransform(geotrans)
         out_ds.SetProjection(proj)
         out_ds.GetRasterBand(1).WriteArray(base_data)

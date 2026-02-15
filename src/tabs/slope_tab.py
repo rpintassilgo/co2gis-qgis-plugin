@@ -298,7 +298,7 @@ def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, 
                           input_ds.RasterYSize, 
                           1, 
                           gdal.GDT_Float32,
-                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS'])
+                          options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS', 'BIGTIFF=YES'])
     
     # Copy projection and geotransform
     out_ds.SetProjection(input_ds.GetProjection())
