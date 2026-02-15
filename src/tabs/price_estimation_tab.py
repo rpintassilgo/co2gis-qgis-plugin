@@ -328,6 +328,7 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     cell_data = {}
     
     total_segments = 0
+    processed_cells = 0
     
     # Process pipeline segments
     for feature in pipeline_layer.getFeatures():
@@ -381,7 +382,8 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
                     
                     # Initialize cell data if first time
                     cell_key = (row, col)
-                    if cell_key not in cell_data:
+                    is_new_cell = cell_key not in cell_data
+                    if is_new_cell:
                         cell_data[cell_key] = {
                             'Fc': float(Fc[row, col]),
                             'Fs': float(Fs[row, col]),
@@ -390,6 +392,10 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
                             'L': 0.0,
                             'N': 0
                         }
+                        processed_cells += 1
+                        
+                        # Log every single unique cell processed
+                        dialog.log_message(f"  Processing cell {processed_cells}/{len(cell_data)} (row={row}, col={col})", "Price Estimation")
                     
                     # Accumulate length and N
                     cell_data[cell_key]['L'] += length_in_cell
