@@ -220,17 +220,19 @@ def get_layer_path(layer: QgsMapLayer):
     
     raise ValueError("Unsupported layer type. Only Raster and Vector layers are supported.")
 
-def apply_symbology(original_layer: QgsRasterLayer, clipped_path: str):
-    """Applies symbology from the original raster to the clipped raster without adding it to QGIS."""
-    if not original_layer or not clipped_path:
-        raise ValueError("Original layer or clipped path is missing.")
+def apply_symbology(original_layer: QgsRasterLayer, clipped_layer: QgsRasterLayer):
+    """Applies symbology from the original raster to the clipped raster."""
+    if not original_layer or not clipped_layer:
+        raise ValueError("Original layer or clipped layer is missing.")
+    
+    if not original_layer.isValid() or not clipped_layer.isValid():
+        raise ValueError("One or both layers are invalid.")
 
-    style_path = os.path.splitext(clipped_path)[0] + ".qml"
-    original_layer.saveNamedStyle(style_path)
-
-    clipped_layer = QgsRasterLayer(clipped_path, os.path.basename(clipped_path))
-    if clipped_layer.isValid():
-        clipped_layer.loadNamedStyle(style_path)
+    # Get the renderer from the original layer
+    renderer = original_layer.renderer()
+    if renderer:
+        # Clone the renderer and apply to clipped layer
+        clipped_layer.setRenderer(renderer.clone())
         clipped_layer.triggerRepaint()
     else:
-        raise IOError(f"Could not load the clipped layer at {clipped_path}")
+        raise ValueError("Original layer has no renderer to copy.")
