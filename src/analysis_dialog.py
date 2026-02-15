@@ -108,6 +108,7 @@ class AnalysisDialog(QDialog):
         self.slopeCostsDropdown: QComboBox
         self.corridorsCostsDropdown: QComboBox
         self.crossingsCostsDropdown: QComboBox
+        self.crossingsVectorDropdown: QComboBox
         self.landUseCostsResInput: QLineEdit
         self.slopeCostsResInput: QLineEdit
         self.corridorsCostsResInput: QLineEdit

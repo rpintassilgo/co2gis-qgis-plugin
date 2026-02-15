@@ -1,11 +1,14 @@
 from typing import TYPE_CHECKING
 import numpy as np
+import os
 from PyQt5.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
     QGroupBox, QVBoxLayout, QDialog, QGridLayout
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry
+from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry, QgsRasterLayer
+from qgis import processing
+from osgeo import gdal
 
 from ..task_manager import run_in_background
 from ..utils import update_pipeline_length, update_resolution_field
@@ -63,11 +66,13 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.slopeCostsDropdown = QComboBox()
     dialog.corridorsCostsDropdown = QComboBox()
     dialog.crossingsCostsDropdown = QComboBox()
+    dialog.crossingsVectorDropdown = QComboBox()
     selectionLayout.addRow(QLabel("Select Pipeline Vector:"), dialog.pipelineVectorDropdown)
     selectionLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
     selectionLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
     selectionLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
     selectionLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
+    selectionLayout.addRow(QLabel("Select Infrastructure Vector (for N):"), dialog.crossingsVectorDropdown)
     
     dialog.landUseCostsResInput = QLineEdit()
     dialog.slopeCostsResInput = QLineEdit()
@@ -89,7 +94,6 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     inputLayout.addRow(inputTitle)
     dialog.pipelineLengthInput = QLineEdit()
     dialog.pipelineLengthInput.setReadOnly(True)
-    dialog.crossingsVectorDropdown = QComboBox()
     dialog.standardizedCostFactorInput = QLineEdit()
     dialog.frictionFactorInput = QLineEdit()
     dialog.co2MassFlowRateInput = QLineEdit()
@@ -103,7 +107,6 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.pressureDropInput.setText("0.02")
     
     inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
-    inputLayout.addRow(QLabel("Select Infrastructure Crossings Vector (N):"), dialog.crossingsVectorDropdown)
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
     inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
     inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
@@ -146,13 +149,12 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         slope_layer = QgsProject.instance().mapLayer(dialog.slopeCostsDropdown.currentData())
         corridors_layer = QgsProject.instance().mapLayer(dialog.corridorsCostsDropdown.currentData())
         crossings_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
-        crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
         
-        if not all([pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer]):
-            raise ValueError("All layers for price estimation must be selected.")
+        if not all([pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer]):
+            raise ValueError("Pipeline vector and all cost rasters (Flu, Fs, Fc, Fci) must be selected.")
 
-        full_raster_values = extract_raster_values_along_pipeline(
-            pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
+        full_raster_values = extract_raster_values_along_pipeline_cells(
+            dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer
         )
         if not full_raster_values:
             raise ValueError("No valid raster values found for the pipeline path. Check if the pipeline intersects with the cost rasters.")
@@ -260,6 +262,260 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
 
     except Exception as e:
         dialog.log_message(f"Price Estimation Failed: {str(e)}", "Price Estimation")
+
+def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer):
+    """
+    Extracts raster values along the pipeline using cell-based approach with resampling.
+    Uses geometric intersection to calculate precise length within each cell.
+    N is calculated by counting pipeline intersections with infrastructure vector within each cell.
+    
+    Returns: List of (Fc, Fs, Flu, Fci, N, cell_length) tuples grouped by cell
+    """
+    import tempfile
+    from qgis.core import QgsRectangle
+    
+    dialog.log_message("Step 1: Resampling all cost rasters to common resolution...", "Price Estimation")
+    
+    # Collect all raster layers
+    all_layers = [land_use_layer, slope_layer, corridors_layer, crossings_layer]
+    layer_names = ['Land Use (Flu)', 'Slope (Fs)', 'Corridors (Fc)', 'Crossings (Fci)']
+    
+    # Calculate common extent (intersection)
+    common_extent = all_layers[0].extent()
+    for layer in all_layers[1:]:
+        common_extent = common_extent.intersect(layer.extent())
+    
+    if common_extent.isEmpty():
+        raise ValueError("No common extent found - cost rasters do not overlap!")
+    
+    # Use first raster as reference for resolution
+    reference_layer = all_layers[0]
+    ref_resolution = reference_layer.rasterUnitsPerPixelX()
+    
+    dialog.log_message(f"  Reference resolution: {ref_resolution:.2f}m from {reference_layer.name()}", "Price Estimation")
+    
+    # Resample all rasters
+    temp_dir = tempfile.mkdtemp()
+    resampled_data = {}
+    
+    for layer, name in zip(all_layers, layer_names):
+        resampled_path = os.path.join(temp_dir, f'_price_est_{name.replace(" ", "_")}.tif')
+        
+        params = {
+            'INPUT': layer,
+            'SOURCE_CRS': layer.crs(),
+            'TARGET_CRS': reference_layer.crs(),
+            'RESAMPLING': 0,  # Nearest neighbor
+            'NODATA': None,
+            'TARGET_RESOLUTION': ref_resolution,
+            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+            'OUTPUT': resampled_path
+        }
+        
+        result = processing.run('gdal:warpreproject', params)
+        
+        if result and 'OUTPUT' in result:
+            ds = gdal.Open(result['OUTPUT'])
+            data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
+            
+            # Store metadata from first raster
+            if not resampled_data:
+                width = ds.RasterXSize
+                height = ds.RasterYSize
+                geotrans = ds.GetGeoTransform()
+                resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans}
+            
+            resampled_data[name] = data
+            ds = None
+            dialog.log_message(f"  ✓ Resampled {name}", "Price Estimation")
+        else:
+            raise RuntimeError(f"Failed to resample {layer.name()}")
+    
+    # Get dimensions
+    meta = resampled_data['_meta']
+    width, height = meta['width'], meta['height']
+    geotrans = meta['geotrans']
+    cell_width = abs(geotrans[1])
+    cell_height = abs(geotrans[5])
+    origin_x = geotrans[0]
+    origin_y = geotrans[3]
+    
+    dialog.log_message(f"  Resampled grid: {width}x{height} cells, cell size: {cell_width:.2f}m x {cell_height:.2f}m", "Price Estimation")
+    
+    # Create arrays
+    Flu = resampled_data.get('Land Use (Flu)', np.ones((height, width), dtype=np.float32))
+    Fs = resampled_data.get('Slope (Fs)', np.ones((height, width), dtype=np.float32))
+    Fc = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
+    Fci = resampled_data.get('Crossings (Fci)', np.ones((height, width), dtype=np.float32))
+    
+    dialog.log_message("Step 2: Extracting pipeline segments and calculating cell intersections...", "Price Estimation")
+    
+    # Get infrastructure vector for N calculation
+    crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData()) if hasattr(dialog, 'crossingsVectorDropdown') else None
+    
+    if not crossings_vector_layer:
+        dialog.log_message("  ⚠️ No infrastructure vector selected - N will be 0 for all cells", "Price Estimation")
+        infrastructure_features = []
+    else:
+        infrastructure_features = list(crossings_vector_layer.getFeatures())
+        dialog.log_message(f"  Loaded {len(infrastructure_features)} infrastructure features for N calculation", "Price Estimation")
+    
+    # Dictionary to accumulate data per cell: {(row, col): {'Fc': val, 'Fs': val, ..., 'L': total_length, 'N': count}}
+    cell_data = {}
+    
+    total_segments = 0
+    
+    # Process pipeline segments
+    for feature in pipeline_layer.getFeatures():
+        geom = feature.geometry()
+        parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
+        
+        for line in parts:
+            for i in range(len(line) - 1):
+                start, end = line[i], line[i + 1]
+                total_segments += 1
+                
+                # Create segment geometry
+                segment_geom = QgsGeometry.fromPolylineXY([start, end])
+                
+                # Get cells intersected by this segment
+                cells_touched = get_intersected_cells(
+                    start.x(), start.y(), end.x(), end.y(),
+                    origin_x, origin_y,
+                    cell_width, cell_height,
+                    width, height
+                )
+                
+                # For each cell touched by this segment
+                for col, row in cells_touched:
+                    # Create cell polygon
+                    cell_x_min = origin_x + col * cell_width
+                    cell_x_max = cell_x_min + cell_width
+                    cell_y_max = origin_y - row * cell_height
+                    cell_y_min = cell_y_max - cell_height
+                    
+                    cell_rect = QgsRectangle(cell_x_min, cell_y_min, cell_x_max, cell_y_max)
+                    cell_polygon = QgsGeometry.fromRect(cell_rect)
+                    
+                    # Calculate intersection length (Lcell)
+                    intersection = segment_geom.intersection(cell_polygon)
+                    if intersection.isEmpty():
+                        continue
+                    
+                    length_in_cell = intersection.length()
+                    
+                    # Count infrastructure intersections within this cell (N)
+                    n_in_cell = 0
+                    for infra_feature in infrastructure_features:
+                        infra_geom = infra_feature.geometry()
+                        # Check if infrastructure intersects both the segment AND the cell
+                        if segment_geom.intersects(infra_geom):
+                            # Further check if intersection happens within this specific cell
+                            infra_in_cell = infra_geom.intersection(cell_polygon)
+                            if not infra_in_cell.isEmpty() and segment_geom.intersects(infra_in_cell):
+                                n_in_cell += 1
+                    
+                    # Initialize cell data if first time
+                    cell_key = (row, col)
+                    if cell_key not in cell_data:
+                        cell_data[cell_key] = {
+                            'Fc': float(Fc[row, col]),
+                            'Fs': float(Fs[row, col]),
+                            'Flu': float(Flu[row, col]),
+                            'Fci': float(Fci[row, col]),
+                            'L': 0.0,
+                            'N': 0
+                        }
+                    
+                    # Accumulate length and N
+                    cell_data[cell_key]['L'] += length_in_cell
+                    cell_data[cell_key]['N'] += n_in_cell
+    
+    dialog.log_message(f"  Processed {total_segments} segments across {len(cell_data)} unique cells", "Price Estimation")
+    
+    # Convert dictionary to list of tuples
+    values = []
+    for (row, col), data in cell_data.items():
+        # Cap N at 10 (same as LCP)
+        n_capped = min(data['N'], 10)
+        values.append((
+            data['Fc'],
+            data['Fs'],
+            data['Flu'],
+            data['Fci'],
+            n_capped,
+            data['L']
+        ))
+    
+    dialog.log_message(f"  ✓ Extracted {len(values)} cell entries with total length: {sum(v[5] for v in values):.2f}m", "Price Estimation")
+    
+    # Cleanup temp files
+    try:
+        import shutil
+        shutil.rmtree(temp_dir)
+    except:
+        pass
+    
+    return values
+
+def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, grid_width, grid_height):
+    """
+    Get all raster cells intersected by a line segment using a rasterization algorithm.
+    
+    Parameters:
+        x1, y1, x2, y2: Line segment endpoints in map coordinates
+        origin_x, origin_y: Top-left corner of raster (origin_y is top)
+        cell_width, cell_height: Cell dimensions
+        grid_width, grid_height: Raster dimensions in cells
+    
+    Returns:
+        List of (col, row) tuples
+    """
+    cells = set()
+    
+    # Convert endpoints to cell coordinates
+    col1 = int((x1 - origin_x) / cell_width)
+    row1 = int((origin_y - y1) / cell_height)
+    col2 = int((x2 - origin_x) / cell_width)
+    row2 = int((origin_y - y2) / cell_height)
+    
+    # Bresenham's line algorithm (adapted for cells)
+    dx = abs(col2 - col1)
+    dy = abs(row2 - row1)
+    
+    col = col1
+    row = row1
+    
+    col_inc = 1 if col2 > col1 else -1
+    row_inc = 1 if row2 > row1 else -1
+    
+    # Add cells along the line
+    if dx > dy:
+        error = dx / 2
+        while col != col2:
+            if 0 <= col < grid_width and 0 <= row < grid_height:
+                cells.add((col, row))
+            error -= dy
+            if error < 0:
+                row += row_inc
+                error += dx
+            col += col_inc
+    else:
+        error = dy / 2
+        while row != row2:
+            if 0 <= col < grid_width and 0 <= row < grid_height:
+                cells.add((col, row))
+            error -= dx
+            if error < 0:
+                col += col_inc
+                error += dy
+            row += row_inc
+    
+    # Add final cell
+    if 0 <= col2 < grid_width and 0 <= row2 < grid_height:
+        cells.add((col2, row2))
+    
+    return list(cells)
 
 def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
     """
