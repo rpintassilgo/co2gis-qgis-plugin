@@ -399,7 +399,9 @@ def run_r_cost(input_raster: str,
         'output':                 cost_output,
         'outdir':                 direction_output,
         'GRASS_REGION_PARAMETER': region,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
+        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',  # Force BIGTIFF for large rasters
+        'GRASS_RASTER_FORMAT_META': 'GTiff'
     }
 
     # 4) Run r.cost to generate cost accumulation and direction surfaces
@@ -452,14 +454,18 @@ def run_r_drain_and_vectorize(cost_result: dict,
         'direction': direction_path,
         'start_coordinates': dest_coord,
         'output': drain_out,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
+        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',
+        'GRASS_RASTER_FORMAT_META': 'GTiff'
     })
 
     # Convert raster path to vector lines
     processing.run("grass7:r.to.vect", {
         'input': drain_out,
         'type': 0, # line
-        'output': vector_output
+        'output': vector_output,
+        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',
+        'GRASS_RASTER_FORMAT_META': 'GTiff'
     })
 
     # Load the resulting vector
