@@ -180,27 +180,8 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         ΔP = Δp_per_length_unit * pipeline_total_length  # Pa (total pressure drop)
         
         # Calculate diameter D once for the entire pipeline using total length
-        dialog.log_message(f"DEBUG D CALC - λ (lambda): {λ}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - M (mass flow): {M} kg/s", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - M²: {M**2}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Total Pipeline Length (L): {pipeline_total_length} m", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - ρ (rho/density): {p} kg/m³", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Δp (pressure drop per meter): {Δp_per_length_unit} Pa/m", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - ΔP (total pressure drop, Δp×L): {ΔP:,.0f} Pa = {ΔP/1e6:.2f} MPa", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - π²: {np.pi**2}", "Price Estimation")
-        
-        # Calculate step by step
-        numerator = 8 * λ * M**2 * pipeline_total_length
-        denominator = np.pi**2 * p * ΔP
-        fraction = numerator / denominator
-        
-        dialog.log_message(f"DEBUG D CALC - Numerator (8*λ*M²*L): {numerator:,.2f}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Denominator (π²*ρ*ΔP): {denominator:,.2f}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Fraction (num/den): {fraction:.8f}", "Price Estimation")
-        dialog.log_message(f"DEBUG D CALC - Fraction^(1/5): {fraction**(1/5):.6f}", "Price Estimation")
-        
         D = ((8 * λ * M**2 * pipeline_total_length) / (np.pi**2 * p * ΔP))**(1/5)
-        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D*1000:.0f} mm (constant for entire pipeline)", "Price Estimation")
+        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D*1000:.2f} mm", "Price Estimation")
         dialog.log_message(f"--------------------------------------------------", "Price Estimation")
 
         for Fc, Fs, Flu, Fci, N, cell_length in full_raster_values:
@@ -218,22 +199,6 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                     fc_i * fs_i * (flu_i * (1 - 0.1 * n_i) + 0.1 * n_i * fci_i) * cl_i
                     for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_segment_cells
                 )
-
-                # Debug logging for F factor values
-                if current_segment_cells:
-                    sample_fc, sample_fs, sample_flu, sample_fci, sample_n, sample_cl = current_segment_cells[0]
-                    dialog.log_message(f"DEBUG - Sample F values: Fc={sample_fc:.2f}, Fs={sample_fs:.2f}, Flu={sample_flu:.2f}, Fci={sample_fci:.2f}, N={sample_n}, L_cell={sample_cl:.2f}", "Price Estimation")
-                    
-                dialog.log_message(f"DEBUG - Summation value: {summation:,.2f}", "Price Estimation")
-                dialog.log_message(f"DEBUG - Bc={Bc}, D={D:.4f}m (constant), Segment_length={L_segment:.2f}m", "Price Estimation")
-                
-                # Show min/max F values across all cells in segment
-                all_fc = [fc for fc, _, _, _, _, _ in current_segment_cells]
-                all_fs = [fs for _, fs, _, _, _, _ in current_segment_cells]
-                all_flu = [flu for _, _, flu, _, _, _ in current_segment_cells]
-                all_fci = [fci for _, _, _, fci, _, _ in current_segment_cells]
-                
-                dialog.log_message(f"DEBUG - F ranges: Fc={min(all_fc):.2f}-{max(all_fc):.2f}, Fs={min(all_fs):.2f}-{max(all_fs):.2f}, Flu={min(all_flu):.2f}-{max(all_flu):.2f}, Fci={min(all_fci):.2f}-{max(all_fci):.2f}", "Price Estimation")
 
                 Ip = Bc * D * summation
                 segment_costs.append(Ip)
@@ -256,6 +221,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
 
         I_total = sum(segment_costs) + sum(booster_costs)
         dialog.log_message(f"--------------------------------------------------", "Price Estimation")
+        dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D*1000:.2f} mm", "Price Estimation")
         dialog.log_message(f"Calculated Total Pipeline Price (Itotal): {I_total:,.2f} €", "Price Estimation")
         dialog.log_message(f"--------------------------------------------------", "Price Estimation")
 
