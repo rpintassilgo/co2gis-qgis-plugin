@@ -194,8 +194,9 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         
         dialog.log_message(f"  Cell size: {cell_width:.2f} x {cell_height:.2f}", "Crossings")
         
-        # Initialize count array
-        count_array = np.zeros((ref_height, ref_width), dtype=np.int32)
+        # Initialize a dictionary to track unique features per cell
+        # Key: (row, col), Value: set of feature IDs
+        cell_features = {}
         
         # Iterate through all features in the crossing vector
         feature_count = crossing_layer.featureCount()
@@ -203,6 +204,7 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         
         processed = 0
         for feature in crossing_layer.getFeatures():
+            feature_id = feature.id()
             geom = feature.geometry()
             
             if not geom or geom.isEmpty():
@@ -214,6 +216,9 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
             else:
                 lines = [geom.asPolyline()]
             
+            # Track cells touched by THIS feature (to avoid counting same feature multiple times)
+            cells_touched_by_feature = set()
+            
             # For each line segment
             for line in lines:
                 if len(line) < 2:
@@ -224,7 +229,7 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
                     x1, y1 = line[i].x(), line[i].y()
                     x2, y2 = line[i+1].x(), line[i+1].y()
                     
-                    # Get all cells intersected by this line segment using Bresenham-like algorithm
+                    # Get all cells intersected by this line segment
                     cells = get_intersected_cells(
                         x1, y1, x2, y2,
                         ref_extent.xMinimum(), ref_extent.yMaximum(),
@@ -232,15 +237,28 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
                         ref_width, ref_height
                     )
                     
-                    # Increment count for each intersected cell
+                    # Mark these cells as touched by this feature
                     for col, row in cells:
-                        count_array[row, col] += 1
+                        cells_touched_by_feature.add((row, col))
+            
+            # Now register this feature ID in all cells it touched
+            for cell_key in cells_touched_by_feature:
+                if cell_key not in cell_features:
+                    cell_features[cell_key] = set()
+                cell_features[cell_key].add(feature_id)
             
             processed += 1
             if processed % 100 == 0:
                 dialog.log_message(f"  Processed {processed}/{feature_count} features...", "Crossings")
         
         dialog.log_message(f"  All {feature_count} features processed", "Crossings")
+        
+        # Convert the dictionary to a count array
+        dialog.log_message("  Building count array from unique features...", "Crossings")
+        count_array = np.zeros((ref_height, ref_width), dtype=np.int32)
+        
+        for (row, col), feature_set in cell_features.items():
+            count_array[row, col] = len(feature_set)
         
         # Log statistics
         max_count = np.max(count_array)
