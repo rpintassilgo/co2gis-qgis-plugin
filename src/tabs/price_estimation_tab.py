@@ -324,6 +324,26 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
         infrastructure_features = list(crossings_vector_layer.getFeatures())
         dialog.log_message(f"  Loaded {len(infrastructure_features)} infrastructure features for N calculation", "Price Estimation")
     
+    # PRE-PASS: Quick count of total unique cells (fast, no heavy geometry operations)
+    dialog.log_message("  Counting total unique cells...", "Price Estimation")
+    unique_cells_set = set()
+    for feature in pipeline_layer.getFeatures():
+        geom = feature.geometry()
+        parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
+        for line in parts:
+            for i in range(len(line) - 1):
+                start, end = line[i], line[i + 1]
+                cells_touched = get_intersected_cells(
+                    start.x(), start.y(), end.x(), end.y(),
+                    origin_x, origin_y,
+                    cell_width, cell_height,
+                    width, height
+                )
+                unique_cells_set.update(cells_touched)
+    
+    total_unique_cells = len(unique_cells_set)
+    dialog.log_message(f"  Found {total_unique_cells} unique cells to process", "Price Estimation")
+    
     # Dictionary to accumulate data per cell: {(row, col): {'Fc': val, 'Fs': val, ..., 'L': total_length, 'N': count}}
     cell_data = {}
     
@@ -394,8 +414,8 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
                         }
                         processed_cells += 1
                         
-                        # Log every single unique cell processed
-                        dialog.log_message(f"  Processing cell {processed_cells}/{len(cell_data)} (row={row}, col={col})", "Price Estimation")
+                        # Log every single unique cell processed with total
+                        dialog.log_message(f"  Processing unique cell {processed_cells}/{total_unique_cells} (row={row}, col={col})", "Price Estimation")
                     
                     # Accumulate length and N
                     cell_data[cell_key]['L'] += length_in_cell
