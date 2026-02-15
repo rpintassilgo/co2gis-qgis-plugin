@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer, QgsPalettedRasterRenderer
 from qgis import processing
 from functools import partial
+import os
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
@@ -147,7 +148,8 @@ def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRas
     input_ds = None
     
     # Load the result into QGIS
-    new_layer = QgsRasterLayer(output_path, "Land Use Costs")
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    new_layer = QgsRasterLayer(output_path, layer_name)
     if new_layer.isValid():
         QgsProject.instance().addMapLayer(new_layer)
     else:

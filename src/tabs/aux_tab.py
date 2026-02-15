@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer, QgsRectangle
 import processing
+import os
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file, update_original_resolution, apply_symbology, get_layer_path
@@ -171,7 +172,8 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
         dialog.log_message("Vectors combined successfully.", "Aux")
         
         # Load the combined layer
-        combined_layer = QgsVectorLayer(result['OUTPUT'], "Combined Vectors", "ogr")
+        layer_name = os.path.splitext(os.path.basename(result['OUTPUT']))[0]
+        combined_layer = QgsVectorLayer(result['OUTPUT'], layer_name, "ogr")
         if combined_layer.isValid():
             QgsProject.instance().addMapLayer(combined_layer)
             dialog.log_message(f"Combined vector layer loaded with {combined_layer.featureCount()} features.", "Aux")
@@ -207,7 +209,8 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
         processing.run("gdal:warpreproject", params)
         dialog.log_message(f"Resampled raster saved successfully at: {output_path}", "Aux")
 
-        resampled_layer = QgsRasterLayer(output_path, "Resampled Raster")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        resampled_layer = QgsRasterLayer(output_path, layer_name)
         if resampled_layer.isValid():
             QgsProject.instance().addMapLayer(resampled_layer)
         else:
@@ -236,7 +239,8 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
         clip_raster_to_vector(get_layer_path(raster_to_clip), points_layer, output_path, clip_mode)
         dialog.log_message(f"Clipped Raster created successfully at: {output_path}", "Aux")
         
-        clipped_layer = QgsRasterLayer(output_path, "Clipped Raster")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        clipped_layer = QgsRasterLayer(output_path, layer_name)
         if clipped_layer.isValid():
              QgsProject.instance().addMapLayer(clipped_layer)
         else:

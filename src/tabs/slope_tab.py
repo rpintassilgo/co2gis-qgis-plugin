@@ -8,6 +8,7 @@ from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 from osgeo import gdal
 import numpy as np
+import os
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
@@ -118,7 +119,8 @@ def run_slope_creation(dialog: 'AnalysisDialog'):
         create_slope_layer_from_dem(dem_layer, output_path)
         dialog.log_message(f"Slope Raster created at: {output_path}", "Slope")
 
-        slope_layer = QgsRasterLayer(output_path, "slope_layer_from_dem")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        slope_layer = QgsRasterLayer(output_path, layer_name)
         if slope_layer.isValid():
             QgsProject.instance().addMapLayer(slope_layer)
         else:
@@ -145,7 +147,8 @@ def run_slope_costs_creation(dialog: 'AnalysisDialog'):
         create_slope_costs_from_slope(slope_layer, intervals, output_path)
         dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}", "Slope")
         
-        new_layer = QgsRasterLayer(output_path, "Slope Costs")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        new_layer = QgsRasterLayer(output_path, layer_name)
         if new_layer.isValid():
             QgsProject.instance().addMapLayer(new_layer)
         else:
@@ -310,7 +313,8 @@ def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, 
     input_ds = None
     
     # Load the result into QGIS
-    new_layer = QgsRasterLayer(output_path, "Slope Costs")
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    new_layer = QgsRasterLayer(output_path, layer_name)
     if new_layer.isValid():
         QgsProject.instance().addMapLayer(new_layer)
     else:

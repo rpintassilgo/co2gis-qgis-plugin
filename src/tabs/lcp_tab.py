@@ -321,7 +321,8 @@ def combine_rasters_with_comet_formula(
     out_ds = None
     
     # Load result into QGIS
-    new_layer = QgsRasterLayer(output_path, "Combined Costs (COMET)")
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    new_layer = QgsRasterLayer(output_path, layer_name)
     if new_layer.isValid():
         QgsProject.instance().addMapLayer(new_layer)
         dialog.log_message("Successfully created combined cost raster using COMET formula", "LCP")
@@ -423,7 +424,8 @@ def run_r_drain_and_vectorize(cost_result: dict,
     })
 
     # Load the resulting vector
-    layer = QgsVectorLayer(vector_output, "Least Cost Path", "ogr")
+    layer_name = os.path.splitext(os.path.basename(vector_output))[0]
+    layer = QgsVectorLayer(vector_output, layer_name, "ogr")
     if not layer.isValid():
         raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
     QgsProject.instance().addMapLayer(layer)

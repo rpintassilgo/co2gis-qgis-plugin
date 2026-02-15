@@ -144,7 +144,8 @@ def run_corridors_cost_creation(dialog: 'AnalysisDialog'):
         )
         
         # Load result into QGIS
-        new_layer = QgsRasterLayer(output_path, "Corridors Cost")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        new_layer = QgsRasterLayer(output_path, layer_name)
         if not new_layer.isValid():
             raise RuntimeError("Failed to load the resulting raster layer.")
         

@@ -7,6 +7,7 @@ from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer, QgsWkbTypes
 from qgis import processing
 from osgeo import gdal
 import numpy as np
+import os
 from ..task_manager import run_in_background
 from ..utils import select_output_file
 
@@ -142,7 +143,8 @@ def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
         if not output_raster:
             raise RuntimeError("Rasterization returned no output.")
 
-        new_layer = QgsRasterLayer(output_raster, "Crossings Cost")
+        layer_name = os.path.splitext(os.path.basename(output_raster))[0]
+        new_layer = QgsRasterLayer(output_raster, layer_name)
         if not new_layer.isValid():
             raise RuntimeError("Failed to load the resulting raster layer.")
 
@@ -296,7 +298,8 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         out_ds = None
         
         # Load into QGIS
-        new_layer = QgsRasterLayer(output_path, "Number of Crossings (N)")
+        layer_name = os.path.splitext(os.path.basename(output_path))[0]
+        new_layer = QgsRasterLayer(output_path, layer_name)
         if not new_layer.isValid():
             raise RuntimeError("Failed to load the resulting N raster layer.")
         
