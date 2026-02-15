@@ -132,6 +132,9 @@ class AnalysisDialog(QDialog):
         # Setup UI
         setup_ui(self)
         
+        # Make all dropdowns searchable
+        self._make_all_dropdowns_searchable()
+        
         # Populate dropdowns
         populate_layer_dropdowns(self)
         QgsProject.instance().layersAdded.connect(lambda: populate_layer_dropdowns(self))
@@ -145,6 +148,51 @@ class AnalysisDialog(QDialog):
 
         # Connect signals
         self.connect_signals()
+    
+    def _make_all_dropdowns_searchable(self):
+        """Make all layer selection dropdowns searchable with autocomplete."""
+        from .utils import make_searchable_dropdown
+        
+        # Land Use tab
+        make_searchable_dropdown(self.landUseComboBox)
+        
+        # Slope tab
+        make_searchable_dropdown(self.demComboBox)
+        make_searchable_dropdown(self.slopeLayerComboBox)
+        
+        # Crossings tab
+        make_searchable_dropdown(self.crossingComboBox)
+        make_searchable_dropdown(self.crossingRefRasterComboBox)
+        make_searchable_dropdown(self.nCrossingVectorComboBox)
+        make_searchable_dropdown(self.nCrossingRefRasterComboBox)
+        
+        # Corridors tab
+        make_searchable_dropdown(self.corridorComboBox)
+        make_searchable_dropdown(self.corridorRefRasterComboBox)
+        
+        # Aux tab
+        make_searchable_dropdown(self.vectorComboBox)
+        make_searchable_dropdown(self.vector2ComboBox)
+        make_searchable_dropdown(self.resampleRasterComboBox)
+        make_searchable_dropdown(self.clipRasterInputDropdown)
+        make_searchable_dropdown(self.clipPointVectorComboBox)
+        
+        # LCP tab
+        make_searchable_dropdown(self.combineLandUseDropdown)
+        make_searchable_dropdown(self.combineSlopeDropdown)
+        make_searchable_dropdown(self.combineCorridorsDropdown)
+        make_searchable_dropdown(self.combineCrossingsDropdown)
+        make_searchable_dropdown(self.combineNRasterDropdown)
+        make_searchable_dropdown(self.pointsComboBox)
+        make_searchable_dropdown(self.lcpInputDropdown)
+        
+        # Price Estimation tab
+        make_searchable_dropdown(self.pipelineVectorDropdown)
+        make_searchable_dropdown(self.landUseCostsDropdown)
+        make_searchable_dropdown(self.slopeCostsDropdown)
+        make_searchable_dropdown(self.corridorsCostsDropdown)
+        make_searchable_dropdown(self.crossingsCostsDropdown)
+        make_searchable_dropdown(self.crossingsVectorDropdown)
 
     def connect_signals(self):
         """Connect all signals to their respective slots."""

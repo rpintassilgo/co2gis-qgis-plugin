@@ -3,10 +3,26 @@ import os
 from qgis.core import (
     QgsProject, QgsRasterLayer, QgsVectorLayer, QgsWkbTypes, QgsUnitTypes, QgsMapLayer
 )
-from PyQt5.QtWidgets import QComboBox, QLineEdit, QFileDialog
+from PyQt5.QtWidgets import QComboBox, QLineEdit, QFileDialog, QCompleter
+from PyQt5.QtCore import Qt
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
+
+def make_searchable_dropdown(dropdown: QComboBox):
+    """
+    Makes a QComboBox searchable with autocomplete filtering.
+    User can type to filter options - matches anywhere in the text.
+    """
+    dropdown.setEditable(True)
+    dropdown.setInsertPolicy(QComboBox.NoInsert)  # Prevent adding new items
+    
+    # Configure completer for better search experience
+    completer = dropdown.completer()
+    if completer:
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        completer.setFilterMode(Qt.MatchContains)  # Match anywhere in text
+        completer.setCaseSensitivity(Qt.CaseInsensitive)  # Case-insensitive search
 
 def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     """Populate all dropdowns with available layers."""
