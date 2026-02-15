@@ -395,13 +395,11 @@ def run_r_cost(input_raster: str,
         'start_coordinates': start_coordinates,    # Use start_points for r.cost
         '-n':                     True,                 # Use Knight's move
         'max_cost':               0,                    # no maximum cost
-        'memory':                 2000,
+        'memory':                 8000,  # Increased memory for large rasters (8GB)
         'output':                 cost_output,
         'outdir':                 direction_output,
         'GRASS_REGION_PARAMETER': region,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',  # Force BIGTIFF for large rasters
-        'GRASS_RASTER_FORMAT_META': 'GTiff'
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0
     }
 
     # 4) Run r.cost to generate cost accumulation and direction surfaces
@@ -454,18 +452,14 @@ def run_r_drain_and_vectorize(cost_result: dict,
         'direction': direction_path,
         'start_coordinates': dest_coord,
         'output': drain_out,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0,
-        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',
-        'GRASS_RASTER_FORMAT_META': 'GTiff'
+        'GRASS_REGION_CELLSIZE_PARAMETER': 0
     })
 
     # Convert raster path to vector lines
     processing.run("grass7:r.to.vect", {
         'input': drain_out,
         'type': 0, # line
-        'output': vector_output,
-        'GRASS_RASTER_FORMAT_OPT': 'COMPRESS=LZW,BIGTIFF=YES',
-        'GRASS_RASTER_FORMAT_META': 'GTiff'
+        'output': vector_output
     })
 
     # Load the resulting vector
