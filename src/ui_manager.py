@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 def setup_ui(dialog: 'AnalysisDialog'):
     """Set up the main UI for AnalysisDialog."""
     dialog.setWindowTitle("Least Cost Pipeline Analysis")
-    dialog.setGeometry(0, 0, 800, 780)
+    dialog.setGeometry(0, 0, 1200, 780)
     dialog.setStyleSheet("""
         QLabel, QComboBox, QPushButton, QGroupBox::title, QHeaderView::section {
             color: white;
