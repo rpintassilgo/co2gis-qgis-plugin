@@ -444,20 +444,72 @@ def run_r_drain_and_vectorize(cost_result: dict,
 
     # r.drain → raster path, then r.to.vect lines to GPKG
     drain_out = os.path.join(temp_dir, "drain_path.tif")
+    thin_out = os.path.join(temp_dir, "drain_thin.tif")
+    
+    # Get the region from the accumulation raster to use in r.drain
+    accum_layer = QgsRasterLayer(accum_path, "temp_accum")
+    if not accum_layer.isValid():
+        raise RuntimeError(f"Cannot read accumulation raster: {accum_path}")
+    
+    ext = accum_layer.extent()
+    region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
+    
+    # Try to access dialog for logging if available in scope
+    dialog = None
+    try:
+        import inspect
+        frame = inspect.currentframe()
+        while frame:
+            if 'dialog' in frame.f_locals:
+                dialog = frame.f_locals['dialog']
+                break
+            frame = frame.f_back
+    except:
+        pass
+    
+    if dialog:
+        dialog.log_message("Running r.drain to extract least cost path...", "LCP")
     
     # Run r.drain from destination to trace back to origin
     # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
-    processing.run("grass7:r.drain", {
+    # CRITICAL 2: Must set GRASS_REGION to avoid "North must be larger than South" error
+    drain_result = processing.run("grass7:r.drain", {
         'input': accum_path,
         'direction': direction_path,
         'start_coordinates': dest_coord,
         'output': drain_out,
+        'GRASS_REGION_PARAMETER': region,
         'GRASS_REGION_CELLSIZE_PARAMETER': 0
     })
+    
+    if not drain_result or 'output' not in drain_result:
+        raise RuntimeError("r.drain failed to produce output")
+    
+    drain_path = drain_result['output']
+    
+    if dialog:
+        dialog.log_message(f"r.drain output: {drain_path}", "LCP")
+        dialog.log_message("Running r.thin to prepare for vectorization...", "LCP")
+    
+    # Thin the raster path to avoid "crowded cell" errors in r.to.vect
+    thin_result = processing.run("grass7:r.thin", {
+        'input': drain_path,
+        'output': thin_out,
+        'iterations': 200  # Sufficient iterations to thin properly
+    })
+    
+    if not thin_result or 'output' not in thin_result:
+        raise RuntimeError("r.thin failed to produce output")
+    
+    thin_path = thin_result['output']
+    
+    if dialog:
+        dialog.log_message(f"r.thin output: {thin_path}", "LCP")
+        dialog.log_message("Converting to vector...", "LCP")
 
-    # Convert raster path to vector lines
+    # Convert thinned raster path to vector lines
     processing.run("grass7:r.to.vect", {
-        'input': drain_out,
+        'input': thin_path,
         'type': 0, # line
         'output': vector_output
     })
@@ -469,19 +521,8 @@ def run_r_drain_and_vectorize(cost_result: dict,
         raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
     QgsProject.instance().addMapLayer(layer)
 
-    # Log success
-    try:
-        # Try to access dialog for logging if available in scope
-        import inspect
-        frame = inspect.currentframe()
-        while frame:
-            if 'dialog' in frame.f_locals:
-                dialog = frame.f_locals['dialog']
-                dialog.log_message("LCP created using: r.drain → r.to.vect", "LCP")
-                break
-            frame = frame.f_back
-    except:
-        pass  # Silent fallback if logging not available
+    if dialog:
+        dialog.log_message("✓ LCP created successfully using: r.drain → r.thin → r.to.vect", "LCP")
     
     # Cleanup
     shutil.rmtree(temp_dir, ignore_errors=True)
