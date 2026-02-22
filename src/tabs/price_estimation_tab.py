@@ -3,7 +3,8 @@ import numpy as np
 import os
 from PyQt5.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
-    QGroupBox, QVBoxLayout, QDialog, QGridLayout, QRadioButton, QButtonGroup
+    QGroupBox, QVBoxLayout, QDialog, QGridLayout, QRadioButton, QButtonGroup,
+    QScrollArea, QWidget, QSizePolicy
 )
 from PyQt5.QtCore import Qt
 from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry, QgsRasterLayer
@@ -25,10 +26,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     columns_layout.addLayout(left_layout, 1)
     columns_layout.addLayout(right_layout, 1)
 
-    # ... (rest of the setup from ui.py)
-    descriptionGroupBox = QGroupBox()
-    descriptionGroupBox.setStyleSheet("QGroupBox { border: 0px; }")
-    descriptionLayout = QFormLayout()
+    # Description block — scrollable, fixed max height
     descriptionLabel = QLabel("""
         <html>
             <body>
@@ -49,9 +47,16 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
         </html>
     """)
     descriptionLabel.setWordWrap(True)
-    descriptionLayout.addRow(descriptionLabel)
-    descriptionGroupBox.setLayout(descriptionLayout)
-    main_layout.addWidget(descriptionGroupBox)
+
+    descriptionScrollArea = QScrollArea()
+    descriptionScrollArea.setWidget(descriptionLabel)
+    descriptionScrollArea.setWidgetResizable(True)
+    descriptionScrollArea.setMaximumHeight(160)
+    descriptionScrollArea.setMinimumHeight(60)
+    descriptionScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    descriptionScrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    descriptionScrollArea.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+    main_layout.addWidget(descriptionScrollArea)
 
     dialog.show_formulas_button = QPushButton("Show Calculation Formulas")
     main_layout.addWidget(dialog.show_formulas_button)
@@ -622,13 +627,21 @@ class FormulaDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Calculation Formulas")
-        self.setMinimumWidth(900)
+        self.setMinimumSize(800, 500)
+        self.resize(1000, 700)
+        self.setSizeGripEnabled(True)
         self.setStyleSheet("""
             QDialog { background-color: #2a2a2a; }
             QLabel { color: white; font-size: 13px; }
+            QScrollArea { background-color: #2a2a2a; border: none; }
+            QWidget#scrollContent { background-color: #2a2a2a; }
         """)
-        
-        grid_layout = QGridLayout()
+
+        # Inner widget that holds the grid
+        scroll_content = QWidget()
+        scroll_content.setObjectName("scrollContent")
+
+        grid_layout = QGridLayout(scroll_content)
         grid_layout.setSpacing(24)
         grid_layout.setContentsMargins(20, 20, 20, 20)
         grid_layout.setColumnStretch(0, 3)
@@ -747,4 +760,13 @@ class FormulaDialog(QDialog):
         grid_layout.addWidget(Itotal_formula_label, 4, 0, Qt.AlignCenter)
         grid_layout.addWidget(Itotal_explanation, 4, 1)
 
-        self.setLayout(grid_layout)
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(scroll_content)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.addWidget(scroll_area)
+        self.setLayout(outer_layout)
