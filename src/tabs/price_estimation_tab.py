@@ -190,13 +190,19 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         dialog.log_message("Calculating pipeline price...", "Price Estimation")
 
         pipeline_layer = QgsProject.instance().mapLayer(dialog.pipelineVectorDropdown.currentData())
+        if not pipeline_layer:
+            raise ValueError("Pipeline vector must be selected.")
+
         land_use_layer = QgsProject.instance().mapLayer(dialog.landUseCostsDropdown.currentData())
         slope_layer = QgsProject.instance().mapLayer(dialog.slopeCostsDropdown.currentData())
         corridors_layer = QgsProject.instance().mapLayer(dialog.corridorsCostsDropdown.currentData())
         crossings_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
-        
-        if not all([pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer]):
-            raise ValueError("Pipeline vector and all cost rasters (Flu, Fs, Fc, Fci) must be selected.")
+
+        # Log warnings for missing rasters (will default to 1.0)
+        for name, layer in [("Land Use (Flu)", land_use_layer), ("Slope (Fs)", slope_layer),
+                             ("Corridors (Fc)", corridors_layer), ("Crossings (Fci)", crossings_layer)]:
+            if not layer:
+                dialog.log_message(f"  ⚠️ {name}: Not selected — will use constant 1.0 (neutral)", "Price Estimation")
 
         # Choose calculation method based on radio button selection
         use_precise = dialog.calcModePreciseRadio.isChecked()
@@ -209,9 +215,9 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
             dialog.log_message("Calculation mode: Fast (Segment-based with point sampling)", "Price Estimation")
             crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
             if not crossings_vector_layer:
-                raise ValueError("Infrastructure Vector (for N) must be selected for Fast mode.")
+                dialog.log_message("  ⚠️ Infrastructure Vector (for N): Not selected — N will be 1 for all segments (neutral, preserves Fci contribution)", "Price Estimation")
             full_raster_values = extract_raster_values_along_pipeline(
-                pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
+                dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
             )
         if not full_raster_values:
             raise ValueError("No valid raster values found for the pipeline path. Check if the pipeline intersects with the cost rasters.")
@@ -296,29 +302,37 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     
     dialog.log_message("Step 1: Resampling all cost rasters to common resolution...", "Price Estimation")
     
-    # Collect all raster layers
-    all_layers = [land_use_layer, slope_layer, corridors_layer, crossings_layer]
-    layer_names = ['Land Use (Flu)', 'Slope (Fs)', 'Corridors (Fc)', 'Crossings (Fci)']
+    # Separate valid from missing layers
+    all_input = [
+        (land_use_layer, 'Land Use (Flu)'),
+        (slope_layer,    'Slope (Fs)'),
+        (corridors_layer,'Corridors (Fc)'),
+        (crossings_layer,'Crossings (Fci)'),
+    ]
+    valid_layers = [(l, n) for l, n in all_input if l and l.isValid()]
     
-    # Calculate common extent (intersection)
-    common_extent = all_layers[0].extent()
-    for layer in all_layers[1:]:
+    if not valid_layers:
+        raise ValueError("At least one cost raster must be provided.")
+    
+    # Calculate common extent from valid layers only
+    common_extent = valid_layers[0][0].extent()
+    for layer, _ in valid_layers[1:]:
         common_extent = common_extent.intersect(layer.extent())
     
     if common_extent.isEmpty():
         raise ValueError("No common extent found - cost rasters do not overlap!")
     
-    # Use first raster as reference for resolution
-    reference_layer = all_layers[0]
+    # Use first valid layer as reference for resolution
+    reference_layer = valid_layers[0][0]
     ref_resolution = reference_layer.rasterUnitsPerPixelX()
     
     dialog.log_message(f"  Reference resolution: {ref_resolution:.2f}m from {reference_layer.name()}", "Price Estimation")
     
-    # Resample all rasters
+    # Resample valid rasters only
     temp_dir = tempfile.mkdtemp()
     resampled_data = {}
     
-    for layer, name in zip(all_layers, layer_names):
+    for layer, name in valid_layers:
         resampled_path = os.path.join(temp_dir, f'_price_est_{name.replace(" ", "_")}.tif')
         
         params = {
@@ -363,19 +377,24 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     
     dialog.log_message(f"  Resampled grid: {width}x{height} cells, cell size: {cell_width:.2f}m x {cell_height:.2f}m", "Price Estimation")
     
-    # Create arrays
+    # Create arrays — missing rasters default to 1.0 (neutral)
     Flu = resampled_data.get('Land Use (Flu)', np.ones((height, width), dtype=np.float32))
-    Fs = resampled_data.get('Slope (Fs)', np.ones((height, width), dtype=np.float32))
-    Fc = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
-    Fci = resampled_data.get('Crossings (Fci)', np.ones((height, width), dtype=np.float32))
-    
+    Fs  = resampled_data.get('Slope (Fs)',     np.ones((height, width), dtype=np.float32))
+    Fc  = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
+    Fci = resampled_data.get('Crossings (Fci)',np.ones((height, width), dtype=np.float32))
+
+    for name, key in [("Land Use (Flu)", 'Land Use (Flu)'), ("Slope (Fs)", 'Slope (Fs)'),
+                      ("Corridors (Fc)", 'Corridors (Fc)'), ("Crossings (Fci)", 'Crossings (Fci)')]:
+        if key not in resampled_data:
+            dialog.log_message(f"  ⚠️ {name}: Not selected — assuming constant 1.0 (neutral)", "Price Estimation")
+
     dialog.log_message("Step 2: Extracting pipeline segments and calculating cell intersections...", "Price Estimation")
     
     # Get infrastructure vector for N calculation
     crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData()) if hasattr(dialog, 'crossingsVectorDropdown') else None
     
     if not crossings_vector_layer:
-        dialog.log_message("  ⚠️ No infrastructure vector selected - N will be 0 for all cells", "Price Estimation")
+        dialog.log_message("  ⚠️ No infrastructure vector selected - N will be 1 for all cells (neutral, preserves Fci contribution)", "Price Estimation")
         infrastructure_features = []
     else:
         infrastructure_features = list(crossings_vector_layer.getFeatures())
@@ -483,8 +502,9 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     # Convert dictionary to list of tuples
     values = []
     for (row, col), data in cell_data.items():
+        # If no infrastructure vector was provided, N defaults to 1 (preserves Fci contribution)
         # Cap N at 10 (same as LCP)
-        n_capped = min(data['N'], 10)
+        n_capped = min(max(data['N'], 1 if not infrastructure_features else 0), 10)
         values.append((
             data['Fc'],
             data['Fs'],
@@ -564,12 +584,20 @@ def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_h
     
     return list(cells)
 
-def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
+def extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
     """
     Extracts raster values at multiple points along each segment of the pipeline, returning the maximum value for each raster.
+    Missing rasters default to 1.0 (neutral). Missing infrastructure vector defaults to N=0.
     """
     values = []
-    crossings_features = list(crossings_vector_layer.getFeatures())
+
+    # Log warnings for missing inputs
+    for name, layer in [("Land Use (Flu)", land_use_layer), ("Slope (Fs)", slope_layer),
+                        ("Corridors (Fc)", corridors_layer), ("Crossings (Fci)", crossings_layer)]:
+        if not layer:
+            dialog.log_message(f"  ⚠️ {name}: Not selected — assuming constant 1.0 (neutral)", "Price Estimation")
+
+    crossings_features = list(crossings_vector_layer.getFeatures()) if crossings_vector_layer else []
 
     for feature in pipeline_layer.getFeatures():
         geom = feature.geometry()
@@ -583,27 +611,37 @@ def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_l
                 for crossing_feature in crossings_features:
                     if segment_geom.intersects(crossing_feature.geometry()):
                         num_intersections += 1
+                # Default N to 1 if no infrastructure vector provided (preserves Fci contribution)
+                if not crossings_features:
+                    num_intersections = 1
 
                 cell_length = start.distance(end)
                 sample_ratios = [0.0, 0.25, 0.5, 0.75, 1.0]
                 corridors_vals, land_use_vals, slope_vals, crossings_vals = [], [], [], []
 
                 for ratio in sample_ratios:
-                    x, y = start.x() + (end.x() - start.x()) * ratio, start.y() + (end.y() - start.y()) * ratio
+                    x = start.x() + (end.x() - start.x()) * ratio
+                    y = start.y() + (end.y() - start.y()) * ratio
                     point = QgsPointXY(x, y)
                     
-                    Fc = get_raster_value_at_point(corridors_layer, point)
-                    Fs = get_raster_value_at_point(slope_layer, point)
+                    Fc  = get_raster_value_at_point(corridors_layer, point)
+                    Fs  = get_raster_value_at_point(slope_layer, point)
                     Flu = get_raster_value_at_point(land_use_layer, point)
                     Fci = get_raster_value_at_point(crossings_layer, point)
 
-                    if Fc is not None: corridors_vals.append(Fc)
-                    if Fs is not None: slope_vals.append(Fs)
-                    if Flu is not None: land_use_vals.append(Flu)
-                    if Fci is not None: crossings_vals.append(Fci)
+                    corridors_vals.append(Fc  if Fc  is not None else 1.0)
+                    slope_vals.append(    Fs  if Fs  is not None else 1.0)
+                    land_use_vals.append( Flu if Flu is not None else 1.0)
+                    crossings_vals.append(Fci if Fci is not None else 1.0)
 
-                if all([land_use_vals, slope_vals, corridors_vals, crossings_vals]):
-                    values.append((max(corridors_vals), max(slope_vals), max(land_use_vals), max(crossings_vals), num_intersections, cell_length))
+                values.append((
+                    max(corridors_vals),
+                    max(slope_vals),
+                    max(land_use_vals),
+                    max(crossings_vals),
+                    num_intersections,
+                    cell_length
+                ))
     return values
 
 def get_raster_value_at_point(raster_layer, point):
