@@ -289,7 +289,7 @@ class CometValuesDialog(QDialog):
         layout = QVBoxLayout()
         table = QTableWidget()
         table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["Class ID", "Thematic Class", "COMET Land Use", "Cost Factor"])
+        table.setHorizontalHeaderLabels(["Class ID", "COSc Thematic Class", "COMET Land Use", "Cost Factor"])
         table.setEditTriggers(QTableWidget.NoEditTriggers)
 
         data = [
