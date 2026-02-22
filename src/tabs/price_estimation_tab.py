@@ -564,7 +564,6 @@ def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_h
     
     return list(cells)
 
-# LEGACY CODE:This is no longer used, now we can iterate over the cells and get the values for each cell since all rasters are resampled to the same resolution.
 def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
     """
     Extracts raster values at multiple points along each segment of the pipeline, returning the maximum value for each raster.
@@ -607,7 +606,6 @@ def extract_raster_values_along_pipeline(pipeline_layer, land_use_layer, slope_l
                     values.append((max(corridors_vals), max(slope_vals), max(land_use_vals), max(crossings_vals), num_intersections, cell_length))
     return values
 
-# LEGACY CODE: This is no longer used, now we can iterate over the cells and get the values for each cell since all rasters are resampled to the same resolution. So there's no need to get value at a point.
 def get_raster_value_at_point(raster_layer, point):
     """Gets a raster value at a specific point."""
     if not raster_layer: return None
