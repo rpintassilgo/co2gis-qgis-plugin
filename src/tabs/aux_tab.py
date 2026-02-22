@@ -96,7 +96,7 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     clipLayout.addRow(clipTitle)
     infoClipText = QLabel(
-        "ⓘ This functionality clips rasters based on a two-point vector layer (like a rectangle between points). It's useful to reduce raster sizes for faster processing. For example, when calculating a new LCP, you can clip DEM and land use rasters to make computations lighter. While unlikely, some edge cases might lose precision since routes outside the clipped area are not considered. For instance, in scenarios with water bodies, a cheaper route might exist that goes around the clipped area."
+        "ⓘ This functionality clips rasters based on a two-point vector layer (like a rectangle between points). It's useful to reduce raster sizes for faster processing. For example, when calculating a new LCP, you can clip DEM and land use rasters to make computations lighter."
     )
     infoClipText.setStyleSheet("color: lightgrey; font-size: 11px;")
     infoClipText.setWordWrap(True)

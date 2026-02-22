@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox
+from PyQt5.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox, QRadioButton, QButtonGroup
 from PyQt5.QtCore import Qt, QMetaObject, Q_ARG
 from qgis.core import QgsProject
 from typing import Optional
@@ -123,6 +123,9 @@ class AnalysisDialog(QDialog):
         self.pressureDropInput: QLineEdit
         self.calculatePriceButton: QPushButton
         self.show_formulas_button: QPushButton
+        self.calcModePreciseRadio: QRadioButton
+        self.calcModeFastRadio: QRadioButton
+        self.calcModeButtonGroup: QButtonGroup
 
         self.log_output: QTextEdit
         self.clear_log_button: QPushButton
