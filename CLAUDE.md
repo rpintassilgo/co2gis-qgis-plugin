@@ -8,6 +8,15 @@ A **QGIS 3.x plugin** (PyQGIS / PyQt5) for CO₂ pipeline routing and CAPEX esti
 
 The repo lives directly in the QGIS plugins directory (this checkout *is* the installed plugin), so edits take effect on the next QGIS restart / plugin reload — no deploy step needed during development.
 
+## Issues & pull requests
+
+This is an open-source repo. Follow the `/commit` skill for commit messages (Conventional
+Commits; issues referenced in the scope and/or a `Closes #N` footer; no LLM co-author trailers).
+
+When opening issues via `gh`, match the GitHub issue forms in `.github/ISSUE_TEMPLATE/`
+(`bug_report.yml`, `feature_request.yml`, `change_request.yml`): use the same title prefix
+(`[Bug]:` / `[Feature]:` / `[Improvement]:`) and fill the fields those forms ask for.
+
 ## Development workflow
 
 - **No automated test suite exists.** The `make test` / `make pylint` targets in the `Makefile` assume the standard QGIS plugin-builder layout (a `*_dialog_base.ui`, `nosetests`) that this project does **not** use — they will not work as-is. Don't rely on them.

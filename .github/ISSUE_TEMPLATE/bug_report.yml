@@ -1,0 +1,108 @@
+name: Bug report
+description: Report something that is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the fields below so the issue can be reproduced.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this has not been reported yet.
+          required: true
+        - label: I am using the latest version of the plugin.
+          required: false
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: See `metadata.txt` or Plugins → Manage and Install Plugins.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: qgis-version
+    attributes:
+      label: QGIS version
+      description: Help → About.
+      placeholder: "3.34.6"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: grass-enabled
+    attributes:
+      label: Is the GRASS provider enabled?
+      description: Settings → Options → Processing → Providers → GRASS. Routing (LCP) requires it.
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure"
+    validations:
+      required: true
+  - type: dropdown
+    id: tab
+    attributes:
+      label: Which tab / step is affected?
+      options:
+        - Land Use
+        - Slope
+        - Crossings
+        - Corridors
+        - Aux
+        - LCP
+        - Price Estimation
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: List the exact steps, including the inputs/layers used.
+      placeholder: |
+        1. Load raster '...'
+        2. Open the LCP tab and select '...'
+        3. Click 'Create ...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Log output
+      description: Copy the relevant lines from the plugin's log panel (and the QGIS Python console if there's a traceback). This will be rendered as code, so no backticks are needed.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: data
+    attributes:
+      label: Data / CRS notes (optional)
+      description: Resolution, CRS (EPSG), extent, or anything relevant about the input data.
+    validations:
+      required: false

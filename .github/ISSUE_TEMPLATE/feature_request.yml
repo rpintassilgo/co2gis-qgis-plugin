@@ -1,0 +1,54 @@
+name: Feature request
+description: Suggest a new capability that does not exist yet
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a **new** capability. If you want to improve something that already exists, use the *Improvement* template instead.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this has not been requested yet.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that the plugin cannot do today?
+      placeholder: "When planning a route I need to ... but there is no way to ..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed feature
+      description: Describe the capability you would like. Reference the COMET model / formulas if relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: tab
+    attributes:
+      label: Which part of the workflow does it relate to?
+      options:
+        - Land Use
+        - Slope
+        - Crossings
+        - Corridors
+        - Aux
+        - LCP
+        - Price Estimation
+        - New tab / cross-cutting
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or current workarounds, if any.
+    validations:
+      required: false

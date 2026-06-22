@@ -1,0 +1,55 @@
+name: Improvement / change request
+description: Improve or change something that already exists (behaviour, defaults, UX, performance)
+title: "[Improvement]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this to improve **existing** behaviour. For a brand-new capability, use the *Feature request* template; for something broken, use *Bug report*.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this has not been requested yet.
+          required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the workflow does it affect?
+      options:
+        - Land Use
+        - Slope
+        - Crossings
+        - Corridors
+        - Aux
+        - LCP
+        - Price Estimation
+        - UI / logging
+        - Performance
+        - Documentation
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current behaviour
+      description: How does it work today, and what is the limitation?
+    validations:
+      required: true
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired improvement
+      description: What should it do instead? Include suggested default values or parameters if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: Why is this better?
+      description: Accuracy, speed, usability, alignment with the COMET model, etc.
+    validations:
+      required: false
