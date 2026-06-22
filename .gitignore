@@ -7,3 +7,6 @@ __pycache__/
 
 # Ignore macOS metadata files
 .DS_Store
+
+# Ignore private, per-developer Claude notes
+CLAUDE.local.md
