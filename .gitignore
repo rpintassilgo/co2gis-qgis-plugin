@@ -4,3 +4,6 @@ __pycache__/
 # Ignore compiled python files
 *.pyc
 *.pyo
+
+# Ignore macOS metadata files
+.DS_Store
