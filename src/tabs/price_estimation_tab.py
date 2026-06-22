@@ -33,8 +33,9 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
                 <p style="text-align:justify; font-size:13px; color:lightgrey; line-height:1.6;">
                     ⓘ This submenu estimates the total pipeline investment cost (<b>I<sub>total</sub></b>) based on the selected pipeline vector and cost rasters. <br><br>
                     The pipeline <b>diameter (D)</b> is calculated once using the full pipeline length and the Darcy-Weisbach equation — it is constant along the entire pipeline. <br><br>
-                    If the pipeline is <b>150 km or less</b>, a single segment cost <b>I<sub>p</sub></b> is calculated.
-                    If longer, the pipeline is split into <b>segments of up to 150 km</b>, each with its own <b>I<sub>p</sub></b>,
+                    The <b>segment length</b> is derived from the pressure budget — total pressure drop ÷ admissible pressure drop (150 km by default). <br><br>
+                    If the pipeline is <b>shorter than one segment</b>, a single segment cost <b>I<sub>p</sub></b> is calculated.
+                    If longer, the pipeline is split into <b>segments of that length</b>, each with its own <b>I<sub>p</sub></b>,
                     and a <b>booster station (I<sub>B</sub>)</b> is added between each pair of consecutive segments. <br><br>
                     <b>Precise mode</b> resamples all cost rasters to a common resolution and iterates over every GIS cell crossed by the pipeline —
                     cost factor values are read from each cell, and
@@ -108,21 +109,30 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.co2MassFlowRateInput = QLineEdit()
     dialog.co2densityInput = QLineEdit()
     dialog.pressureDropInput = QLineEdit()
-    
+    dialog.totalPressureDropInput = QLineEdit()
+    dialog.segmentLengthInput = QLineEdit()
+    dialog.segmentLengthInput.setReadOnly(True)
+
     dialog.standardizedCostFactorInput.setText("1357")
     dialog.frictionFactorInput.setText("0.015")
     dialog.co2MassFlowRateInput.setText("1")
     dialog.co2densityInput.setText("827")
     dialog.pressureDropInput.setText("0.02")
-    
+    dialog.totalPressureDropInput.setText("3")
+
     inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
     inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
     inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
     inputLayout.addRow(QLabel("CO2 Density (ρ, in kg/m³):"), dialog.co2densityInput)
     inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, in MPa/km):"), dialog.pressureDropInput)
+    inputLayout.addRow(QLabel("Total Pressure Drop (Δp, in MPa):"), dialog.totalPressureDropInput)
+    inputLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
     inputGroupBox.setLayout(inputLayout)
     right_layout.addWidget(inputGroupBox)
+
+    # Populate the derived segment-length field with its initial value
+    update_segment_length(dialog)
     
     # Calculation Mode Selection
     calcModeGroupBox = QGroupBox()
@@ -184,6 +194,22 @@ def connect_price_estimation_signals(dialog: 'AnalysisDialog'):
         lambda: update_resolution_field(dialog, dialog.crossingsCostsDropdown, dialog.crossingsCostsResInput)
     )
 
+    # Recompute the derived segment length whenever either pressure input changes
+    dialog.pressureDropInput.textChanged.connect(lambda: update_segment_length(dialog))
+    dialog.totalPressureDropInput.textChanged.connect(lambda: update_segment_length(dialog))
+
+def update_segment_length(dialog: 'AnalysisDialog'):
+    """Recomputes the read-only segment length (km) = total pressure drop / admissible pressure drop."""
+    try:
+        admissible = float(dialog.pressureDropInput.text())  # MPa/km
+        total = float(dialog.totalPressureDropInput.text())  # MPa
+        if admissible > 0:
+            dialog.segmentLengthInput.setText(f"{total / admissible:.2f}")
+        else:
+            dialog.segmentLengthInput.setText("—")
+    except (ValueError, ZeroDivisionError):
+        dialog.segmentLengthInput.setText("—")
+
 def run_price_estimation(dialog: 'AnalysisDialog'):
     """Calculates the total pipeline price based on various cost factors."""
     try:
@@ -226,14 +252,23 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         M = float(dialog.co2MassFlowRateInput.text())
         p = float(dialog.co2densityInput.text())
         Δp_Ltotal = float(dialog.pressureDropInput.text()) * 1000  # MPa/km → Pa/m (pressure drop per meter)
+        total_pressure_drop = float(dialog.totalPressureDropInput.text())  # MPa (max drop per segment)
         Bc = float(dialog.standardizedCostFactorInput.text())
-        
+
+        # Max segment length is derived from the pressure budget:
+        # segment (km) = total pressure drop (MPa) / admissible pressure drop (MPa/km)
+        admissible_MPa_km = float(dialog.pressureDropInput.text())
+        if admissible_MPa_km <= 0:
+            raise ValueError("Admissible Pressure Drop must be greater than zero.")
+        max_segment_length = (total_pressure_drop / admissible_MPa_km) * 1000  # km → m
+        dialog.log_message(f"Max segment length (booster spacing): {max_segment_length/1000:.2f} km "
+                           f"(= {total_pressure_drop} MPa / {admissible_MPa_km} MPa/km)", "Price Estimation")
+
         segment_costs = []
         booster_costs = []
         segment_index = 0
         total_length = 0
 
-        max_segment_length = 150000  # 150 km
         current_segment_cells = []
         current_segment_length = 0
         
@@ -265,15 +300,15 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                 dialog.log_message(f"Segment {segment_index+1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €", "Price Estimation")
 
                 if not final_segment:
-                    # Booster stations are placed every 150 km
-                    # Calculate pressure drop for 150 km segment
-                    ΔP_booster_segment = Δp_Ltotal * 150000  # Pa (pressure drop over 150 km)
+                    # Booster stations are placed at the end of each full segment.
+                    # Pressure drop over a full segment = Δp/L × segment length (= total_pressure_drop)
+                    ΔP_booster_segment = Δp_Ltotal * max_segment_length  # Pa (pressure drop over one segment)
                     Beff = 0.75
                     Sc_W = (M * ΔP_booster_segment) / (p * Beff) #W (compressor power)
                     Sc_MW = Sc_W / 1e6 # converted to MW
                     Ib = (0.547 * Sc_MW + 0.42) * 1e6 # Convert M€ to €
                     booster_costs.append(Ib)
-                    dialog.log_message(f"Booster Station after 150 km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
+                    dialog.log_message(f"Booster Station after {max_segment_length/1000:.2f} km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
 
                 current_segment_cells = []
                 current_segment_length = 0
@@ -721,7 +756,7 @@ class FormulaDialog(QDialog):
             </p></body></html>""")
         Ip_explanation = QLabel(
             "<b>Pipeline Segment Cost (I<sub>p</sub>):</b><br><br>"
-            "Cost of one pipeline segment (up to 150 km), applying the COMET multiplicative formula.<br><br>"
+            "Cost of one pipeline segment (up to the derived segment length, 150 km by default), applying the COMET multiplicative formula.<br><br>"
             "<b>B<sub>c</sub></b> = standardized base cost (€/m²) &nbsp;|&nbsp; <b>D</b> = diameter (m)<br>"
             "<b>F<sub>c</sub></b> = corridor factor &nbsp;|&nbsp; <b>F<sub>s</sub></b> = slope factor<br>"
             "<b>F<sub>lu</sub></b> = land use factor &nbsp;|&nbsp; <b>F<sub>ci</sub></b> = crossing factor<br>"
@@ -753,9 +788,9 @@ class FormulaDialog(QDialog):
             </tr></table></body></html>""")
         Sc_explanation = QLabel(
             "<b>Compressor Power (S<sub>c</sub>):</b><br><br>"
-            "Power required for each booster station, placed every 150 km. "
+            "Power required for each booster station, placed at the end of every full segment (derived segment length, 150 km by default). "
             "<b>M</b> = CO₂ mass flow rate (kg/s), "
-            "<b>ΔP<sub>seg</sub></b> = total pressure drop over a 150 km segment = Δp/L × 150,000 m (Pa), "
+            "<b>ΔP<sub>seg</sub></b> = total pressure drop over one segment = Δp/L × segment length (Pa), "
             "<b>ρ</b> = CO₂ density (kg/m³), "
             "<b>B<sub>eff</sub></b> = booster efficiency = 0.75. "
             "Result is in Watts (W)."
@@ -789,8 +824,8 @@ class FormulaDialog(QDialog):
             "<b>Total Pipeline Cost (I<sub>total</sub>):</b><br><br>"
             "The total investment cost in euros (€), calculated as the sum of all pipeline "
             "segment costs (ΣI<sub>p</sub>) and all booster station costs (ΣI<sub>B</sub>). "
-            "For pipelines ≤ 150 km there are no booster stations (ΣI<sub>B</sub> = 0). "
-            "For longer pipelines, one booster station is added after every 150 km segment."
+            "For pipelines shorter than one segment there are no booster stations (ΣI<sub>B</sub> = 0). "
+            "For longer pipelines, one booster station is added after every full segment."
         )
         Itotal_explanation.setWordWrap(True)
         grid_layout.addWidget(Itotal_formula_label, 4, 0, Qt.AlignCenter)
