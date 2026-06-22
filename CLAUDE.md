@@ -17,6 +17,18 @@ When opening issues via `gh`, match the GitHub issue forms in `.github/ISSUE_TEM
 (`bug_report.yml`, `feature_request.yml`, `change_request.yml`): use the same title prefix
 (`[Bug]:` / `[Feature]:` / `[Improvement]:`) and fill the fields those forms ask for.
 
+**Labels.** Two orthogonal axes plus a type label:
+
+- `priority: low|medium|high` — how soon it should be addressed (scheduling). Applies to **every**
+  issue (bugs, features, improvements).
+- `severity: low|medium|high` — how bad the impact is if it occurs (technical impact). Applies to
+  **bugs** only — it has no meaning for a feature request.
+- A type label: `bug` / `enhancement` / `documentation`.
+
+A bug can be high-severity but low-priority (rare edge case) or vice versa; set the two
+independently. Example: the worker-thread bug is `severity: high` + `priority: high`; the lifecycle
+cleanup is `severity: medium` + `priority: low`.
+
 ## Development workflow
 
 - **No automated test suite exists.** The `make test` / `make pylint` targets in the `Makefile` assume the standard QGIS plugin-builder layout (a `*_dialog_base.ui`, `nosetests`) that this project does **not** use — they will not work as-is. Don't rely on them.
