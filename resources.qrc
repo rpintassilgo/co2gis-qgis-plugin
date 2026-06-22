@@ -1,5 +1,0 @@
-<RCC>
-    <qresource prefix="/plugins/least_cost_pipeline" >
-        <file>icon.png</file>
-    </qresource>
-</RCC>
