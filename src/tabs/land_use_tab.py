@@ -308,6 +308,7 @@ class CometValuesDialog(QDialog):
             ("500", "Superfícies sem vegetação", "Áreas não povoadas", "1.0"),
             ("610", "Zonas húmidas", "Zonas regularmente inundadas", "1.2"),
             ("620", "Água", "Corpos de água", "4.0"),
+            ("-", "-", "Áreas protegidas", "10"),
         ]
 
         table.setRowCount(len(data))
