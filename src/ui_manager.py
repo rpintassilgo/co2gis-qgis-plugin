@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def setup_ui(dialog: 'AnalysisDialog'):
     """Set up the main UI for AnalysisDialog."""
-    dialog.setWindowTitle("Least Cost Pipeline Analysis")
+    dialog.setWindowTitle("CO2GIS")
     dialog.setMinimumSize(900, 600)
     dialog.resize(1200, 820)
     dialog.setSizeGripEnabled(True)

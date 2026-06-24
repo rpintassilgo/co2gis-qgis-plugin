@@ -4,14 +4,14 @@
 # Mandatory items:
 
 [general]
-name=LeastCostPipeline
+name=CO2GIS
 qgisMinimumVersion=3.0
-description=Optimised CO2 pipeline routing (least-cost path) and cell-level CAPEX estimation based on the COMET cost model.
+description=CO₂ transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
 version=1.0.0
 author=Rodrigo Pintassilgo
 email=rodrigoferreirap68681@gmail.com
 
-about=LeastCostPipeline combines raster-based least-cost path (LCP) routing with cell-level capital-cost (CAPEX) estimation for planning CO2 transport pipelines, in a single interactive QGIS interface. It implements the COMET multi-criteria cost surface model (Van den Broek et al., 2013), least-cost path computation via GRASS GIS, and CAPEX estimation with a pipeline diameter derived from the Darcy-Weisbach equation and booster stations on long segments. Two estimation modes (precise cell-by-cell and fast point-sampling) offer a user-controlled accuracy/speed trade-off. Requires the GRASS provider bundled with QGIS. Developed as the practical component of a Master's dissertation (ESTG / Polytechnic of Leiria) with the Net4CO2 collaborative laboratory.
+about=CO2GIS is an open-source QGIS plugin for planning CO₂ transport pipeline infrastructure. It integrates raster-based least-cost path (LCP) routing with cell-level capital-cost (CAPEX) estimation, enabling optimal pipeline corridor selection under multi-criteria land constraints. The plugin implements the COMET cost surface framework, hydraulic pipeline sizing via the Darcy-Weisbach equation, and automatic booster station placement on long segments. Two estimation modes — precise cell-by-cell and fast point-sampling — let users tune the accuracy/speed trade-off. Requires the GRASS GIS provider bundled with QGIS.
 
 tracker=https://github.com/rpintassilgo/qgis-co2-pipeline-routing/issues
 repository=https://github.com/rpintassilgo/qgis-co2-pipeline-routing
@@ -21,7 +21,7 @@ repository=https://github.com/rpintassilgo/qgis-co2-pipeline-routing
 
 hasProcessingProvider=no
 
-changelog=1.0.0 - First stable release (post-dissertation): COMET multi-criteria cost surface, GRASS-based LCP routing, COMET CAPEX estimation with precise and fast modes, Portuguese open-data case study.
+changelog=1.0.0 - First stable release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes, Portuguese open-data case study.
 
 # Tags are comma separated with spaces allowed
 tags=carbon capture and storage, CCS, CO2, pipeline, least cost path, LCP, CAPEX, routing, raster, GRASS
