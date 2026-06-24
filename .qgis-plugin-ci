@@ -1,0 +1,21 @@
+plugin_path: .
+github_organization_slug: rpintassilgo
+project_slug: qgis-co2-pipeline-routing
+
+# Files/dirs to exclude from the release ZIP
+exclude:
+  - "__pycache__"
+  - "*.pyc"
+  - ".DS_Store"
+  - "CLAUDE.md"
+  - "CLAUDE.local.md"
+  - ".claude"
+  - "pb_tool.cfg"
+  - "pylintrc"
+  - "Makefile"
+  - "plugin_upload.py"
+  - "scripts"
+  - "docs"
+  - "help/source"
+  - ".github"
+  - ".git"

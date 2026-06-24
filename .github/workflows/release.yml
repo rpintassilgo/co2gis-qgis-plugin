@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create GitHub releases
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install qgis-plugin-ci
+        run: pip install qgis-plugin-ci
+
+      - name: Package and publish
+        run: qgis-plugin-ci release ${GITHUB_REF_NAME}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OSGEO_USERNAME: ${{ secrets.OSGEO_USERNAME }}
+          OSGEO_PASSWORD: ${{ secrets.OSGEO_PASSWORD }}
