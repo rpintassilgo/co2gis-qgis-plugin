@@ -21,7 +21,7 @@ repository=https://github.com/rpintassilgo/qgis-co2-pipeline-routing
 
 hasProcessingProvider=no
 
-changelog=1.0.0 - First stable release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes, Portuguese open-data case study.
+changelog=1.0.0 - First stable release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes.
 
 # Tags are comma separated with spaces allowed
 tags=carbon capture and storage, CCS, CO2, pipeline, least cost path, LCP, CAPEX, routing, raster, GRASS
