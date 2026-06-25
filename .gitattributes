@@ -14,4 +14,4 @@ pb_tool.cfg       export-ignore
 plugin_upload.py  export-ignore
 scripts           export-ignore
 docs              export-ignore
-help/source       export-ignore
+help              export-ignore
