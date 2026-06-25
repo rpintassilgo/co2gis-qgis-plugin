@@ -90,16 +90,21 @@ Each cost tab has a **Populate according to COMET** button that fills in referen
 
 ## Cost model & parameters
 
-**Cost factors** (COMET, onshore):
+**Cost factors** — the COMET reference values loaded by the **Populate according to COMET** buttons. All editable.
 
-| Factor | Category | Value |
-|--------|----------|-------|
-| `Flu` land use | unpopulated / cultivated / flooded / forest / urban / water | 1.0 / 1.1 / 1.2 / 1.3 / 1.8 / 4.0 |
-| `Fs` slope | <10% / 10–20% / 20–30% / 30–70% / >70% | 1.0 / 1.1 / 1.2 / 3.0 / 9.0 |
-| `Fci` crossing | none / road or rail | 1.0 / 3.0 |
-| `Fc` corridor | existing / new (onshore) | 0.9 / 1.0 |
+| `Flu` land use | | `Fs` slope | | `Fci` crossing | | `Fc` corridor | |
+|---|--:|---|--:|---|--:|---|--:|
+| Unpopulated | 1.0 | < 10% | 1.0 | None | 1.0 | Onshore, existing | 0.9 |
+| Cultivated / arid | 1.1 | 10–20% | 1.1 | Road or rail | 3.0 | Onshore, new | 1.0 |
+| Regularly flooded | 1.2 | 20–30% | 1.2 | | | Offshore, existing | 2.7 |
+| Forest | 1.3 | 30–70% | 3.0 | | | Offshore, new | 3.0 |
+| Urban | 1.8 | > 70% | 9.0 | | | | |
+| Water bodies | 4.0 | | | | | | |
+| Protected areas † | 10 | | | | | | |
 
-A cell cost ranges from ~**0.9** (existing corridor, easy terrain) to **36** (water on a steep slope).
+> † COMET defines a **protected-areas** category (10), but Portugal's COSc map doesn't flag it, so it isn't auto-filled — set it manually where it applies.
+
+With standard COSc values a cell cost ranges from **0.9** (existing corridor, flat, unpopulated) to **36** (water on a slope > 70%); manually assigned protected areas can push it to **90**.
 
 **Physical & economic parameters:**
 
@@ -144,36 +149,15 @@ The bundled Portuguese case study runs entirely on open data: land use (COSc 202
 
 ---
 
-## Scope & limitations
-
-- Cost factors come from **expert elicitation** (COMET stakeholders), not observed construction costs — a limitation shared by all CO₂ pipeline cost models.
-- **CAPEX only** — no OPEX, social or environmental costs.
-- **Point-to-point** routing; multi-source / multi-sink network optimisation is a planned extension.
-
----
-
 ## Contributing
 
-Issues and pull requests are welcome. Use the [issue templates](https://github.com/rpintassilgo/co2gis-qgis-plugin/issues/new/choose) for bugs, feature requests and improvements. For commercial CCUS work needing custom development or priority support, reach out at **co2gis.support@gmail.com**.
+Issues and pull requests are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ---
 
 ## Acknowledgments
 
-CO2GIS began as the practical component of a Master's dissertation in Computer Engineering at the **[Polytechnic University of Leiria](https://www.ipleiria.pt/)** (ESTG), in collaboration with the **[Net4CO2](https://net4co2.pt)** laboratory — and is now developed independently and in the open.
-
-It builds on open-source foundations — **QGIS** and **GRASS GIS** — the **COMET** cost model ([Van den Broek et al., 2013](https://doi.org/10.1016/j.egypro.2013.06.200)) and the CCS Roadmap for Portugal (Seixas et al., 2015).
-
-## Citation
-
-```bibtex
-@mastersthesis{pintassilgo2026co2gis,
-  title  = {Plugin QGIS para Otimiza\c{c}\~ao do Tra\c{c}ado e do Investimento para Gasodutos de CO2},
-  author = {Pintassilgo, Rodrigo},
-  school = {Escola Superior de Tecnologia e Gest\~ao, Polit\'ecnico de Leiria},
-  year   = {2026}
-}
-```
+CO2GIS began as the practical component of a Master's dissertation in Computer Engineering at the **[Polytechnic University of Leiria](https://www.ipleiria.pt/)** (ESTG) — and is now developed independently and in the open.
 
 ## License
 
