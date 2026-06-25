@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QAction
 
 from .src.analysis_dialog import AnalysisDialog
 
+
 class CO2GISPlugin:
     def __init__(self, iface):
         self.iface = iface
@@ -23,6 +24,7 @@ class CO2GISPlugin:
         if not self.analysis_dialog:
             self.analysis_dialog = AnalysisDialog()
         self.analysis_dialog.show()
+
 
 def classFactory(iface):
     return CO2GISPlugin(iface)

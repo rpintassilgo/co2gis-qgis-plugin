@@ -9,6 +9,7 @@ from PyQt5.QtCore import Qt
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
 
+
 def make_searchable_dropdown(dropdown: QComboBox):
     """
     Makes a QComboBox searchable with autocomplete filtering.
@@ -16,13 +17,14 @@ def make_searchable_dropdown(dropdown: QComboBox):
     """
     dropdown.setEditable(True)
     dropdown.setInsertPolicy(QComboBox.NoInsert)  # Prevent adding new items
-    
+
     # Configure completer for better search experience
     completer = dropdown.completer()
     if completer:
         completer.setCompletionMode(QCompleter.PopupCompletion)
         completer.setFilterMode(Qt.MatchContains)  # Match anywhere in text
         completer.setCaseSensitivity(Qt.CaseInsensitive)  # Case-insensitive search
+
 
 def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     """Populate all dropdowns with available layers."""
@@ -122,13 +124,14 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
     if dialog.resampleRasterComboBox.count() == 0:
         dialog.log_message("No raster layers found for resampling.", "System")
 
+
 def update_resolution_field(dialog: 'AnalysisDialog', combo_box: QComboBox, line_edit: QLineEdit):
     """Update the resolution input field based on the selected raster."""
     layer_id = combo_box.currentData()
     if not layer_id:
         line_edit.setText("")
         return
-        
+
     raster_layer = QgsProject.instance().mapLayer(layer_id)
     if raster_layer:
         crs = raster_layer.crs()
@@ -137,6 +140,7 @@ def update_resolution_field(dialog: 'AnalysisDialog', combo_box: QComboBox, line
         avg_resolution = round((resolution_x + resolution_y) / 2, 2)
         unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
         line_edit.setText(f"~{avg_resolution} {unit}")
+
 
 def update_pipeline_length(dialog: 'AnalysisDialog'):
     """Calculate the total length of the selected pipeline vector and update the input field."""
@@ -162,12 +166,13 @@ def update_pipeline_length(dialog: 'AnalysisDialog'):
     dialog.pipelineLengthInput.setText(rounded_length)
     dialog.log_message(f"Entire pipeline length for '{layer.name()}' updated: {rounded_length} m", "Price Estimation")
 
+
 def select_output_file(output_field: QLineEdit, file_type: str):
     """Open a file dialog to select an output file location."""
     file_dialog = QFileDialog()
     file_dialog.setFileMode(QFileDialog.AnyFile)
     file_dialog.setAcceptMode(QFileDialog.AcceptSave)
-    
+
     if file_type == "tif":
         name_filter = "TIF files (*.tif)"
     elif file_type == "gpkg":
@@ -178,16 +183,17 @@ def select_output_file(output_field: QLineEdit, file_type: str):
         name_filter = f"*.{file_type}"
 
     file_dialog.setNameFilter(name_filter)
-    
+
     if file_dialog.exec_():
         selected_files = file_dialog.selectedFiles()
         if selected_files:
             selected_file = selected_files[0]
             # The dialog should handle the extension, but as a fallback:
             if not selected_file.lower().endswith(f".{file_type}") and file_type != "ogr":
-                 if not os.path.splitext(selected_file)[1]:
+                if not os.path.splitext(selected_file)[1]:
                     selected_file += f".{file_type}"
             output_field.setText(selected_file)
+
 
 def update_original_resolution(dialog: 'AnalysisDialog'):
     """Update the original resolution input field based on the selected raster."""
@@ -200,6 +206,7 @@ def update_original_resolution(dialog: 'AnalysisDialog'):
         avg_resolution = round((resolution_x + resolution_y) / 2, 2)
         unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
         dialog.originalResolutionInput.setText(f"~{avg_resolution} {unit}")
+
 
 def get_layer_path(layer: QgsMapLayer):
     """Returns the file path of the given QgsMapLayer."""
@@ -217,14 +224,15 @@ def get_layer_path(layer: QgsMapLayer):
     if layer.type() == QgsMapLayer.VectorLayer:
         path = uri.split("|")[0]
         return os.path.abspath(path)
-    
+
     raise ValueError("Unsupported layer type. Only Raster and Vector layers are supported.")
+
 
 def apply_symbology(original_layer: QgsRasterLayer, clipped_layer: QgsRasterLayer):
     """Applies symbology from the original raster to the clipped raster."""
     if not original_layer or not clipped_layer:
         raise ValueError("Original layer or clipped layer is missing.")
-    
+
     if not original_layer.isValid() or not clipped_layer.isValid():
         raise ValueError("One or both layers are invalid.")
 

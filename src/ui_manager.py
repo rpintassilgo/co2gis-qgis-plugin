@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFormLayout, QTextEdit, QTabWidget, QWidget,
-    QPushButton, QComboBox, QSplitter, QDialog, QSizeGrip
+    QPushButton, QComboBox, QSplitter, QDialog
 )
 from PyQt5.QtCore import Qt
 
@@ -15,6 +15,7 @@ from .tabs.corridors_tab import setup_corridors_tab
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
+
 
 def setup_ui(dialog: 'AnalysisDialog'):
     """Set up the main UI for AnalysisDialog."""

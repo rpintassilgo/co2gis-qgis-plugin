@@ -1,10 +1,10 @@
 from typing import TYPE_CHECKING
 from PyQt5.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, 
+    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
     QGroupBox, QCheckBox, QVBoxLayout, QRadioButton, QButtonGroup
 )
 from PyQt5.QtCore import Qt
-from qgis.core import QgsProject, QgsVectorLayer, QgsVectorFileWriter, QgsFeature, QgsRasterLayer, QgsRectangle
+from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer, QgsRectangle
 import processing
 import os
 
@@ -13,6 +13,7 @@ from ..utils import select_output_file, update_original_resolution, apply_symbol
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
+
 
 def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     """Sets up the Aux tab with its various functionalities."""
@@ -105,7 +106,7 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     clipLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.clipPointVectorComboBox)
     dialog.clipRasterInputDropdown = QComboBox()
     clipLayout.addRow(QLabel("Select Raster To Clip:"), dialog.clipRasterInputDropdown)
-    
+
     # Clip mode radio buttons
     clipModeLabel = QLabel("Clip Mode:")
     dialog.clipModeButtonGroup = QButtonGroup()
@@ -116,13 +117,13 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.clipModeButtonGroup.addButton(dialog.clipModeXY, 0)
     dialog.clipModeButtonGroup.addButton(dialog.clipModeX, 1)
     dialog.clipModeButtonGroup.addButton(dialog.clipModeY, 2)
-    
+
     clipModeLayout = QHBoxLayout()
     clipModeLayout.addWidget(dialog.clipModeXY)
     clipModeLayout.addWidget(dialog.clipModeX)
     clipModeLayout.addWidget(dialog.clipModeY)
     clipLayout.addRow(clipModeLabel, clipModeLayout)
-    
+
     dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
     dialog.copySymbologyCheckbox.setChecked(False)
     clipLayout.addRow(dialog.copySymbologyCheckbox)
@@ -139,12 +140,14 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     clipGroupBox.setLayout(clipLayout)
     layout.addWidget(clipGroupBox)
 
+
 def connect_aux_signals(dialog: 'AnalysisDialog'):
     """Connects signals for the Aux tab."""
     dialog.runCombineVectorsButton.clicked.connect(lambda checked: run_in_background(dialog, run_vector_combination))
     dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
     dialog.runResampleButton.clicked.connect(lambda checked: run_in_background(dialog, run_raster_resampling))
     dialog.clip_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_clipping))
+
 
 def run_vector_combination(dialog: 'AnalysisDialog'):
     """Combine two vector layers into one"""
@@ -157,20 +160,20 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
             raise ValueError("Both vector layers and an output path must be specified.")
 
         dialog.log_message("Combining vector layers...", "Aux")
-        
+
         # Use the modern QGIS processing algorithm for merging vectors
         params = {
             'LAYERS': [layer1, layer2],
             'OUTPUT': output_path
         }
-        
+
         result = processing.run("native:mergevectorlayers", params)
-        
+
         if not result or 'OUTPUT' not in result:
             raise RuntimeError("Vector merge processing failed to return the expected output.")
-        
+
         dialog.log_message("Vectors combined successfully.", "Aux")
-        
+
         # Load the combined layer
         layer_name = os.path.splitext(os.path.basename(result['OUTPUT']))[0]
         combined_layer = QgsVectorLayer(result['OUTPUT'], layer_name, "ogr")
@@ -183,6 +186,7 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
     except Exception as e:
         dialog.log_message(f"Vector Combination Failed: {str(e)}", "Aux")
 
+
 def run_raster_resampling(dialog: 'AnalysisDialog'):
     """Resample Raster"""
     try:
@@ -193,7 +197,7 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
 
         if not all([raster_layer, target_resolution, output_path]):
             raise ValueError("Raster layer, target resolution, and output path must be specified.")
-            
+
         resampling_map = {
             "Nearest Neighbor": 0, "Bilinear": 1, "Cubic": 2, "Cubic Spline": 3, "Lanczos": 4
         }
@@ -220,6 +224,7 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
     except Exception as e:
         dialog.log_message(f"Resampling Raster Failed: {str(e)}", "Aux")
 
+
 def run_raster_clipping(dialog: 'AnalysisDialog'):
     """Clip Combined Raster"""
     try:
@@ -234,16 +239,16 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
         clip_mode_id = dialog.clipModeButtonGroup.checkedId()
         clip_modes = {0: "xy", 1: "x", 2: "y"}
         clip_mode = clip_modes.get(clip_mode_id, "xy")
-        
+
         mode_names = {"xy": "X and Y", "x": "X only", "y": "Y only"}
         dialog.log_message(f"Clipping Raster (mode: {mode_names[clip_mode]})...", "Aux")
         clip_raster_to_vector(get_layer_path(raster_to_clip), points_layer, output_path, clip_mode)
         dialog.log_message(f"Clipped Raster created successfully at: {output_path}", "Aux")
-        
+
         layer_name = os.path.splitext(os.path.basename(output_path))[0]
         clipped_layer = QgsRasterLayer(output_path, layer_name)
         if clipped_layer.isValid():
-             QgsProject.instance().addMapLayer(clipped_layer)
+            QgsProject.instance().addMapLayer(clipped_layer)
         else:
             dialog.log_message("Failed to load clipped raster.", "Aux")
 
@@ -255,10 +260,11 @@ def run_raster_clipping(dialog: 'AnalysisDialog'):
     except Exception as e:
         dialog.log_message(f"Clipping Raster Failed: {str(e)}", "Aux")
 
+
 def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"):
     """
     Clips a raster to the extent of a vector layer with a buffer to ensure points are within the raster.
-    
+
     Args:
         raster_path: Path to the raster to clip
         vector_layer: Vector layer defining the extent
@@ -273,26 +279,26 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
     raster_ds = gdal.Open(raster_path)
     if not raster_ds:
         raise RuntimeError(f"Could not open raster: {raster_path}")
-    
+
     raster_geotrans = raster_ds.GetGeoTransform()
     raster_width = raster_ds.RasterXSize
     raster_height = raster_ds.RasterYSize
-    
+
     # Calculate raster extent
     raster_xmin = raster_geotrans[0]
     raster_ymax = raster_geotrans[3]
     raster_xmax = raster_xmin + raster_width * raster_geotrans[1]
     raster_ymin = raster_ymax + raster_height * raster_geotrans[5]  # geotrans[5] is negative
-    
+
     raster_ds = None
-    
+
     # Get the vector extent
     vector_extent = vector_layer.extent()
-    
+
     # Add a buffer around the extent to ensure points are well within the clipped raster
     # Use 10% of the extent size as buffer, with a minimum of 1000 units
     buffer_distance = max(vector_extent.width() * 0.1, 1000)
-    
+
     # Build the clipping extent based on mode
     if clip_mode == "xy":
         # Clip both X and Y (default behavior)
@@ -327,9 +333,9 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
         'NODATA': None,
         'OUTPUT': output_path,
     }
-    
+
     result = processing.run("gdal:cliprasterbyextent", params)
-    
+
     if result and 'OUTPUT' in result:
         return result['OUTPUT']
     else:

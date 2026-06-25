@@ -9,9 +9,10 @@ from .tabs.land_use_tab import connect_land_use_signals
 from .tabs.slope_tab import connect_slope_signals
 from .tabs.aux_tab import connect_aux_signals
 from .tabs.lcp_tab import connect_lcp_signals
-from .tabs.price_estimation_tab import connect_price_estimation_signals, open_formulas_dialog
+from .tabs.price_estimation_tab import connect_price_estimation_signals
 from .tabs.crossings_tab import connect_crossings_signals
 from .tabs.corridors_tab import connect_corridors_signals
+
 
 class AnalysisDialog(QDialog):
     def __init__(self, parent=None):
@@ -25,7 +26,7 @@ class AnalysisDialog(QDialog):
         self.landUseCostsRasterPath: QLineEdit
         self.landUseBrowse: QPushButton
         self.create_land_use_costs_button: QPushButton
-        
+
         self.demComboBox: QComboBox
         self.slopeRasterPath: QLineEdit
         self.slopeRasterBrowse: QPushButton
@@ -54,7 +55,7 @@ class AnalysisDialog(QDialog):
         self.crossingOutputPath: QLineEdit
         self.crossingBrowse: QPushButton
         self.runCreateRasterFromCrossingButton: QPushButton
-        
+
         # Crossings tab - Section 2: Number of Crossings (N)
         self.nCrossingVectorComboBox: QComboBox
         self.nCrossingRefRasterComboBox: QComboBox
@@ -132,19 +133,19 @@ class AnalysisDialog(QDialog):
 
         self.log_output: QTextEdit
         self.clear_log_button: QPushButton
-        
+
         self._is_updating_weights = False
 
         # Setup UI
         setup_ui(self)
-        
+
         # Make all dropdowns searchable
         self._make_all_dropdowns_searchable()
-        
+
         # Populate dropdowns
         populate_layer_dropdowns(self)
         QgsProject.instance().layersAdded.connect(lambda: populate_layer_dropdowns(self))
-        
+
         # Manually trigger updates for Price Estimation tab after population
         update_pipeline_length(self)
         update_resolution_field(self, self.landUseCostsDropdown, self.landUseCostsResInput)
@@ -154,35 +155,35 @@ class AnalysisDialog(QDialog):
 
         # Connect signals
         self.connect_signals()
-    
+
     def _make_all_dropdowns_searchable(self):
         """Make all layer selection dropdowns searchable with autocomplete."""
         from .utils import make_searchable_dropdown
-        
+
         # Land Use tab
         make_searchable_dropdown(self.landUseComboBox)
-        
+
         # Slope tab
         make_searchable_dropdown(self.demComboBox)
         make_searchable_dropdown(self.slopeLayerComboBox)
-        
+
         # Crossings tab
         make_searchable_dropdown(self.crossingComboBox)
         make_searchable_dropdown(self.crossingRefRasterComboBox)
         make_searchable_dropdown(self.nCrossingVectorComboBox)
         make_searchable_dropdown(self.nCrossingRefRasterComboBox)
-        
+
         # Corridors tab
         make_searchable_dropdown(self.corridorComboBox)
         make_searchable_dropdown(self.corridorRefRasterComboBox)
-        
+
         # Aux tab
         make_searchable_dropdown(self.vectorComboBox)
         make_searchable_dropdown(self.vector2ComboBox)
         make_searchable_dropdown(self.resampleRasterComboBox)
         make_searchable_dropdown(self.clipRasterInputDropdown)
         make_searchable_dropdown(self.clipPointVectorComboBox)
-        
+
         # LCP tab
         make_searchable_dropdown(self.combineLandUseDropdown)
         make_searchable_dropdown(self.combineSlopeDropdown)
@@ -191,7 +192,7 @@ class AnalysisDialog(QDialog):
         make_searchable_dropdown(self.combineNRasterDropdown)
         make_searchable_dropdown(self.pointsComboBox)
         make_searchable_dropdown(self.lcpInputDropdown)
-        
+
         # Price Estimation tab
         make_searchable_dropdown(self.pipelineVectorDropdown)
         make_searchable_dropdown(self.landUseCostsDropdown)
@@ -230,4 +231,3 @@ class AnalysisDialog(QDialog):
                 "clear",
                 Qt.QueuedConnection
             )
-
