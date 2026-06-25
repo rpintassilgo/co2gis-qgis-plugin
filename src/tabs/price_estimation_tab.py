@@ -109,10 +109,6 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     resolutionsLayout.addRow(QLabel("Crossings (F<sub>ci</sub>):"), dialog.crossingsCostsResInput)
     left_layout.addWidget(_make_group_box("Cost Rasters Resolutions", resolutionsLayout))
 
-    left_layout.addStretch(1)
-
-    # ─── RIGHT COLUMN ───────────────────────────────────────────────────────────
-
     # Derived inputs (read-only — auto-calculated from selected vector / pressure inputs)
     derivedLayout = QFormLayout()
     dialog.pipelineLengthInput = QLineEdit()
@@ -121,7 +117,11 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.segmentLengthInput.setReadOnly(True)
     derivedLayout.addRow(QLabel("Pipeline Length (L, m):"), dialog.pipelineLengthInput)
     derivedLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
-    right_layout.addWidget(_make_group_box("Derived (auto-calculated)", derivedLayout))
+    left_layout.addWidget(_make_group_box("Derived (auto-calculated)", derivedLayout))
+
+    left_layout.addStretch(1)
+
+    # ─── RIGHT COLUMN ───────────────────────────────────────────────────────────
 
     # Pipe Diameter (D) inputs — Darcy-Weisbach: D = (8λM² / π²ρ(Δp/L))^(1/5)
     dLayout = QFormLayout()
