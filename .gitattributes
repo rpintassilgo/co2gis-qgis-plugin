@@ -1,0 +1,16 @@
+# Files/dirs excluded from the release archive built by `git archive`
+# (the plugin ZIP published to plugins.qgis.org). Dev-only tooling stays here.
+.github           export-ignore
+.claude           export-ignore
+.vscode           export-ignore
+.gitignore        export-ignore
+.gitattributes    export-ignore
+CLAUDE.md         export-ignore
+CLAUDE.local.md   export-ignore
+Makefile          export-ignore
+pylintrc          export-ignore
+pb_tool.cfg       export-ignore
+plugin_upload.py  export-ignore
+scripts           export-ignore
+docs              export-ignore
+help/source       export-ignore

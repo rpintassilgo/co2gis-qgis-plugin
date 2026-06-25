@@ -18,12 +18,30 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install qgis-plugin-ci
-        run: pip install qgis-plugin-ci
+      - name: Derive version from tag
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - name: Package and publish
-        run: qgis-plugin-ci release ${GITHUB_REF_NAME}
+      - name: Check metadata.txt version matches the tag
+        run: |
+          meta=$(grep -E '^version=' metadata.txt | head -1 | cut -d= -f2 | tr -d '[:space:]')
+          if [ "$meta" != "${{ steps.ver.outputs.version }}" ]; then
+            echo "::error::metadata.txt version ($meta) does not match tag ${GITHUB_REF_NAME} (${{ steps.ver.outputs.version }})"
+            exit 1
+          fi
+
+      - name: Build plugin ZIP
+        # Top-level folder = co2gis (the plugin's package name on plugins.qgis.org).
+        # Dev-only files are dropped via export-ignore in .gitattributes.
+        run: git archive --format=zip --prefix=co2gis/ -o co2gis.zip "${GITHUB_REF_NAME}"
+
+      - name: Create GitHub release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" co2gis.zip --title "${GITHUB_REF_NAME}" --generate-notes
+
+      - name: Upload to plugins.qgis.org
+        env:
           OSGEO_USERNAME: ${{ secrets.OSGEO_USERNAME }}
           OSGEO_PASSWORD: ${{ secrets.OSGEO_PASSWORD }}
+        run: python plugin_upload.py -u "$OSGEO_USERNAME" -w "$OSGEO_PASSWORD" co2gis.zip
