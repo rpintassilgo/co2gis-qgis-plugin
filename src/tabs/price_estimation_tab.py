@@ -146,7 +146,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     ipLayout = QFormLayout()
     dialog.standardizedCostFactorInput = QLineEdit()
     dialog.standardizedCostFactorInput.setText("1357")
-    ipLayout.addRow(QLabel("Standardised Cost Factor (B<sub>c</sub>, €₂₀₁₀/m²):"), dialog.standardizedCostFactorInput)
+    ipLayout.addRow(QLabel("Standardised Cost Factor (B<sub>c</sub>, €/m²):"), dialog.standardizedCostFactorInput)
     right_layout.addWidget(_make_group_box("Segment Cost (I<sub>p</sub>)", ipLayout))
 
     # Booster stations (Sc, IB) inputs
@@ -158,8 +158,8 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.boosterVariableCostInput.setText("0.547")
     dialog.boosterFixedCostInput.setText("0.42")
     boosterLayout.addRow(QLabel("Booster Efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
-    boosterLayout.addRow(QLabel("Variable Cost (α, M€₂₀₁₀/MW):"), dialog.boosterVariableCostInput)
-    boosterLayout.addRow(QLabel("Fixed Cost (β, M€₂₀₁₀):"), dialog.boosterFixedCostInput)
+    boosterLayout.addRow(QLabel("Variable Cost (α, M€/MW):"), dialog.boosterVariableCostInput)
+    boosterLayout.addRow(QLabel("Fixed Cost (β, M€):"), dialog.boosterFixedCostInput)
     right_layout.addWidget(_make_group_box("Booster Stations (S<sub>c</sub>, I<sub>B</sub>)", boosterLayout))
 
     # Populate the derived segment-length field with its initial value
