@@ -14,23 +14,21 @@ Please search existing issues first to avoid duplicates.
 
 ## Development setup
 
-CO2GIS is a QGIS 3.x plugin (PyQGIS / PyQt5) — there's no standalone entry point, it runs inside QGIS. The repository **is** the installed plugin, so clone it directly into your QGIS plugins directory:
+CO2GIS is a QGIS 3.x plugin (PyQGIS / PyQt5) — there's no standalone entry point, it runs inside QGIS. The repository **is** the installed plugin, so it has to live in your QGIS plugins directory:
 
 - **Linux:** `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
 - **macOS:** `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
 - **Windows:** `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\`
 
+[Fork](https://github.com/rpintassilgo/co2gis-qgis-plugin/fork) the repository, then clone your fork into that directory:
+
 ```bash
-git clone https://github.com/rpintassilgo/co2gis-qgis-plugin.git
+git clone https://github.com/<your-username>/co2gis-qgis-plugin.git
 ```
 
 Then enable **CO2GIS** in *Plugins → Manage and Install Plugins → Installed*. Edits take effect on the next plugin reload — the [Plugin Reloader](https://plugins.qgis.org/plugins/plugin_reloader/) plugin is handy during development.
 
 **Requirements:** QGIS 3.0+ with the **GRASS provider** enabled (routing calls `grass7:r.cost` / `r.drain`) and the Processing framework. No extra Python packages — only PyQGIS, PyQt5, GDAL/OGR and NumPy, all shipped with QGIS.
-
-## Testing
-
-There's no automated test suite — testing is manual: reload the plugin and exercise the relevant tab. The plugin logs verbosely to its in-dialog log panel (and a pop-out window); use it for diagnostics rather than `print`. When changing the cost model, verify the routing surface and the CAPEX estimate stay consistent — both implement the same COMET formula and must agree.
 
 ## Code style
 
@@ -44,6 +42,7 @@ Run it inside a QGIS-aware Python environment (PyQGIS imports only resolve again
 
 ## Commits & pull requests
 
+- Work on a branch in your fork, then open a pull request against `master`.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply.
 - Keep pull requests focused — one logical change per PR, with a short description of what and why.
 - Make sure the plugin still loads and the affected workflow runs in QGIS before opening the PR.
