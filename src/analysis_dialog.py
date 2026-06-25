@@ -121,6 +121,9 @@ class AnalysisDialog(QDialog):
         self.co2MassFlowRateInput: QLineEdit
         self.co2densityInput: QLineEdit
         self.pressureDropInput: QLineEdit
+        self.boosterVariableCostInput: QLineEdit
+        self.boosterFixedCostInput: QLineEdit
+        self.boosterEfficiencyInput: QLineEdit
         self.calculatePriceButton: QPushButton
         self.show_formulas_button: QPushButton
         self.calcModePreciseRadio: QRadioButton

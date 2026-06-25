@@ -112,6 +112,9 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.totalPressureDropInput = QLineEdit()
     dialog.segmentLengthInput = QLineEdit()
     dialog.segmentLengthInput.setReadOnly(True)
+    dialog.boosterVariableCostInput = QLineEdit()
+    dialog.boosterFixedCostInput = QLineEdit()
+    dialog.boosterEfficiencyInput = QLineEdit()
 
     dialog.standardizedCostFactorInput.setText("1357")
     dialog.frictionFactorInput.setText("0.015")
@@ -119,6 +122,9 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.co2densityInput.setText("827")
     dialog.pressureDropInput.setText("0.02")
     dialog.totalPressureDropInput.setText("3")
+    dialog.boosterVariableCostInput.setText("0.547")
+    dialog.boosterFixedCostInput.setText("0.42")
+    dialog.boosterEfficiencyInput.setText("0.75")
 
     inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
     inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
@@ -128,6 +134,9 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, in MPa/km):"), dialog.pressureDropInput)
     inputLayout.addRow(QLabel("Total Pressure Drop (Δp, in MPa):"), dialog.totalPressureDropInput)
     inputLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
+    inputLayout.addRow(QLabel("Booster variable cost (α, M€/MW):"), dialog.boosterVariableCostInput)
+    inputLayout.addRow(QLabel("Booster fixed cost (β, M€):"), dialog.boosterFixedCostInput)
+    inputLayout.addRow(QLabel("Booster efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
     inputGroupBox.setLayout(inputLayout)
     right_layout.addWidget(inputGroupBox)
 
@@ -303,10 +312,12 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                     # Booster stations are placed at the end of each full segment.
                     # Pressure drop over a full segment = Δp/L × segment length (= total_pressure_drop)
                     ΔP_booster_segment = Δp_Ltotal * max_segment_length  # Pa (pressure drop over one segment)
-                    Beff = 0.75
+                    Beff = float(dialog.boosterEfficiencyInput.text())
                     Sc_W = (M * ΔP_booster_segment) / (p * Beff) #W (compressor power)
                     Sc_MW = Sc_W / 1e6 # converted to MW
-                    Ib = (0.547 * Sc_MW + 0.42) * 1e6 # Convert M€ to €
+                    α = float(dialog.boosterVariableCostInput.text())  # M€/MW (COMET default: 0.547)
+                    β = float(dialog.boosterFixedCostInput.text())     # M€ fixed cost (COMET default: 0.42)
+                    Ib = (α * Sc_MW + β) * 1e6 # Convert M€ to €
                     booster_costs.append(Ib)
                     dialog.log_message(f"Booster Station after {max_segment_length/1000:.2f} km: ΔP_segment = {ΔP_booster_segment/1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
 
@@ -792,7 +803,7 @@ class FormulaDialog(QDialog):
             "<b>M</b> = CO₂ mass flow rate (kg/s), "
             "<b>ΔP<sub>seg</sub></b> = total pressure drop over one segment = Δp/L × segment length (Pa), "
             "<b>ρ</b> = CO₂ density (kg/m³), "
-            "<b>B<sub>eff</sub></b> = booster efficiency = 0.75. "
+            "<b>B<sub>eff</sub></b> = booster efficiency (default 0.75, editable in the inputs panel). "
             "Result is in Watts (W)."
         )
         Sc_explanation.setWordWrap(True)
@@ -802,14 +813,15 @@ class FormulaDialog(QDialog):
         # --- IB ---
         Ib_formula_label = QLabel("""
             <html><body><p align="center" style="font-size:26px; font-weight:bold; line-height:1.6;">
-            I<sub>B</sub> = (0.547 ⋅ S<sub>c</sub>[MW] + 0.42) × 10⁶
+            I<sub>B</sub> = (α ⋅ S<sub>c</sub>[MW] + β) × 10⁶
             </p></body></html>""")
         Ib_explanation = QLabel(
             "<b>Booster Station Cost (I<sub>B</sub>):</b><br><br>"
             "Investment cost for a booster station in euros (€). "
             "S<sub>c</sub> must be converted to MW before applying the formula. "
-            "The empirical correlation (0.547 × S<sub>c</sub>[MW] + 0.42) gives the cost in M€, "
-            "which is then multiplied by 10⁶ to obtain the result in €."
+            "<b>α</b> (default 0.547 M€/MW) is the variable cost per unit of compressor capacity; "
+            "<b>β</b> (default 0.42 M€) is the fixed installation cost regardless of station size. "
+            "Both constants originate from COMET TN6.4 (van den Broek et al., 2013) and are editable in the inputs panel."
         )
         Ib_explanation.setWordWrap(True)
         grid_layout.addWidget(Ib_formula_label, 3, 0, Qt.AlignCenter)
