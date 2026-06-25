@@ -17,6 +17,18 @@ from ..utils import update_pipeline_length, update_resolution_field
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
+def _make_group_box(title_html: str, form_layout: QFormLayout) -> QGroupBox:
+    """Helper: wrap a QFormLayout in a styled QGroupBox with a centred bold title."""
+    box = QGroupBox()
+    box.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    title = QLabel(title_html)
+    title.setAlignment(Qt.AlignCenter)
+    title.setStyleSheet("font-weight: bold; font-size: 12px;")
+    form_layout.insertRow(0, title)
+    box.setLayout(form_layout)
+    return box
+
+
 def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     """Sets up the UI for the Price Estimation tab."""
     main_layout = QVBoxLayout()
@@ -61,105 +73,103 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
 
     dialog.show_formulas_button = QPushButton("Show Calculation Formulas")
     main_layout.addWidget(dialog.show_formulas_button)
-    
+
     main_layout.addLayout(columns_layout)
 
-    selectionGroupBox = QGroupBox()
-    selectionGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+    # ─── LEFT COLUMN ────────────────────────────────────────────────────────────
+
+    # Select Cost Rasters and Vector
     selectionLayout = QFormLayout()
-    selectionTitle = QLabel("Select Cost Rasters and Vector")
-    selectionTitle.setAlignment(Qt.AlignCenter)
-    selectionTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    selectionLayout.addRow(selectionTitle)
     dialog.pipelineVectorDropdown = QComboBox()
     dialog.landUseCostsDropdown = QComboBox()
     dialog.slopeCostsDropdown = QComboBox()
     dialog.corridorsCostsDropdown = QComboBox()
     dialog.crossingsCostsDropdown = QComboBox()
     dialog.crossingsVectorDropdown = QComboBox()
-    selectionLayout.addRow(QLabel("Select Pipeline Vector:"), dialog.pipelineVectorDropdown)
-    selectionLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
-    selectionLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
-    selectionLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
-    selectionLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
-    selectionLayout.addRow(QLabel("Select Infrastructure Vector (for N):"), dialog.crossingsVectorDropdown)
-    
+    selectionLayout.addRow(QLabel("Pipeline Vector:"), dialog.pipelineVectorDropdown)
+    selectionLayout.addRow(QLabel("Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
+    selectionLayout.addRow(QLabel("Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
+    selectionLayout.addRow(QLabel("Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
+    selectionLayout.addRow(QLabel("Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
+    selectionLayout.addRow(QLabel("Infrastructure Vector (for N):"), dialog.crossingsVectorDropdown)
+    left_layout.addWidget(_make_group_box("Select Cost Rasters and Vector", selectionLayout))
+
+    # Cost Rasters Resolutions (read-only)
+    resolutionsLayout = QFormLayout()
     dialog.landUseCostsResInput = QLineEdit()
     dialog.slopeCostsResInput = QLineEdit()
     dialog.corridorsCostsResInput = QLineEdit()
     dialog.crossingsCostsResInput = QLineEdit()
-    selectionLayout.addRow(QLabel("Land Use Costs Resolution:"), dialog.landUseCostsResInput)
-    selectionLayout.addRow(QLabel("Slope Costs Resolution:"), dialog.slopeCostsResInput)
-    selectionLayout.addRow(QLabel("Corridors Costs Resolution:"), dialog.corridorsCostsResInput)
-    selectionLayout.addRow(QLabel("Crossings Costs Resolution:"), dialog.crossingsCostsResInput)
-    selectionGroupBox.setLayout(selectionLayout)
-    left_layout.addWidget(selectionGroupBox)
+    for inp in (dialog.landUseCostsResInput, dialog.slopeCostsResInput,
+                dialog.corridorsCostsResInput, dialog.crossingsCostsResInput):
+        inp.setReadOnly(True)
+    resolutionsLayout.addRow(QLabel("Land Use (F<sub>lu</sub>):"), dialog.landUseCostsResInput)
+    resolutionsLayout.addRow(QLabel("Slope (F<sub>s</sub>):"), dialog.slopeCostsResInput)
+    resolutionsLayout.addRow(QLabel("Corridors (F<sub>c</sub>):"), dialog.corridorsCostsResInput)
+    resolutionsLayout.addRow(QLabel("Crossings (F<sub>ci</sub>):"), dialog.crossingsCostsResInput)
+    left_layout.addWidget(_make_group_box("Cost Rasters Resolutions", resolutionsLayout))
 
-    inputGroupBox = QGroupBox()
-    inputGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    inputLayout = QFormLayout()
-    inputTitle = QLabel("Equation Input Variables")
-    inputTitle.setAlignment(Qt.AlignCenter)
-    inputTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    inputLayout.addRow(inputTitle)
+    left_layout.addStretch(1)
+
+    # ─── RIGHT COLUMN ───────────────────────────────────────────────────────────
+
+    # Derived inputs (read-only — auto-calculated from selected vector / pressure inputs)
+    derivedLayout = QFormLayout()
     dialog.pipelineLengthInput = QLineEdit()
     dialog.pipelineLengthInput.setReadOnly(True)
-    dialog.standardizedCostFactorInput = QLineEdit()
+    dialog.segmentLengthInput = QLineEdit()
+    dialog.segmentLengthInput.setReadOnly(True)
+    derivedLayout.addRow(QLabel("Pipeline Length (L, m):"), dialog.pipelineLengthInput)
+    derivedLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
+    right_layout.addWidget(_make_group_box("Derived (auto-calculated)", derivedLayout))
+
+    # Pipe Diameter (D) inputs — Darcy-Weisbach: D = (8λM² / π²ρ(Δp/L))^(1/5)
+    dLayout = QFormLayout()
     dialog.frictionFactorInput = QLineEdit()
     dialog.co2MassFlowRateInput = QLineEdit()
     dialog.co2densityInput = QLineEdit()
     dialog.pressureDropInput = QLineEdit()
     dialog.totalPressureDropInput = QLineEdit()
-    dialog.segmentLengthInput = QLineEdit()
-    dialog.segmentLengthInput.setReadOnly(True)
-    dialog.boosterVariableCostInput = QLineEdit()
-    dialog.boosterFixedCostInput = QLineEdit()
-    dialog.boosterEfficiencyInput = QLineEdit()
-
-    dialog.standardizedCostFactorInput.setText("1357")
     dialog.frictionFactorInput.setText("0.015")
     dialog.co2MassFlowRateInput.setText("1")
     dialog.co2densityInput.setText("827")
     dialog.pressureDropInput.setText("0.02")
     dialog.totalPressureDropInput.setText("3")
+    dLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
+    dLayout.addRow(QLabel("CO₂ Mass Flow Rate (M, kg/s):"), dialog.co2MassFlowRateInput)
+    dLayout.addRow(QLabel("CO₂ Density (ρ, kg/m³):"), dialog.co2densityInput)
+    dLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, MPa/km):"), dialog.pressureDropInput)
+    dLayout.addRow(QLabel("Total Pressure Drop (Δp, MPa):"), dialog.totalPressureDropInput)
+    right_layout.addWidget(_make_group_box("Pipe Diameter (D)", dLayout))
+
+    # Segment cost (Ip) inputs — Ip = Bc · D · Σ(Ccell · Lcell)
+    ipLayout = QFormLayout()
+    dialog.standardizedCostFactorInput = QLineEdit()
+    dialog.standardizedCostFactorInput.setText("1357")
+    ipLayout.addRow(QLabel("Standardised Cost Factor (B<sub>c</sub>, €₂₀₁₀/m²):"), dialog.standardizedCostFactorInput)
+    right_layout.addWidget(_make_group_box("Segment Cost (I<sub>p</sub>)", ipLayout))
+
+    # Booster stations (Sc, IB) inputs
+    boosterLayout = QFormLayout()
+    dialog.boosterEfficiencyInput = QLineEdit()
+    dialog.boosterVariableCostInput = QLineEdit()
+    dialog.boosterFixedCostInput = QLineEdit()
+    dialog.boosterEfficiencyInput.setText("0.75")
     dialog.boosterVariableCostInput.setText("0.547")
     dialog.boosterFixedCostInput.setText("0.42")
-    dialog.boosterEfficiencyInput.setText("0.75")
-
-    inputLayout.addRow(QLabel("Pipeline Length (L, in m):"), dialog.pipelineLengthInput)
-    inputLayout.addRow(QLabel("Standardized Cost Factor (B<sub>c</sub>, in €/m²):"), dialog.standardizedCostFactorInput)
-    inputLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
-    inputLayout.addRow(QLabel("CO2 Mass Flow Rate (M, in kg/s):"), dialog.co2MassFlowRateInput)
-    inputLayout.addRow(QLabel("CO2 Density (ρ, in kg/m³):"), dialog.co2densityInput)
-    inputLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, in MPa/km):"), dialog.pressureDropInput)
-    inputLayout.addRow(QLabel("Total Pressure Drop (Δp, in MPa):"), dialog.totalPressureDropInput)
-    inputLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
-    inputLayout.addRow(QLabel("Booster variable cost (α, M€/MW):"), dialog.boosterVariableCostInput)
-    inputLayout.addRow(QLabel("Booster fixed cost (β, M€):"), dialog.boosterFixedCostInput)
-    inputLayout.addRow(QLabel("Booster efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
-    inputGroupBox.setLayout(inputLayout)
-    right_layout.addWidget(inputGroupBox)
+    boosterLayout.addRow(QLabel("Booster Efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
+    boosterLayout.addRow(QLabel("Variable Cost (α, M€₂₀₁₀/MW):"), dialog.boosterVariableCostInput)
+    boosterLayout.addRow(QLabel("Fixed Cost (β, M€₂₀₁₀):"), dialog.boosterFixedCostInput)
+    right_layout.addWidget(_make_group_box("Booster Stations (S<sub>c</sub>, I<sub>B</sub>)", boosterLayout))
 
     # Populate the derived segment-length field with its initial value
     update_segment_length(dialog)
-    
-    # Calculation Mode Selection
-    calcModeGroupBox = QGroupBox()
-    calcModeGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
+
+    # Calculation Mode
     calcModeLayout = QFormLayout()
-    calcModeTitle = QLabel("Calculation Mode")
-    calcModeTitle.setAlignment(Qt.AlignCenter)
-    calcModeTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    calcModeLayout.addRow(calcModeTitle)
-    
-    # Radio buttons
     dialog.calcModePreciseRadio = QRadioButton("Precise (Cell-based with resampling)")
     dialog.calcModeFastRadio = QRadioButton("Fast (Segment-based with point sampling)")
-    
-    # Set default to Precise
     dialog.calcModePreciseRadio.setChecked(True)
-    
-    # Add tooltips
     dialog.calcModePreciseRadio.setToolTip(
         "Resamples all rasters to common resolution, calculates exact length (L) and crossings (N) per cell.\n"
         "More accurate but slower for large datasets."
@@ -168,17 +178,15 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
         "Samples 5 points along each vector segment, uses maximum values.\n"
         "Faster but less spatially accurate."
     )
-    
-    # Button group to make them mutually exclusive
     dialog.calcModeButtonGroup = QButtonGroup()
     dialog.calcModeButtonGroup.addButton(dialog.calcModePreciseRadio)
     dialog.calcModeButtonGroup.addButton(dialog.calcModeFastRadio)
-    
     calcModeLayout.addRow(dialog.calcModePreciseRadio)
     calcModeLayout.addRow(dialog.calcModeFastRadio)
-    calcModeGroupBox.setLayout(calcModeLayout)
-    right_layout.addWidget(calcModeGroupBox)
-    
+    right_layout.addWidget(_make_group_box("Calculation Mode", calcModeLayout))
+
+    right_layout.addStretch(1)
+
     dialog.calculatePriceButton = QPushButton("Calculate pipeline price")
     main_layout.addWidget(dialog.calculatePriceButton)
 
