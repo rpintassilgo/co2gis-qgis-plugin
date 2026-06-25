@@ -13,8 +13,8 @@ email=rodrigoferreirap68681@gmail.com
 
 about=CO2GIS is an open-source QGIS plugin for planning CO₂ transport pipeline infrastructure. It integrates raster-based least-cost path (LCP) routing with cell-level capital-cost (CAPEX) estimation, enabling optimal pipeline corridor selection under multi-criteria land constraints. The plugin implements the COMET cost surface framework, hydraulic pipeline sizing via the Darcy-Weisbach equation, and automatic booster station placement on long segments. Two estimation modes — precise cell-by-cell and fast point-sampling — let users tune the accuracy/speed trade-off. Requires the GRASS GIS provider bundled with QGIS.
 
-tracker=https://github.com/rpintassilgo/qgis-co2-pipeline-routing/issues
-repository=https://github.com/rpintassilgo/qgis-co2-pipeline-routing
+tracker=https://github.com/rpintassilgo/co2gis-qgis-plugin/issues
+repository=https://github.com/rpintassilgo/co2gis-qgis-plugin
 # End of mandatory metadata
 
 # Recommended items:
@@ -26,7 +26,7 @@ changelog=0.1.0 - Initial release: COMET multi-criteria cost surface, GRASS-base
 # Tags are comma separated with spaces allowed
 tags=carbon capture and storage, CCS, CO2, pipeline, least cost path, LCP, CAPEX, routing, raster, GRASS
 
-homepage=https://github.com/rpintassilgo/qgis-co2-pipeline-routing
+homepage=https://github.com/rpintassilgo/co2gis-qgis-plugin
 category=Plugins
 icon=icon.png
 
