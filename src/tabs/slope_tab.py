@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..constants.slope import COMET_SLOPE_INTERVALS
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -152,7 +152,7 @@ def run_slope_costs_creation(dialog: "AnalysisDialog"):
     """Create slope costs raster based on defined intervals."""
     try:
         intervals = get_slope_cost_intervals(dialog)
-        slope_layer = QgsProject.instance().mapLayer(dialog.slopeLayerComboBox.currentData())
+        slope_layer = layer_from_dropdown(dialog.slopeLayerComboBox)
         output_path = dialog.slopeCostsRasterPath.text()
 
         if not slope_layer:

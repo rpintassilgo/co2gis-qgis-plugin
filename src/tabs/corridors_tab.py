@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -115,9 +115,9 @@ def run_corridors_cost_creation(dialog: "AnalysisDialog"):
     """Create corridors cost raster with water body detection - simpler approach like crossings."""
     try:
         # Load inputs
-        corridor_layer = QgsProject.instance().mapLayer(dialog.corridorComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.corridorRefRasterComboBox.currentData())
-        land_use_layer = QgsProject.instance().mapLayer(dialog.corridorLandUseComboBox.currentData())
+        corridor_layer = layer_from_dropdown(dialog.corridorComboBox)
+        ref_layer = layer_from_dropdown(dialog.corridorRefRasterComboBox)
+        land_use_layer = layer_from_dropdown(dialog.corridorLandUseComboBox)
         output_path = dialog.corridorOutputPath.text().strip()
 
         if not all([corridor_layer, ref_layer, land_use_layer, output_path]):

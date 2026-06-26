@@ -20,7 +20,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import apply_symbology, get_layer_path, select_output_file, update_original_resolution
+from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, select_output_file, update_original_resolution
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -163,8 +163,8 @@ def connect_aux_signals(dialog: "AnalysisDialog"):
 def run_vector_combination(dialog: "AnalysisDialog"):
     """Combine two vector layers into one"""
     try:
-        layer1 = QgsProject.instance().mapLayer(dialog.vectorComboBox.currentData())
-        layer2 = QgsProject.instance().mapLayer(dialog.vector2ComboBox.currentData())
+        layer1 = layer_from_dropdown(dialog.vectorComboBox)
+        layer2 = layer_from_dropdown(dialog.vector2ComboBox)
         output_path = dialog.vectorsOutputPath.text().strip()
 
         if not all([layer1, layer2, output_path]):
@@ -198,7 +198,7 @@ def run_vector_combination(dialog: "AnalysisDialog"):
 def run_raster_resampling(dialog: "AnalysisDialog"):
     """Resample Raster"""
     try:
-        raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
+        raster_layer = layer_from_dropdown(dialog.resampleRasterComboBox)
         target_resolution = float(dialog.targetResolutionInput.text().strip())
         resampling_method_text = dialog.resamplingMethodComboBox.currentText()
         output_path = dialog.resampleOutputPath.text().strip()
@@ -227,8 +227,8 @@ def run_raster_resampling(dialog: "AnalysisDialog"):
 def run_raster_clipping(dialog: "AnalysisDialog"):
     """Clip Combined Raster"""
     try:
-        points_layer = QgsProject.instance().mapLayer(dialog.clipPointVectorComboBox.currentData())
-        raster_to_clip = QgsProject.instance().mapLayer(dialog.clipRasterInputDropdown.currentData())
+        points_layer = layer_from_dropdown(dialog.clipPointVectorComboBox)
+        raster_to_clip = layer_from_dropdown(dialog.clipRasterInputDropdown)
         output_path = dialog.clippedRasterPath.text().strip()
 
         if not all([points_layer, raster_to_clip, output_path]):

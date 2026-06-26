@@ -9,6 +9,16 @@ if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
 
 
+def layer_from_dropdown(combo: QComboBox):
+    """Return the map layer whose id is stored as the combo's current item data.
+
+    Replaces the ``QgsProject.instance().mapLayer(<combo>.currentData())``
+    pattern repeated across every tab. Returns ``None`` if nothing is selected
+    or the layer is no longer in the project.
+    """
+    return QgsProject.instance().mapLayer(combo.currentData())
+
+
 def grass_alg_id(name: str) -> str:
     """
     Resolve a GRASS processing algorithm id across QGIS versions.
@@ -219,7 +229,7 @@ def select_output_file(output_field: QLineEdit, file_type: str):
 
 def update_original_resolution(dialog: "AnalysisDialog"):
     """Update the original resolution input field based on the selected raster."""
-    raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
+    raster_layer = layer_from_dropdown(dialog.resampleRasterComboBox)
     if raster_layer:
         crs = raster_layer.crs()
         resolution_x = raster_layer.rasterUnitsPerPixelX()

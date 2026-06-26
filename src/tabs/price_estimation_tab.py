@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from osgeo import gdal
-from qgis.core import QgsGeometry, QgsPointXY, QgsProject, QgsRaster
+from qgis.core import QgsGeometry, QgsPointXY, QgsRaster
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
@@ -27,7 +27,7 @@ from ..constants.comet import N_CAP
 from ..core.comet import comet_cell_cost
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import update_pipeline_length, update_resolution_field
+from ..utils import layer_from_dropdown, update_pipeline_length, update_resolution_field
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -254,14 +254,14 @@ def run_price_estimation(dialog: "AnalysisDialog"):
     try:
         dialog.log_message("Calculating pipeline price...", "Price Estimation")
 
-        pipeline_layer = QgsProject.instance().mapLayer(dialog.pipelineVectorDropdown.currentData())
+        pipeline_layer = layer_from_dropdown(dialog.pipelineVectorDropdown)
         if not pipeline_layer:
             raise ValueError("Pipeline vector must be selected.")
 
-        land_use_layer = QgsProject.instance().mapLayer(dialog.landUseCostsDropdown.currentData())
-        slope_layer = QgsProject.instance().mapLayer(dialog.slopeCostsDropdown.currentData())
-        corridors_layer = QgsProject.instance().mapLayer(dialog.corridorsCostsDropdown.currentData())
-        crossings_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
+        land_use_layer = layer_from_dropdown(dialog.landUseCostsDropdown)
+        slope_layer = layer_from_dropdown(dialog.slopeCostsDropdown)
+        corridors_layer = layer_from_dropdown(dialog.corridorsCostsDropdown)
+        crossings_layer = layer_from_dropdown(dialog.crossingsCostsDropdown)
 
         # Log warnings for missing rasters (will default to 1.0)
         for name, layer in [
@@ -282,7 +282,7 @@ def run_price_estimation(dialog: "AnalysisDialog"):
             )
         else:
             dialog.log_message("Calculation mode: Fast (Segment-based with point sampling)", "Price Estimation")
-            crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
+            crossings_vector_layer = layer_from_dropdown(dialog.crossingsVectorDropdown)
             if not crossings_vector_layer:
                 dialog.log_message(
                     "  ⚠️ Infrastructure Vector (for N): Not selected — N will be 1 for all segments (neutral, preserves Fci contribution)",
@@ -501,9 +501,7 @@ def extract_raster_values_along_pipeline_cells(
 
     # Get infrastructure vector for N calculation
     crossings_vector_layer = (
-        QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
-        if hasattr(dialog, "crossingsVectorDropdown")
-        else None
+        layer_from_dropdown(dialog.crossingsVectorDropdown) if hasattr(dialog, "crossingsVectorDropdown") else None
     )
 
     if not crossings_vector_layer:

@@ -21,7 +21,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..constants.land_use import COMET_LAND_USE_COSTS
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -83,7 +83,7 @@ def on_land_use_layer_changed(dialog: "AnalysisDialog"):
 def run_land_use_cost_creation(dialog: "AnalysisDialog"):
     """Create Land Use Cost Raster"""
     try:
-        land_use_layer = QgsProject.instance().mapLayer(dialog.landUseComboBox.currentData())
+        land_use_layer = layer_from_dropdown(dialog.landUseComboBox)
         class_costs = get_land_use_costs(dialog)
 
         if not land_use_layer:

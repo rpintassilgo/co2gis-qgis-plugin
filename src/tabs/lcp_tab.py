@@ -13,7 +13,7 @@ from ..constants.comet import COST_FLOOR, N_CAP
 from ..core.comet import comet_cell_cost
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import grass_alg_id, select_output_file
+from ..utils import grass_alg_id, layer_from_dropdown, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -92,11 +92,11 @@ def run_raster_combination(dialog: "AnalysisDialog"):
     """Combine Cost Rasters using COMET formula with N factor"""
     try:
         # Load all layers
-        costs_layer = QgsProject.instance().mapLayer(dialog.combineLandUseDropdown.currentData())
-        slope_layer = QgsProject.instance().mapLayer(dialog.combineSlopeDropdown.currentData())
-        corridors_layer = QgsProject.instance().mapLayer(dialog.combineCorridorsDropdown.currentData())
-        crossings_layer = QgsProject.instance().mapLayer(dialog.combineCrossingsDropdown.currentData())
-        N_layer = QgsProject.instance().mapLayer(dialog.combineNRasterDropdown.currentData())
+        costs_layer = layer_from_dropdown(dialog.combineLandUseDropdown)
+        slope_layer = layer_from_dropdown(dialog.combineSlopeDropdown)
+        corridors_layer = layer_from_dropdown(dialog.combineCorridorsDropdown)
+        crossings_layer = layer_from_dropdown(dialog.combineCrossingsDropdown)
+        N_layer = layer_from_dropdown(dialog.combineNRasterDropdown)
         output_path = dialog.combinedRasterPath.text().strip()
 
         if not output_path:
@@ -115,8 +115,8 @@ def run_raster_combination(dialog: "AnalysisDialog"):
 def run_lcp_creation(dialog: "AnalysisDialog"):
     """Generate Least Cost Path Vector"""
     try:
-        points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
-        combined_layer = QgsProject.instance().mapLayer(dialog.lcpInputDropdown.currentData())
+        points_layer = layer_from_dropdown(dialog.pointsComboBox)
+        combined_layer = layer_from_dropdown(dialog.lcpInputDropdown)
         vector_output_path = dialog.finalPath.text().strip()
 
         if not all([points_layer, combined_layer, vector_output_path]):

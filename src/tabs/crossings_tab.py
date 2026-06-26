@@ -9,7 +9,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -107,8 +107,8 @@ def run_crossings_cost_creation(dialog: "AnalysisDialog"):
     """Create a single-band cost raster from a vector, aligned to a reference raster"""
     try:
         # Get selected layers and parameters
-        crossing_layer = QgsProject.instance().mapLayer(dialog.crossingComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.crossingRefRasterComboBox.currentData())
+        crossing_layer = layer_from_dropdown(dialog.crossingComboBox)
+        ref_layer = layer_from_dropdown(dialog.crossingRefRasterComboBox)
         output_path = dialog.crossingOutputPath.text().strip()
         crossing_cost = float(dialog.crossingCostInput.text())
         no_crossing_cost = float(dialog.crossingNoCostInput.text())
@@ -168,8 +168,8 @@ def run_n_raster_creation(dialog: "AnalysisDialog"):
     """
     try:
         # Get selected layers
-        crossing_layer = QgsProject.instance().mapLayer(dialog.nCrossingVectorComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.nCrossingRefRasterComboBox.currentData())
+        crossing_layer = layer_from_dropdown(dialog.nCrossingVectorComboBox)
+        ref_layer = layer_from_dropdown(dialog.nCrossingRefRasterComboBox)
         output_path = dialog.nCrossingOutputPath.text().strip()
 
         if not crossing_layer or not ref_layer or not output_path:
