@@ -6,6 +6,7 @@
 [general]
 name=CO2GIS
 qgisMinimumVersion=3.0
+qgisMaximumVersion=4.99
 description=CO₂ transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
 version=0.1.0
 author=Rodrigo Pintassilgo

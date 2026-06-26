@@ -1,9 +1,9 @@
 import os
 from typing import TYPE_CHECKING
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, QTableWidget, QHeaderView, QCheckBox
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 
@@ -72,7 +72,7 @@ def setup_corridors_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 
 def populate_corridor_land_use_table(dialog, layer_id):
     from qgis.core import QgsProject, QgsRasterLayer
-    from PyQt5.QtWidgets import QTableWidgetItem
+    from qgis.PyQt.QtWidgets import QTableWidgetItem
     dialog.corridorLandUseTable.setRowCount(0)
     lyr = QgsProject.instance().mapLayer(layer_id)
     if not isinstance(lyr, QgsRasterLayer):

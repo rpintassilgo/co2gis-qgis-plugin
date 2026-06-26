@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
     QGroupBox, QTableWidget, QHeaderView, QSpinBox, QCheckBox, QTableWidgetItem
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 from osgeo import gdal

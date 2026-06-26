@@ -1,5 +1,5 @@
-from PyQt5.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox, QRadioButton, QButtonGroup
-from PyQt5.QtCore import Qt, QMetaObject, Q_ARG
+from qgis.PyQt.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox, QRadioButton, QButtonGroup
+from qgis.PyQt.QtCore import Qt, QMetaObject, Q_ARG
 from qgis.core import QgsProject
 from typing import Optional
 

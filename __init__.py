@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from PyQt5.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction
 
 from .src.analysis_dialog import AnalysisDialog
 
