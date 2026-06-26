@@ -6,14 +6,14 @@ import numpy as np
 from osgeo import gdal
 from qgis import processing
 from qgis.core import QgsProject, QgsRasterLayer
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QPushButton
 
 from ..constants.comet import COST_FLOOR, N_CAP
 from ..core.comet import comet_cell_cost
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import grass_alg_id, layer_from_dropdown, select_output_file
+from ..utils import grass_alg_id, layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -22,13 +22,7 @@ if TYPE_CHECKING:
 def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the LCP (Least Cost Path) tab."""
     # Combined Costs GroupBox
-    combinedCostsGroupBox = QGroupBox()
-    combinedCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     combinedCostsLayout = QFormLayout()
-    combinedCostsTitle = QLabel("Create Combined Costs Raster")
-    combinedCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    combinedCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    combinedCostsLayout.addRow(combinedCostsTitle)
     dialog.combineLandUseDropdown = QComboBox()
     dialog.combineSlopeDropdown = QComboBox()
     dialog.combineCorridorsDropdown = QComboBox()
@@ -43,43 +37,27 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
         QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.combineCrossingsDropdown
     )
     combinedCostsLayout.addRow(QLabel("Select Number of Crossings Raster (N):"), dialog.combineNRasterDropdown)
-    dialog.combinedRasterPath = QLineEdit()
-    dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
-    dialog.combinedRasterBrowse = QPushButton("Browse")
-    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath, "tif"))
-    combinedFileLayout = QHBoxLayout()
-    combinedFileLayout.addWidget(dialog.combinedRasterPath)
-    combinedFileLayout.addWidget(dialog.combinedRasterBrowse)
+    combinedFileLayout = add_output_path_row(
+        dialog, "combinedRasterPath", "combinedRasterBrowse", "tif", "Choose output path for Combined Raster"
+    )
     combinedCostsLayout.addRow(combinedFileLayout)
     dialog.combine_button = QPushButton("Create Combined Raster")
     combinedCostsLayout.addRow(dialog.combine_button)
-    combinedCostsGroupBox.setLayout(combinedCostsLayout)
-    layout.addWidget(combinedCostsGroupBox)
+    layout.addWidget(make_group_box("Create Combined Costs Raster", combinedCostsLayout))
 
     # LCP GroupBox
-    lcpGroupBox = QGroupBox()
-    lcpGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     lcpPathLayout = QFormLayout()
-    lcpTitle = QLabel("Create Least Cost Path")
-    lcpTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    lcpTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    lcpPathLayout.addRow(lcpTitle)
     dialog.pointsComboBox = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
     dialog.lcpInputDropdown = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
-    dialog.finalPath = QLineEdit()
-    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector")
-    dialog.finalBrowse = QPushButton("Browse")
-    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
-    finalFileLayout = QHBoxLayout()
-    finalFileLayout.addWidget(dialog.finalPath)
-    finalFileLayout.addWidget(dialog.finalBrowse)
+    finalFileLayout = add_output_path_row(
+        dialog, "finalPath", "finalBrowse", "gpkg", "Choose output path for LCP Vector"
+    )
     lcpPathLayout.addRow(finalFileLayout)
     dialog.final_button = QPushButton("Create Least Cost Path")
     lcpPathLayout.addRow(dialog.final_button)
-    lcpGroupBox.setLayout(lcpPathLayout)
-    layout.addWidget(lcpGroupBox)
+    layout.addWidget(make_group_box("Create Least Cost Path", lcpPathLayout))
 
 
 def connect_lcp_signals(dialog: "AnalysisDialog"):

@@ -3,13 +3,11 @@ from typing import TYPE_CHECKING
 
 import processing
 from qgis.core import QgsProject, QgsRasterLayer, QgsRectangle, QgsVectorLayer
-from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,7 +18,8 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, select_output_file, update_original_resolution
+from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, update_original_resolution
+from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -29,13 +28,7 @@ if TYPE_CHECKING:
 def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     """Sets up the Aux tab with its various functionalities."""
     # Combine Vectors GroupBox
-    combineVectorsGroupBox = QGroupBox()
-    combineVectorsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     combineVectorsLayout = QFormLayout()
-    combineVectorsTitle = QLabel("Combine Vectors")
-    combineVectorsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    combineVectorsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    combineVectorsLayout.addRow(combineVectorsTitle)
     infoCombineText = QLabel(
         "ⓘ Combine vectors functionality is useful to combine roads and railroads vectors for crossings to calculate crossings cost raster in Corridors and Crossings tab later."
     )
@@ -48,27 +41,16 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     vectorSelectionLayout.addWidget(dialog.vectorComboBox)
     vectorSelectionLayout.addWidget(dialog.vector2ComboBox)
     combineVectorsLayout.addRow(QLabel("Select Vectors:"), vectorSelectionLayout)
-    dialog.vectorsOutputPath = QLineEdit()
-    dialog.vectorsOutputPath.setPlaceholderText("Choose output path for Combined Vectors")
-    dialog.vectorsBrowse = QPushButton("Browse")
-    dialog.vectorsBrowse.clicked.connect(lambda: select_output_file(dialog.vectorsOutputPath, "shp"))
-    outputVectorsLayout = QHBoxLayout()
-    outputVectorsLayout.addWidget(dialog.vectorsOutputPath)
-    outputVectorsLayout.addWidget(dialog.vectorsBrowse)
+    outputVectorsLayout = add_output_path_row(
+        dialog, "vectorsOutputPath", "vectorsBrowse", "shp", "Choose output path for Combined Vectors"
+    )
     combineVectorsLayout.addRow(outputVectorsLayout)
     dialog.runCombineVectorsButton = QPushButton("Combine vectors")
     combineVectorsLayout.addRow(dialog.runCombineVectorsButton)
-    combineVectorsGroupBox.setLayout(combineVectorsLayout)
-    layout.addWidget(combineVectorsGroupBox)
+    layout.addWidget(make_group_box("Combine Vectors", combineVectorsLayout))
 
     # Resample Raster GroupBox
-    resampleGroupBox = QGroupBox()
-    resampleGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     resampleLayout = QFormLayout()
-    resampleTitle = QLabel("Resample Raster")
-    resampleTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    resampleTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    resampleLayout.addRow(resampleTitle)
     infoResampleText = QLabel(
         "ⓘ For accurate GIS analysis, use a raster with a projected CRS (meters) instead of a geographic CRS (degrees), as degrees are not uniform in distance across different latitudes."
     )
@@ -86,27 +68,16 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.resamplingMethodComboBox = QComboBox()
     dialog.resamplingMethodComboBox.addItems(["Nearest Neighbor", "Bilinear", "Cubic", "Lanczos"])
     resampleLayout.addRow(QLabel("Resampling Method:"), dialog.resamplingMethodComboBox)
-    dialog.resampleOutputPath = QLineEdit()
-    dialog.resampleOutputPath.setPlaceholderText("Choose output path for Resampled Raster")
-    dialog.resampleBrowse = QPushButton("Browse")
-    dialog.resampleBrowse.clicked.connect(lambda: select_output_file(dialog.resampleOutputPath, "tif"))
-    resampleOutputLayout = QHBoxLayout()
-    resampleOutputLayout.addWidget(dialog.resampleOutputPath)
-    resampleOutputLayout.addWidget(dialog.resampleBrowse)
+    resampleOutputLayout = add_output_path_row(
+        dialog, "resampleOutputPath", "resampleBrowse", "tif", "Choose output path for Resampled Raster"
+    )
     resampleLayout.addRow(resampleOutputLayout)
     dialog.runResampleButton = QPushButton("Run Resampling")
     resampleLayout.addRow(dialog.runResampleButton)
-    resampleGroupBox.setLayout(resampleLayout)
-    layout.addWidget(resampleGroupBox)
+    layout.addWidget(make_group_box("Resample Raster", resampleLayout))
 
     # Clip Raster GroupBox
-    clipGroupBox = QGroupBox()
-    clipGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     clipLayout = QFormLayout()
-    clipTitle = QLabel("Clip Raster to Area")
-    clipTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    clipLayout.addRow(clipTitle)
     infoClipText = QLabel(
         "ⓘ This functionality clips rasters based on a two-point vector layer (like a rectangle between points). It's useful to reduce raster sizes for faster processing. For example, when calculating a new LCP, you can clip DEM and land use rasters to make computations lighter."
     )
@@ -138,18 +109,13 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.copySymbologyCheckbox = QCheckBox("Copy Symbology to Clipped Raster")
     dialog.copySymbologyCheckbox.setChecked(False)
     clipLayout.addRow(dialog.copySymbologyCheckbox)
-    dialog.clippedRasterPath = QLineEdit()
-    dialog.clippedRasterPath.setPlaceholderText("Choose output path for Clipped Raster")
-    dialog.clippedRasterBrowse = QPushButton("Browse")
-    dialog.clippedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.clippedRasterPath, "tif"))
-    clippedFileLayout = QHBoxLayout()
-    clippedFileLayout.addWidget(dialog.clippedRasterPath)
-    clippedFileLayout.addWidget(dialog.clippedRasterBrowse)
+    clippedFileLayout = add_output_path_row(
+        dialog, "clippedRasterPath", "clippedRasterBrowse", "tif", "Choose output path for Clipped Raster"
+    )
     clipLayout.addRow(clippedFileLayout)
     dialog.clip_button = QPushButton("Clip Raster to Area")
     clipLayout.addRow(dialog.clip_button)
-    clipGroupBox.setLayout(clipLayout)
-    layout.addWidget(clipGroupBox)
+    layout.addWidget(make_group_box("Clip Raster to Area", clipLayout))
 
 
 def connect_aux_signals(dialog: "AnalysisDialog"):

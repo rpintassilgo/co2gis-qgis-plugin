@@ -8,7 +8,6 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -18,7 +17,8 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import layer_from_dropdown, select_output_file
+from ..utils import layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -57,12 +57,7 @@ def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     layout.addRow(dialog.corridorLandUseTable)
 
     # Output path
-    dialog.corridorOutputPath = QLineEdit()
-    dialog.corridorBrowse = QPushButton("Browse")
-    dialog.corridorBrowse.clicked.connect(lambda: select_output_file(dialog.corridorOutputPath, "tif"))
-    path_layout = QHBoxLayout()
-    path_layout.addWidget(dialog.corridorOutputPath)
-    path_layout.addWidget(dialog.corridorBrowse)
+    path_layout = add_output_path_row(dialog, "corridorOutputPath", "corridorBrowse", "tif")
     layout.addRow(path_layout)
 
     # Run button

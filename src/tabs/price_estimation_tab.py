@@ -11,7 +11,6 @@ from qgis.PyQt.QtWidgets import (
     QDialog,
     QFormLayout,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -28,21 +27,10 @@ from ..core.comet import comet_cell_cost
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
 from ..utils import layer_from_dropdown, update_pipeline_length, update_resolution_field
+from ..widgets.browse_row import make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
-
-
-def _make_group_box(title_html: str, form_layout: QFormLayout) -> QGroupBox:
-    """Helper: wrap a QFormLayout in a styled QGroupBox with a centred bold title."""
-    box = QGroupBox()
-    box.setStyleSheet("QGroupBox { border: 1px solid grey; }")
-    title = QLabel(title_html)
-    title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    title.setStyleSheet("font-weight: bold; font-size: 12px;")
-    form_layout.insertRow(0, title)
-    box.setLayout(form_layout)
-    return box
 
 
 def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
@@ -108,7 +96,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     selectionLayout.addRow(QLabel("Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
     selectionLayout.addRow(QLabel("Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
     selectionLayout.addRow(QLabel("Infrastructure Vector (for N):"), dialog.crossingsVectorDropdown)
-    left_layout.addWidget(_make_group_box("Select Cost Rasters and Vector", selectionLayout))
+    left_layout.addWidget(make_group_box("Select Cost Rasters and Vector", selectionLayout))
 
     # Cost Rasters Resolutions (read-only)
     resolutionsLayout = QFormLayout()
@@ -127,7 +115,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     resolutionsLayout.addRow(QLabel("Slope (F<sub>s</sub>):"), dialog.slopeCostsResInput)
     resolutionsLayout.addRow(QLabel("Corridors (F<sub>c</sub>):"), dialog.corridorsCostsResInput)
     resolutionsLayout.addRow(QLabel("Crossings (F<sub>ci</sub>):"), dialog.crossingsCostsResInput)
-    left_layout.addWidget(_make_group_box("Cost Rasters Resolutions", resolutionsLayout))
+    left_layout.addWidget(make_group_box("Cost Rasters Resolutions", resolutionsLayout))
 
     # Derived inputs (read-only — auto-calculated from selected vector / pressure inputs)
     derivedLayout = QFormLayout()
@@ -137,7 +125,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.segmentLengthInput.setReadOnly(True)
     derivedLayout.addRow(QLabel("Pipeline Length (L, m):"), dialog.pipelineLengthInput)
     derivedLayout.addRow(QLabel("Segment Length (km):"), dialog.segmentLengthInput)
-    left_layout.addWidget(_make_group_box("Derived (auto-calculated)", derivedLayout))
+    left_layout.addWidget(make_group_box("Derived (auto-calculated)", derivedLayout))
 
     left_layout.addStretch(1)
 
@@ -160,14 +148,14 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dLayout.addRow(QLabel("CO₂ Density (ρ, kg/m³):"), dialog.co2densityInput)
     dLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, MPa/km):"), dialog.pressureDropInput)
     dLayout.addRow(QLabel("Total Pressure Drop (Δp, MPa):"), dialog.totalPressureDropInput)
-    right_layout.addWidget(_make_group_box("Pipe Diameter (D)", dLayout))
+    right_layout.addWidget(make_group_box("Pipe Diameter (D)", dLayout))
 
     # Segment cost (Ip) inputs — Ip = Bc · D · Σ(Ccell · Lcell)
     ipLayout = QFormLayout()
     dialog.standardizedCostFactorInput = QLineEdit()
     dialog.standardizedCostFactorInput.setText(str(capex.STANDARDIZED_COST_FACTOR))
     ipLayout.addRow(QLabel("Standardised Cost Factor (B<sub>c</sub>, €/m²):"), dialog.standardizedCostFactorInput)
-    right_layout.addWidget(_make_group_box("Segment Cost (I<sub>p</sub>)", ipLayout))
+    right_layout.addWidget(make_group_box("Segment Cost (I<sub>p</sub>)", ipLayout))
 
     # Booster stations (Sc, IB) inputs
     boosterLayout = QFormLayout()
@@ -180,7 +168,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     boosterLayout.addRow(QLabel("Booster Efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
     boosterLayout.addRow(QLabel("Variable Cost (α, M€/MW):"), dialog.boosterVariableCostInput)
     boosterLayout.addRow(QLabel("Fixed Cost (β, M€):"), dialog.boosterFixedCostInput)
-    right_layout.addWidget(_make_group_box("Booster Stations (S<sub>c</sub>, I<sub>B</sub>)", boosterLayout))
+    right_layout.addWidget(make_group_box("Booster Stations (S<sub>c</sub>, I<sub>B</sub>)", boosterLayout))
 
     # Populate the derived segment-length field with its initial value
     update_segment_length(dialog)
@@ -202,7 +190,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.calcModeButtonGroup.addButton(dialog.calcModeFastRadio)
     calcModeLayout.addRow(dialog.calcModePreciseRadio)
     calcModeLayout.addRow(dialog.calcModeFastRadio)
-    right_layout.addWidget(_make_group_box("Calculation Mode", calcModeLayout))
+    right_layout.addWidget(make_group_box("Calculation Mode", calcModeLayout))
 
     right_layout.addStretch(1)
 
