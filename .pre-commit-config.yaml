@@ -1,0 +1,25 @@
+# Pre-commit hooks for this QGIS plugin.
+# One-time setup after cloning:  pre-commit install
+# Run manually on everything:    pre-commit run --all-files
+#
+# These run LOCALLY before each commit (not on GitHub). Ruff config lives in
+# pyproject.toml. pylint is intentionally excluded: it needs the QGIS-bundled
+# interpreter to resolve `qgis.*` imports, so run it by hand inside QGIS.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      # Linter — autofixes what it safely can, blocks on the rest.
+      - id: ruff-check
+        args: [--fix]
+      # Formatter — the "prettier for Python".
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-merge-conflict
+      - id: check-added-large-files

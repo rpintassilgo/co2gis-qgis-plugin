@@ -1,0 +1,21 @@
+[tool.ruff]
+# Line width used by the formatter when it wraps code. Long log strings / URLs
+# that cannot be split are left untouched (E501 is intentionally not enabled).
+line-length = 120
+# Oldest Python the plugin must run on. QGIS 3.x ships Python 3.9+, so keep
+# modernization (pyupgrade-style) suggestions compatible with that floor.
+target-version = "py39"
+# Generated Sphinx help scaffolding is not hand-maintained plugin code.
+extend-exclude = ["help"]
+
+[tool.ruff.lint]
+# Ruff's defaults (pyflakes `F` + the focused pycodestyle subset `E4/E7/E9`),
+# plus warnings `W` and import sorting `I`. This mirrors the rules the codebase
+# was already cleaned against; `E501` (line-too-long) stays off because the
+# formatter handles wrapping and the remaining long lines are deliberate.
+select = ["E4", "E7", "E9", "F", "W", "I"]
+
+[tool.ruff.format]
+# Black-compatible defaults, stated explicitly.
+quote-style = "double"
+indent-style = "space"
