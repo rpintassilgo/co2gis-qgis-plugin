@@ -1,23 +1,32 @@
 from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QFormLayout, QTextEdit, QTabWidget, QWidget,
-    QPushButton, QComboBox, QSplitter, QDialog
-)
-from qgis.PyQt.QtCore import Qt
 
-from .tabs.land_use_tab import setup_land_use_tab
-from .tabs.slope_tab import setup_slope_tab
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QPushButton,
+    QSplitter,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
 from .tabs.aux_tab import setup_aux_tab
+from .tabs.corridors_tab import setup_corridors_tab
+from .tabs.crossings_tab import connect_crossings_signals, setup_crossings_tab
+from .tabs.land_use_tab import setup_land_use_tab
 from .tabs.lcp_tab import setup_lcp_tab
 from .tabs.price_estimation_tab import setup_price_estimation_tab
-from .tabs.crossings_tab import setup_crossings_tab, connect_crossings_signals
-from .tabs.corridors_tab import setup_corridors_tab
+from .tabs.slope_tab import setup_slope_tab
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
 
 
-def setup_ui(dialog: 'AnalysisDialog'):
+def setup_ui(dialog: "AnalysisDialog"):
     """Set up the main UI for AnalysisDialog."""
     dialog.setWindowTitle("CO2GIS")
     dialog.setMinimumSize(900, 600)
@@ -144,7 +153,9 @@ def setup_ui(dialog: 'AnalysisDialog'):
             win.setMinimumSize(600, 300)
             win.resize(800, 400)
             win.setSizeGripEnabled(True)
-            win.setStyleSheet("QDialog { background-color: #2a2a2a; } QTextEdit { color: white; background-color: #1e1e1e; }")
+            win.setStyleSheet(
+                "QDialog { background-color: #2a2a2a; } QTextEdit { color: white; background-color: #1e1e1e; }"
+            )
             win_layout = QVBoxLayout(win)
             win_layout.setContentsMargins(6, 6, 6, 6)
 

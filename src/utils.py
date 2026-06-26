@@ -1,10 +1,9 @@
-from typing import TYPE_CHECKING
 import os
-from qgis.core import (
-    QgsProject, QgsRasterLayer, QgsVectorLayer, QgsWkbTypes, QgsUnitTypes, QgsMapLayer
-)
-from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QFileDialog, QCompleter
+from typing import TYPE_CHECKING
+
+from qgis.core import QgsMapLayer, QgsProject, QgsRasterLayer, QgsUnitTypes, QgsVectorLayer, QgsWkbTypes
 from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import QComboBox, QCompleter, QFileDialog, QLineEdit
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
@@ -22,6 +21,7 @@ def grass_alg_id(name: str) -> str:
     :param name: algorithm name without prefix, e.g. ``"r.cost"``.
     """
     from qgis.core import QgsApplication
+
     registry = QgsApplication.processingRegistry()
     for prefix in ("grass", "grass7"):
         alg_id = f"{prefix}:{name}"
@@ -46,7 +46,7 @@ def make_searchable_dropdown(dropdown: QComboBox):
         completer.setCaseSensitivity(Qt.CaseInsensitive)  # Case-insensitive search
 
 
-def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
+def populate_layer_dropdowns(dialog: "AnalysisDialog"):
     """Populate all dropdowns with available layers."""
     # ... (code from dropdowns.py)
     # Clear all dropdowns first
@@ -145,7 +145,7 @@ def populate_layer_dropdowns(dialog: 'AnalysisDialog'):
         dialog.log_message("No raster layers found for resampling.", "System")
 
 
-def update_resolution_field(dialog: 'AnalysisDialog', combo_box: QComboBox, line_edit: QLineEdit):
+def update_resolution_field(dialog: "AnalysisDialog", combo_box: QComboBox, line_edit: QLineEdit):
     """Update the resolution input field based on the selected raster."""
     layer_id = combo_box.currentData()
     if not layer_id:
@@ -162,7 +162,7 @@ def update_resolution_field(dialog: 'AnalysisDialog', combo_box: QComboBox, line
         line_edit.setText(f"~{avg_resolution} {unit}")
 
 
-def update_pipeline_length(dialog: 'AnalysisDialog'):
+def update_pipeline_length(dialog: "AnalysisDialog"):
     """Calculate the total length of the selected pipeline vector and update the input field."""
     dialog.log_message("Updating pipeline length...", "Price Estimation")
     selected_index = dialog.pipelineVectorDropdown.currentIndex()
@@ -176,7 +176,9 @@ def update_pipeline_length(dialog: 'AnalysisDialog'):
     layer = QgsProject.instance().mapLayer(layer_id)
 
     if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != QgsWkbTypes.LineGeometry:
-        dialog.log_message(f"Selected layer '{layer.name() if layer else 'None'}' is not a valid line vector.", "Price Estimation")
+        dialog.log_message(
+            f"Selected layer '{layer.name() if layer else 'None'}' is not a valid line vector.", "Price Estimation"
+        )
         dialog.pipelineLengthInput.setText("")
         return
 
@@ -215,7 +217,7 @@ def select_output_file(output_field: QLineEdit, file_type: str):
             output_field.setText(selected_file)
 
 
-def update_original_resolution(dialog: 'AnalysisDialog'):
+def update_original_resolution(dialog: "AnalysisDialog"):
     """Update the original resolution input field based on the selected raster."""
     raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
     if raster_layer:

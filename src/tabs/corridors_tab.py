@@ -1,11 +1,20 @@
 import os
 from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, QTableWidget, QHeaderView, QCheckBox
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRasterLayer
+
 from qgis import processing
+from qgis.core import QgsProject, QgsRasterLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+)
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
@@ -14,7 +23,7 @@ if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_corridors_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     # Corridor and reference selection
     dialog.corridorComboBox = QComboBox()
     layout.addRow(QLabel("Select Corridor Vector:"), dialog.corridorComboBox)
@@ -73,12 +82,13 @@ def setup_corridors_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
 def populate_corridor_land_use_table(dialog, layer_id):
     from qgis.core import QgsProject, QgsRasterLayer
     from qgis.PyQt.QtWidgets import QTableWidgetItem
+
     dialog.corridorLandUseTable.setRowCount(0)
     lyr = QgsProject.instance().mapLayer(layer_id)
     if not isinstance(lyr, QgsRasterLayer):
         return
     rnd = lyr.renderer()
-    if not hasattr(rnd, 'classes'):
+    if not hasattr(rnd, "classes"):
         return
     for entry in rnd.classes():
         row = dialog.corridorLandUseTable.rowCount()
@@ -94,13 +104,13 @@ def populate_corridor_land_use_table(dialog, layer_id):
         dialog.corridorLandUseTable.setCellWidget(row, 2, chk)
 
 
-def connect_corridors_signals(dialog: 'AnalysisDialog'):
+def connect_corridors_signals(dialog: "AnalysisDialog"):
     dialog.runCreateRasterFromCorridorButton.clicked.connect(
         lambda _: run_in_background(dialog, run_corridors_cost_creation)
     )
 
 
-def run_corridors_cost_creation(dialog: 'AnalysisDialog'):
+def run_corridors_cost_creation(dialog: "AnalysisDialog"):
     """Create corridors cost raster with water body detection - simpler approach like crossings."""
     try:
         # Load inputs
@@ -138,10 +148,17 @@ def run_corridors_cost_creation(dialog: 'AnalysisDialog'):
 
         # Create corridor cost raster with buffer zones and water detection
         create_corridor_cost_raster_with_buffers(
-            corridor_layer, land_use_layer, ref_layer, water_ids,
-            present_offshore_cost, present_onshore_cost,
-            absent_offshore_cost, absent_onshore_cost,
-            buffer_distance, output_path, dialog
+            corridor_layer,
+            land_use_layer,
+            ref_layer,
+            water_ids,
+            present_offshore_cost,
+            present_onshore_cost,
+            absent_offshore_cost,
+            absent_onshore_cost,
+            buffer_distance,
+            output_path,
+            dialog,
         )
 
         # Load result into QGIS
@@ -157,33 +174,43 @@ def run_corridors_cost_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Corridors cost creation failed: {str(e)}", "Corridors")
 
 
-def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref_layer, water_ids,
-                                             present_offshore_cost, present_onshore_cost,
-                                             absent_offshore_cost, absent_onshore_cost,
-                                             buffer_distance, output_path, dialog):
+def create_corridor_cost_raster_with_buffers(
+    corridor_layer,
+    land_use_layer,
+    ref_layer,
+    water_ids,
+    present_offshore_cost,
+    present_onshore_cost,
+    absent_offshore_cost,
+    absent_onshore_cost,
+    buffer_distance,
+    output_path,
+    dialog,
+):
     """Create corridor cost raster with buffer zones and proper water/land detection."""
     try:
-        from osgeo import gdal
-        import numpy as np
         import os
+
+        import numpy as np
+        from osgeo import gdal
 
         dialog.log_message(f"Creating corridor buffer zones ({buffer_distance}m)...", "Corridors")
 
         # Step 1: Create buffered corridor zones
-        temp_buffered_corridors = output_path.replace('.tif', '_temp_buffered_corridors.gpkg')
+        temp_buffered_corridors = output_path.replace(".tif", "_temp_buffered_corridors.gpkg")
 
         buffer_params = {
-            'INPUT': corridor_layer,
-            'DISTANCE': buffer_distance,
-            'SEGMENTS': 5,
-            'END_CAP_STYLE': 0,  # Round
-            'JOIN_STYLE': 0,  # Round
-            'MITER_LIMIT': 2,
-            'DISSOLVE': False,  # Dissolve overlapping buffers
-            'OUTPUT': temp_buffered_corridors
+            "INPUT": corridor_layer,
+            "DISTANCE": buffer_distance,
+            "SEGMENTS": 5,
+            "END_CAP_STYLE": 0,  # Round
+            "JOIN_STYLE": 0,  # Round
+            "MITER_LIMIT": 2,
+            "DISSOLVE": False,  # Dissolve overlapping buffers
+            "OUTPUT": temp_buffered_corridors,
         }
 
-        processing.run('native:buffer', buffer_params)
+        processing.run("native:buffer", buffer_params)
 
         # Step 2: Create base cost raster with water/land detection for "absent" costs
         ref_ds = gdal.Open(ref_layer.source())
@@ -192,20 +219,20 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
         proj = ref_ds.GetProjection()
 
         # Step 3: Resample land use to match reference grid
-        temp_lu_path = output_path.replace('.tif', '_temp_lu_aligned.tif')
+        temp_lu_path = output_path.replace(".tif", "_temp_lu_aligned.tif")
         resample_params = {
-            'INPUT': land_use_layer,
-            'SOURCE_CRS': land_use_layer.crs(),
-            'TARGET_CRS': proj,
-            'RESAMPLING': 0,  # Nearest neighbor
-            'NODATA': None,
-            'TARGET_RESOLUTION': abs(geotrans[1]),
-            'TARGET_EXTENT': f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-            'OUTPUT': temp_lu_path,
-            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
+            "INPUT": land_use_layer,
+            "SOURCE_CRS": land_use_layer.crs(),
+            "TARGET_CRS": proj,
+            "RESAMPLING": 0,  # Nearest neighbor
+            "NODATA": None,
+            "TARGET_RESOLUTION": abs(geotrans[1]),
+            "TARGET_EXTENT": f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
+            "OUTPUT": temp_lu_path,
+            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
         }
 
-        processing.run('gdal:warpreproject', resample_params)
+        processing.run("gdal:warpreproject", resample_params)
 
         # Load land use data and create base cost raster
         lu_ds = gdal.Open(temp_lu_path)
@@ -215,26 +242,29 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
         water_pixels = np.isin(lu_data, list(water_ids))
         base_data = np.where(water_pixels, absent_offshore_cost, absent_onshore_cost).astype(np.float32)
 
-        dialog.log_message(f"Base costs: {np.sum(water_pixels)} water pixels (cost: {absent_offshore_cost}), {np.sum(~water_pixels)} land pixels (cost: {absent_onshore_cost})", "Corridors")
+        dialog.log_message(
+            f"Base costs: {np.sum(water_pixels)} water pixels (cost: {absent_offshore_cost}), {np.sum(~water_pixels)} land pixels (cost: {absent_onshore_cost})",
+            "Corridors",
+        )
 
         # Step 4: Create corridor buffer mask
-        temp_corridor_mask = output_path.replace('.tif', '_temp_corridor_mask.tif')
+        temp_corridor_mask = output_path.replace(".tif", "_temp_corridor_mask.tif")
         mask_params = {
-            'INPUT': temp_buffered_corridors,
-            'FIELD': None,
-            'BURN': 1,
-            'USE_Z': False,
-            'UNITS': 0,
-            'WIDTH': width,
-            'HEIGHT': height,
-            'EXTENT': f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-            'INIT': 0,
-            'DATA_TYPE': 1,  # Byte
-            'OUTPUT': temp_corridor_mask
+            "INPUT": temp_buffered_corridors,
+            "FIELD": None,
+            "BURN": 1,
+            "USE_Z": False,
+            "UNITS": 0,
+            "WIDTH": width,
+            "HEIGHT": height,
+            "EXTENT": f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
+            "INIT": 0,
+            "DATA_TYPE": 1,  # Byte
+            "OUTPUT": temp_corridor_mask,
         }
 
         dialog.log_message("Rasterizing corridor buffer zones...", "Corridors")
-        processing.run('gdal:rasterize', mask_params)
+        processing.run("gdal:rasterize", mask_params)
 
         # Load corridor mask
         mask_ds = gdal.Open(temp_corridor_mask)
@@ -254,16 +284,18 @@ def create_corridor_cost_raster_with_buffers(corridor_layer, land_use_layer, ref
         dialog.log_message(f"  - {onshore_pixels} onshore pixels (cost: {present_onshore_cost})", "Corridors")
 
         if total_corridor_pixels == 0:
-            dialog.log_message("WARNING: No corridor pixels found! Check buffer distance and vector layer.", "Corridors")
+            dialog.log_message(
+                "WARNING: No corridor pixels found! Check buffer distance and vector layer.", "Corridors"
+            )
 
         # Apply corridor costs ONLY where corridors exist
-        base_data[corridor_pixels & water_pixels] = present_offshore_cost     # Corridor + Water
-        base_data[corridor_pixels & ~water_pixels] = present_onshore_cost     # Corridor + Land
+        base_data[corridor_pixels & water_pixels] = present_offshore_cost  # Corridor + Water
+        base_data[corridor_pixels & ~water_pixels] = present_onshore_cost  # Corridor + Land
         # Everything else remains cost = 1.0 (neutral)
 
         # Step 6: Write final raster
-        driver = gdal.GetDriverByName('GTiff')
-        out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
+        driver = gdal.GetDriverByName("GTiff")
+        out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=["COMPRESS=LZW", "BIGTIFF=YES"])
         out_ds.SetGeoTransform(geotrans)
         out_ds.SetProjection(proj)
         out_ds.GetRasterBand(1).WriteArray(base_data)

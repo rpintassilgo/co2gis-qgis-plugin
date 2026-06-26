@@ -1,13 +1,13 @@
-from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout, QGroupBox
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
-from qgis import processing
-from osgeo import gdal
-import numpy as np
 import os
+from typing import TYPE_CHECKING
+
+import numpy as np
+from osgeo import gdal
+from qgis import processing
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
+
 from ..task_manager import run_in_background
 from ..utils import select_output_file
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_crossings_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the Crossings tab with two sections."""
 
     # ============================================================
@@ -95,17 +95,15 @@ def setup_crossings_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     layout.addWidget(nRasterGroupBox)
 
 
-def connect_crossings_signals(dialog: 'AnalysisDialog'):
+def connect_crossings_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Crossings tab."""
     dialog.runCreateRasterFromCrossingButton.clicked.connect(
         lambda checked: run_in_background(dialog, run_crossings_cost_creation)
     )
-    dialog.runCreateNRasterButton.clicked.connect(
-        lambda checked: run_in_background(dialog, run_n_raster_creation)
-    )
+    dialog.runCreateNRasterButton.clicked.connect(lambda checked: run_in_background(dialog, run_n_raster_creation))
 
 
-def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
+def run_crossings_cost_creation(dialog: "AnalysisDialog"):
     """Create a single-band cost raster from a vector, aligned to a reference raster"""
     try:
         # Get selected layers and parameters
@@ -122,27 +120,27 @@ def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
 
         # Rasterize: initialize all cells with no_crossing_cost, then burn crossing_cost where features exist
         params = {
-            'INPUT': crossing_layer,
-            'FIELD': None,
-            'BURN': crossing_cost,
-            'USE_Z': False,
-            'UNITS': 0,             # Pixel units for width/height
-            'WIDTH': ref_layer.width(),
-            'HEIGHT': ref_layer.height(),
-            'EXTENT': ref_layer.extent(),
-            'INIT': no_crossing_cost,
-            'DATA_TYPE': 5,         # Float32 for single band
-            'EXTRA': '',            # Extra GDAL flags if needed
-            'OUTPUT': output_path
+            "INPUT": crossing_layer,
+            "FIELD": None,
+            "BURN": crossing_cost,
+            "USE_Z": False,
+            "UNITS": 0,  # Pixel units for width/height
+            "WIDTH": ref_layer.width(),
+            "HEIGHT": ref_layer.height(),
+            "EXTENT": ref_layer.extent(),
+            "INIT": no_crossing_cost,
+            "DATA_TYPE": 5,  # Float32 for single band
+            "EXTRA": "",  # Extra GDAL flags if needed
+            "OUTPUT": output_path,
         }
         # Use GDAL rasterize for explicit single-band control
-        result = processing.run('gdal:rasterize', params)
+        result = processing.run("gdal:rasterize", params)
 
         # Validate and load
-        if not result or 'OUTPUT' not in result:
+        if not result or "OUTPUT" not in result:
             raise RuntimeError("Rasterization failed to return output.")
 
-        output_raster = result['OUTPUT']
+        output_raster = result["OUTPUT"]
         if not output_raster:
             raise RuntimeError("Rasterization returned no output.")
 
@@ -158,7 +156,7 @@ def run_crossings_cost_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Crossings raster creation failed: {e}", "Crossings")
 
 
-def run_n_raster_creation(dialog: 'AnalysisDialog'):
+def run_n_raster_creation(dialog: "AnalysisDialog"):
     """
     Create a raster where each cell contains the COUNT of how many times
     the crossing vector intersects that cell.
@@ -192,7 +190,10 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         ref_crs = ref_layer.crs()
 
         dialog.log_message(f"  Reference raster: {ref_width}x{ref_height} pixels", "Crossings")
-        dialog.log_message(f"  Extent: [{ref_extent.xMinimum():.2f}, {ref_extent.xMaximum():.2f}, {ref_extent.yMinimum():.2f}, {ref_extent.yMaximum():.2f}]", "Crossings")
+        dialog.log_message(
+            f"  Extent: [{ref_extent.xMinimum():.2f}, {ref_extent.xMaximum():.2f}, {ref_extent.yMinimum():.2f}, {ref_extent.yMaximum():.2f}]",
+            "Crossings",
+        )
 
         # Calculate cell size
         cell_width = (ref_extent.xMaximum() - ref_extent.xMinimum()) / ref_width
@@ -237,10 +238,16 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
 
                     # Get all cells intersected by this line segment
                     cells = get_intersected_cells(
-                        x1, y1, x2, y2,
-                        ref_extent.xMinimum(), ref_extent.yMaximum(),
-                        cell_width, cell_height,
-                        ref_width, ref_height
+                        x1,
+                        y1,
+                        x2,
+                        y2,
+                        ref_extent.xMinimum(),
+                        ref_extent.yMaximum(),
+                        cell_width,
+                        cell_height,
+                        ref_width,
+                        ref_height,
                     )
 
                     # Mark these cells as touched by this feature
@@ -272,23 +279,21 @@ def run_n_raster_creation(dialog: 'AnalysisDialog'):
         total_cells = ref_width * ref_height
 
         dialog.log_message(f"  Max crossings per cell: {max_count}", "Crossings")
-        dialog.log_message(f"  Cells with crossings: {cells_with_crossings:,} / {total_cells:,} ({100 * cells_with_crossings / total_cells:.1f}%)", "Crossings")
+        dialog.log_message(
+            f"  Cells with crossings: {cells_with_crossings:,} / {total_cells:,} ({100 * cells_with_crossings / total_cells:.1f}%)",
+            "Crossings",
+        )
 
         # Create output raster
         dialog.log_message("  Writing output raster...", "Crossings")
 
-        driver = gdal.GetDriverByName('GTiff')
-        out_ds = driver.Create(output_path, ref_width, ref_height, 1, gdal.GDT_Int32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
+        driver = gdal.GetDriverByName("GTiff")
+        out_ds = driver.Create(
+            output_path, ref_width, ref_height, 1, gdal.GDT_Int32, options=["COMPRESS=LZW", "BIGTIFF=YES"]
+        )
 
         # Set geotransform and projection
-        geotransform = [
-            ref_extent.xMinimum(),
-            cell_width,
-            0,
-            ref_extent.yMaximum(),
-            0,
-            -cell_height
-        ]
+        geotransform = [ref_extent.xMinimum(), cell_width, 0, ref_extent.yMaximum(), 0, -cell_height]
         out_ds.SetGeoTransform(geotransform)
         out_ds.SetProjection(ref_crs.toWkt())
 

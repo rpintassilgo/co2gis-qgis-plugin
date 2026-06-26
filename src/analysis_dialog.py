@@ -1,17 +1,28 @@
-from qgis.PyQt.QtWidgets import QDialog, QComboBox, QLineEdit, QPushButton, QTableWidget, QTextEdit, QCheckBox, QRadioButton, QButtonGroup
-from qgis.PyQt.QtCore import Qt, QMetaObject, Q_ARG
-from qgis.core import QgsProject
 from typing import Optional
 
-from .ui_manager import setup_ui
-from .utils import populate_layer_dropdowns, update_pipeline_length, update_resolution_field
-from .tabs.land_use_tab import connect_land_use_signals
-from .tabs.slope_tab import connect_slope_signals
+from qgis.core import QgsProject
+from qgis.PyQt.QtCore import Q_ARG, QMetaObject, Qt
+from qgis.PyQt.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QTableWidget,
+    QTextEdit,
+)
+
 from .tabs.aux_tab import connect_aux_signals
+from .tabs.corridors_tab import connect_corridors_signals
+from .tabs.crossings_tab import connect_crossings_signals
+from .tabs.land_use_tab import connect_land_use_signals
 from .tabs.lcp_tab import connect_lcp_signals
 from .tabs.price_estimation_tab import connect_price_estimation_signals
-from .tabs.crossings_tab import connect_crossings_signals
-from .tabs.corridors_tab import connect_corridors_signals
+from .tabs.slope_tab import connect_slope_signals
+from .ui_manager import setup_ui
+from .utils import populate_layer_dropdowns, update_pipeline_length, update_resolution_field
 
 
 class AnalysisDialog(QDialog):
@@ -214,20 +225,11 @@ class AnalysisDialog(QDialog):
 
     def log_message(self, message: str, tab_name: Optional[str] = None):
         """Thread-safe method to append a message to the log output."""
-        if hasattr(self, 'log_output'):
+        if hasattr(self, "log_output"):
             formatted_message = f"[{tab_name}] {message}" if tab_name else message
-            QMetaObject.invokeMethod(
-                self.log_output,
-                "append",
-                Qt.QueuedConnection,
-                Q_ARG(str, formatted_message)
-            )
+            QMetaObject.invokeMethod(self.log_output, "append", Qt.QueuedConnection, Q_ARG(str, formatted_message))
 
     def clear_logs(self):
         """Clear the log output."""
-        if hasattr(self, 'log_output'):
-            QMetaObject.invokeMethod(
-                self.log_output,
-                "clear",
-                Qt.QueuedConnection
-            )
+        if hasattr(self, "log_output"):
+            QMetaObject.invokeMethod(self.log_output, "clear", Qt.QueuedConnection)
