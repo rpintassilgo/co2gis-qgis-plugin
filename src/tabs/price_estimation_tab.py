@@ -324,25 +324,23 @@ def run_price_estimation(dialog: "AnalysisDialog"):
         segment_costs = []
         booster_costs = []
         segment_index = 0
-        total_length = 0
 
         current_segment_cells = []
         current_segment_length = 0
-
-        Ltotal = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
         # Calculate diameter D once for the entire pipeline using total length
         D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal)) ** (1 / 5)
         dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm", "Price Estimation")
         dialog.log_message("--------------------------------------------------", "Price Estimation")
 
-        for Fc, Fs, Flu, Fci, N, Lcell in full_raster_values:
+        # Final cell detected by index, not a float-sum comparison (see #15).
+        last_index = len(full_raster_values) - 1
+        for i, (Fc, Fs, Flu, Fci, N, Lcell) in enumerate(full_raster_values):
             current_segment_cells.append((Fc, Fs, Flu, Fci, N, Lcell))
-            total_length += Lcell
             current_segment_length += Lcell
 
             segment_complete = current_segment_length >= max_segment_length
-            final_segment = total_length >= Ltotal
+            final_segment = i == last_index
 
             if segment_complete or final_segment:
                 L_segment = current_segment_length
