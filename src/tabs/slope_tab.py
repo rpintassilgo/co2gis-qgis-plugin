@@ -1,9 +1,6 @@
 import os
 from typing import TYPE_CHECKING
 
-import numpy as np
-from osgeo import gdal
-from qgis import processing
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
@@ -20,8 +17,9 @@ from qgis.PyQt.QtWidgets import (
 )
 
 from ..constants.slope import COMET_SLOPE_INTERVALS
-from ..task_manager import run_in_background
-from ..utils import layer_from_dropdown
+from ..core.slope import create_slope_costs_from_slope, create_slope_layer_from_dem
+from ..task_manager import run_task
+from ..utils import get_layer_path, layer_from_dropdown
 from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -82,72 +80,98 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
 
 def connect_slope_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Slope tab."""
-    dialog.create_slope_button.clicked.connect(lambda checked: run_in_background(dialog, run_slope_creation))
+    dialog.create_slope_button.clicked.connect(
+        lambda checked: run_task(
+            dialog, "Create Slope Raster", work=_slope_work, prepare=_slope_prepare, publish=_slope_publish
+        )
+    )
     dialog.create_slope_costs_button.clicked.connect(
-        lambda checked: run_in_background(dialog, run_slope_costs_creation)
+        lambda checked: run_task(
+            dialog,
+            "Create Slope Costs Raster",
+            work=_slope_costs_work,
+            prepare=_slope_costs_prepare,
+            publish=_slope_costs_publish,
+        )
     )
 
 
-def _get_layer_id_from_widget(widget):
-    """Helper to get layer ID from a QComboBox."""
-    if not widget.currentData():
-        raise ValueError(f"No layer selected in {widget.objectName()}.")
-    return widget.currentData()
+# ── Create slope raster from DEM ──────────────────────────────────────────────
 
 
-def run_slope_creation(dialog: "AnalysisDialog"):
-    """Create Slope Raster from DEM"""
-    try:
-        dem_layer = QgsProject.instance().mapLayer(_get_layer_id_from_widget(dialog.demComboBox))
-        output_path = dialog.slopeRasterPath.text()
+def _slope_prepare(dialog: "AnalysisDialog") -> dict:
+    """Main thread: read DEM layer + output path, resolve to a source path."""
+    dem_layer = layer_from_dropdown(dialog.demComboBox)
+    output_path = dialog.slopeRasterPath.text()
 
-        if not dem_layer:
-            raise ValueError("No DEM layer selected.")
-        if not output_path:
-            raise ValueError("No output path specified for Slope Raster.")
+    if not dem_layer:
+        raise ValueError("No DEM layer selected.")
+    if not output_path:
+        raise ValueError("No output path specified for Slope Raster.")
 
-        dialog.log_message("Creating Slope Raster from DEM...", "Slope")
-        create_slope_layer_from_dem(dem_layer, output_path)
-        dialog.log_message(f"Slope Raster created at: {output_path}", "Slope")
-
-        layer_name = os.path.splitext(os.path.basename(output_path))[0]
-        slope_layer = QgsRasterLayer(output_path, layer_name)
-        if slope_layer.isValid():
-            QgsProject.instance().addMapLayer(slope_layer)
-        else:
-            dialog.log_message("Failed to load created slope layer.", "Slope")
-
-    except Exception as e:
-        dialog.log_message(f"Creating slope data failed: {e}", "Slope")
+    dialog.log_message("Creating Slope Raster from DEM...", "Slope")
+    return {
+        "dem_path": get_layer_path(dem_layer),
+        "output_path": output_path,
+        "log": lambda msg: dialog.log_message(msg, "Slope"),
+    }
 
 
-def run_slope_costs_creation(dialog: "AnalysisDialog"):
-    """Create slope costs raster based on defined intervals."""
-    try:
-        intervals = get_slope_cost_intervals(dialog)
-        slope_layer = layer_from_dropdown(dialog.slopeLayerComboBox)
-        output_path = dialog.slopeCostsRasterPath.text()
+def _slope_work(params: dict) -> str:
+    """Background thread: run the qgis:slope algorithm, write the raster."""
+    return create_slope_layer_from_dem(params["dem_path"], params["output_path"], log=params["log"])
 
-        if not slope_layer:
-            raise ValueError("No slope layer selected.")
-        if not output_path:
-            raise ValueError("No output path specified for Slope Costs Raster.")
-        if not intervals:
-            raise ValueError("No slope cost intervals defined.")
 
-        dialog.log_message("Creating Slope Costs Raster...", "Slope")
-        create_slope_costs_from_slope(slope_layer, intervals, output_path)
-        dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}", "Slope")
+def _slope_publish(dialog: "AnalysisDialog", output_path: str):
+    """Main thread: load the slope raster into the project."""
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    slope_layer = QgsRasterLayer(output_path, layer_name)
+    if not slope_layer.isValid():
+        raise RuntimeError("Failed to load created slope layer.")
+    QgsProject.instance().addMapLayer(slope_layer)
+    dialog.log_message(f"Slope Raster created at: {output_path}", "Slope")
 
-        layer_name = os.path.splitext(os.path.basename(output_path))[0]
-        new_layer = QgsRasterLayer(output_path, layer_name)
-        if new_layer.isValid():
-            QgsProject.instance().addMapLayer(new_layer)
-        else:
-            dialog.log_message("Failed to load created slope costs layer.", "Slope")
 
-    except Exception as e:
-        dialog.log_message(f"Creating Slope Costs Raster Failed: {str(e)}", "Slope")
+# ── Create slope costs raster ─────────────────────────────────────────────────
+
+
+def _slope_costs_prepare(dialog: "AnalysisDialog") -> dict:
+    """Main thread: read intervals (table) + slope layer + output path."""
+    intervals = get_slope_cost_intervals(dialog)
+    slope_layer = layer_from_dropdown(dialog.slopeLayerComboBox)
+    output_path = dialog.slopeCostsRasterPath.text()
+
+    if not slope_layer:
+        raise ValueError("No slope layer selected.")
+    if not output_path:
+        raise ValueError("No output path specified for Slope Costs Raster.")
+    if not intervals:
+        raise ValueError("No slope cost intervals defined.")
+
+    dialog.log_message("Creating Slope Costs Raster...", "Slope")
+    return {
+        "slope_path": get_layer_path(slope_layer),
+        "intervals": intervals,
+        "output_path": output_path,
+        "log": lambda msg: dialog.log_message(msg, "Slope"),
+    }
+
+
+def _slope_costs_work(params: dict) -> str:
+    """Background thread: apply the cost intervals, write the raster."""
+    return create_slope_costs_from_slope(
+        params["slope_path"], params["intervals"], params["output_path"], log=params["log"]
+    )
+
+
+def _slope_costs_publish(dialog: "AnalysisDialog", output_path: str):
+    """Main thread: load the slope costs raster into the project."""
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    new_layer = QgsRasterLayer(output_path, layer_name)
+    if not new_layer.isValid():
+        raise RuntimeError("Failed to load the created Slope Costs raster.")
+    QgsProject.instance().addMapLayer(new_layer)
+    dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}", "Slope")
 
 
 def get_slope_cost_intervals(dialog: "AnalysisDialog"):
@@ -230,86 +254,3 @@ def remove_selected_slope_row(dialog: "AnalysisDialog"):
     selected_rows = set(idx.row() for idx in dialog.slopeCostTable.selectedIndexes())
     for row in sorted(selected_rows, reverse=True):
         dialog.slopeCostTable.removeRow(row)
-
-
-def create_slope_layer_from_dem(dem_layer: QgsRasterLayer, output_path: str):
-    """Creates a slope raster from a DEM layer using the qgis:slope algorithm."""
-    if not dem_layer:
-        raise ValueError("Input DEM layer is not valid.")
-
-    params = {
-        "INPUT": dem_layer,
-        "Z_FACTOR": 1,
-        "UNITS": 1,  # Percent
-        "OUTPUT": output_path,
-    }
-    result = processing.run("qgis:slope", params)
-    if not result or "OUTPUT" not in result:
-        raise RuntimeError("Slope processing failed to return the expected output.")
-    return result["OUTPUT"]
-
-
-def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, output_path: str):
-    """Creates a slope cost raster from a slope layer and interval definitions."""
-    # Open the input raster
-    input_ds = gdal.Open(slope_layer.source())
-    if not input_ds:
-        raise RuntimeError("Could not open input raster with GDAL")
-
-    # Read the input band
-    band = input_ds.GetRasterBand(1)
-    slope_data = band.ReadAsArray()
-
-    # Create output array with same shape
-    output_data = np.zeros_like(slope_data, dtype=np.float32)
-
-    # Apply costs using numpy operations
-    # First set the default cost for slopes above the last interval
-    if intervals:
-        output_data.fill(intervals[-1]["cost"])
-
-    # Then apply each interval's cost
-    for interval in reversed(intervals):  # Process in reverse to handle overlapping ranges correctly
-        min_slope = interval["min"]
-        max_slope = interval["max"]
-        cost = interval["cost"]
-
-        # Create mask for values in this interval
-        if max_slope is None:
-            mask = slope_data >= min_slope
-        else:
-            mask = (slope_data >= min_slope) & (slope_data < max_slope)
-
-        # Apply cost to masked areas
-        output_data[mask] = cost
-
-    # Create output raster
-    driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(
-        output_path,
-        input_ds.RasterXSize,
-        input_ds.RasterYSize,
-        1,
-        gdal.GDT_Float32,
-        options=["COMPRESS=LZW", "NUM_THREADS=ALL_CPUS", "BIGTIFF=YES"],
-    )
-
-    # Copy projection and geotransform
-    out_ds.SetProjection(input_ds.GetProjection())
-    out_ds.SetGeoTransform(input_ds.GetGeoTransform())
-
-    # Write data
-    out_band = out_ds.GetRasterBand(1)
-    out_band.WriteArray(output_data)
-
-    # Clean up
-    out_ds = None
-    input_ds = None
-
-    # Load the result into QGIS
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if new_layer.isValid():
-        QgsProject.instance().addMapLayer(new_layer)
-    else:
-        raise RuntimeError("Failed to load the created Slope Costs raster.")
