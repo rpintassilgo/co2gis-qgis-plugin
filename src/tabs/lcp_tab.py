@@ -11,6 +11,7 @@ from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, 
 
 from ..constants.comet import COST_FLOOR, N_CAP
 from ..core.comet import comet_cell_cost
+from ..core.raster import resample_raster
 from ..task_manager import run_in_background
 from ..utils import grass_alg_id, select_output_file
 
@@ -235,22 +236,17 @@ def combine_rasters_with_comet_formula(
 
         resampled_path = os.path.join(os.path.dirname(output_path), f"_resampled_{name.replace(' ', '_')}.tif")
 
-        params = {
-            "INPUT": layer,
-            "SOURCE_CRS": layer.crs(),
-            "TARGET_CRS": reference_layer.crs(),
-            "RESAMPLING": 0,
-            "NODATA": None,
-            "TARGET_RESOLUTION": ref_resolution,
-            "TARGET_EXTENT": f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            "OUTPUT": resampled_path,
-            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
-        }
+        resampled_output = resample_raster(
+            layer,
+            resampled_path,
+            ref_resolution,
+            source_crs=layer.crs(),
+            target_crs=reference_layer.crs(),
+            target_extent=f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+        )
 
-        result = processing.run("gdal:warpreproject", params)
-
-        if result and "OUTPUT" in result:
-            ds = gdal.Open(result["OUTPUT"])
+        if resampled_output:
+            ds = gdal.Open(resampled_output)
             if ds is None:
                 raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
 
@@ -274,8 +270,8 @@ def combine_rasters_with_comet_formula(
 
             # Clean up temp file
             try:
-                if os.path.exists(result["OUTPUT"]):
-                    os.remove(result["OUTPUT"])
+                if os.path.exists(resampled_output):
+                    os.remove(resampled_output)
             except Exception as cleanup_error:
                 dialog.log_message(f"  ⚠️ Could not delete temp file: {cleanup_error}", "LCP")
         else:

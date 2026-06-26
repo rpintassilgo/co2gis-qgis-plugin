@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..core.raster import resample_raster
 from ..task_manager import run_in_background
 from ..utils import apply_symbology, get_layer_path, select_output_file, update_original_resolution
 
@@ -209,14 +210,7 @@ def run_raster_resampling(dialog: "AnalysisDialog"):
         resampling_method = resampling_map.get(resampling_method_text, 0)
 
         dialog.log_message(f"Resampling raster '{raster_layer.name()}'...", "Aux")
-        params = {
-            "INPUT": raster_layer,
-            "TARGET_RESOLUTION": target_resolution,
-            "RESAMPLING": resampling_method,
-            "OUTPUT": output_path,
-            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
-        }
-        processing.run("gdal:warpreproject", params)
+        resample_raster(raster_layer, output_path, target_resolution, resampling=resampling_method)
         dialog.log_message(f"Resampled raster saved successfully at: {output_path}", "Aux")
 
         layer_name = os.path.splitext(os.path.basename(output_path))[0]

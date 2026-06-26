@@ -3,7 +3,6 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from osgeo import gdal
-from qgis import processing
 from qgis.core import QgsGeometry, QgsPointXY, QgsProject, QgsRaster
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
@@ -26,6 +25,7 @@ from qgis.PyQt.QtWidgets import (
 from ..constants import capex
 from ..constants.comet import N_CAP
 from ..core.comet import comet_cell_cost
+from ..core.raster import resample_raster
 from ..task_manager import run_in_background
 from ..utils import update_pipeline_length, update_resolution_field
 
@@ -442,22 +442,17 @@ def extract_raster_values_along_pipeline_cells(
     for layer, name in valid_layers:
         resampled_path = os.path.join(temp_dir, f"_price_est_{name.replace(' ', '_')}.tif")
 
-        params = {
-            "INPUT": layer,
-            "SOURCE_CRS": layer.crs(),
-            "TARGET_CRS": reference_layer.crs(),
-            "RESAMPLING": 0,  # Nearest neighbor
-            "NODATA": None,
-            "TARGET_RESOLUTION": ref_resolution,
-            "TARGET_EXTENT": f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            "OUTPUT": resampled_path,
-            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
-        }
+        resampled_output = resample_raster(
+            layer,
+            resampled_path,
+            ref_resolution,
+            source_crs=layer.crs(),
+            target_crs=reference_layer.crs(),
+            target_extent=f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+        )
 
-        result = processing.run("gdal:warpreproject", params)
-
-        if result and "OUTPUT" in result:
-            ds = gdal.Open(result["OUTPUT"])
+        if resampled_output:
+            ds = gdal.Open(resampled_output)
             data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
 
             # Store metadata from first raster
