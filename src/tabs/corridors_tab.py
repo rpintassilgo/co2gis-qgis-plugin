@@ -1,7 +1,6 @@
 import os
 from typing import TYPE_CHECKING
 
-from qgis import processing
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
@@ -15,9 +14,9 @@ from qgis.PyQt.QtWidgets import (
     QTableWidget,
 )
 
-from ..core.raster import resample_raster
-from ..task_manager import run_in_background
-from ..utils import layer_from_dropdown
+from ..core.corridors import create_corridor_cost_raster_with_buffers
+from ..task_manager import run_task
+from ..utils import get_layer_path, layer_from_dropdown
 from ..widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
@@ -102,210 +101,90 @@ def populate_corridor_land_use_table(dialog, layer_id):
 
 def connect_corridors_signals(dialog: "AnalysisDialog"):
     dialog.runCreateRasterFromCorridorButton.clicked.connect(
-        lambda _: run_in_background(dialog, run_corridors_cost_creation)
+        lambda _: run_task(
+            dialog,
+            "Create Corridors Costs Raster",
+            work=_corridors_work,
+            prepare=_corridors_prepare,
+            publish=_corridors_publish,
+        )
     )
 
 
-def run_corridors_cost_creation(dialog: "AnalysisDialog"):
-    """Create corridors cost raster with water body detection - simpler approach like crossings."""
-    try:
-        # Load inputs
-        corridor_layer = layer_from_dropdown(dialog.corridorComboBox)
-        ref_layer = layer_from_dropdown(dialog.corridorRefRasterComboBox)
-        land_use_layer = layer_from_dropdown(dialog.corridorLandUseComboBox)
-        output_path = dialog.corridorOutputPath.text().strip()
+def _corridors_prepare(dialog: "AnalysisDialog") -> dict:
+    """Main thread: read widgets, resolve layers to paths, read the water-body table."""
+    corridor_layer = layer_from_dropdown(dialog.corridorComboBox)
+    ref_layer = layer_from_dropdown(dialog.corridorRefRasterComboBox)
+    land_use_layer = layer_from_dropdown(dialog.corridorLandUseComboBox)
+    output_path = dialog.corridorOutputPath.text().strip()
 
-        if not all([corridor_layer, ref_layer, land_use_layer, output_path]):
-            raise ValueError("Select all inputs and output path.")
+    if not all([corridor_layer, ref_layer, land_use_layer, output_path]):
+        raise ValueError("Select all inputs and output path.")
 
-        # Parse costs and buffer distance
-        present_offshore_cost = float(dialog.corridorPresentOffshoreInput.text())
-        present_onshore_cost = float(dialog.corridorPresentOnshoreInput.text())
-        absent_offshore_cost = float(dialog.corridorAbsentOffshoreInput.text())
-        absent_onshore_cost = float(dialog.corridorAbsentOnshoreInput.text())
-        buffer_distance = float(dialog.corridorBufferInput.text())
+    # Parse costs and buffer distance
+    present_offshore_cost = float(dialog.corridorPresentOffshoreInput.text())
+    present_onshore_cost = float(dialog.corridorPresentOnshoreInput.text())
+    absent_offshore_cost = float(dialog.corridorAbsentOffshoreInput.text())
+    absent_onshore_cost = float(dialog.corridorAbsentOnshoreInput.text())
+    buffer_distance = float(dialog.corridorBufferInput.text())
 
-        # Build water IDs set from table
-        water_ids = set()
-        for r in range(dialog.corridorLandUseTable.rowCount()):
-            item = dialog.corridorLandUseTable.item(r, 0)
-            chk = dialog.corridorLandUseTable.cellWidget(r, 2)
-            if item and chk and chk.isChecked():
-                try:
-                    water_ids.add(float(item.text()))
-                except ValueError:
-                    pass  # Skip invalid entries
-
-        dialog.log_message(f"Water classes: {sorted(water_ids)}", "Corridors")
-        if not water_ids:
-            raise ValueError("No water body classes selected. Please check at least one water body class.")
-
-        dialog.log_message("Creating corridors cost raster...", "Corridors")
-
-        # Create corridor cost raster with buffer zones and water detection
-        create_corridor_cost_raster_with_buffers(
-            corridor_layer,
-            land_use_layer,
-            ref_layer,
-            water_ids,
-            present_offshore_cost,
-            present_onshore_cost,
-            absent_offshore_cost,
-            absent_onshore_cost,
-            buffer_distance,
-            output_path,
-            dialog,
-        )
-
-        # Load result into QGIS
-        layer_name = os.path.splitext(os.path.basename(output_path))[0]
-        new_layer = QgsRasterLayer(output_path, layer_name)
-        if not new_layer.isValid():
-            raise RuntimeError("Failed to load the resulting raster layer.")
-
-        QgsProject.instance().addMapLayer(new_layer)
-        dialog.log_message(f"Corridors cost raster created at: {output_path}", "Corridors")
-
-    except Exception as e:
-        dialog.log_message(f"Corridors cost creation failed: {str(e)}", "Corridors")
-
-
-def create_corridor_cost_raster_with_buffers(
-    corridor_layer,
-    land_use_layer,
-    ref_layer,
-    water_ids,
-    present_offshore_cost,
-    present_onshore_cost,
-    absent_offshore_cost,
-    absent_onshore_cost,
-    buffer_distance,
-    output_path,
-    dialog,
-):
-    """Create corridor cost raster with buffer zones and proper water/land detection."""
-    try:
-        import os
-
-        import numpy as np
-        from osgeo import gdal
-
-        dialog.log_message(f"Creating corridor buffer zones ({buffer_distance}m)...", "Corridors")
-
-        # Step 1: Create buffered corridor zones
-        temp_buffered_corridors = output_path.replace(".tif", "_temp_buffered_corridors.gpkg")
-
-        buffer_params = {
-            "INPUT": corridor_layer,
-            "DISTANCE": buffer_distance,
-            "SEGMENTS": 5,
-            "END_CAP_STYLE": 0,  # Round
-            "JOIN_STYLE": 0,  # Round
-            "MITER_LIMIT": 2,
-            "DISSOLVE": False,  # Dissolve overlapping buffers
-            "OUTPUT": temp_buffered_corridors,
-        }
-
-        processing.run("native:buffer", buffer_params)
-
-        # Step 2: Create base cost raster with water/land detection for "absent" costs
-        ref_ds = gdal.Open(ref_layer.source())
-        width, height = ref_ds.RasterXSize, ref_ds.RasterYSize
-        geotrans = ref_ds.GetGeoTransform()
-        proj = ref_ds.GetProjection()
-
-        # Step 3: Resample land use to match reference grid
-        temp_lu_path = output_path.replace(".tif", "_temp_lu_aligned.tif")
-        resample_raster(
-            land_use_layer,
-            temp_lu_path,
-            abs(geotrans[1]),
-            source_crs=land_use_layer.crs(),
-            target_crs=proj,
-            target_extent=f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-        )
-
-        # Load land use data and create base cost raster
-        lu_ds = gdal.Open(temp_lu_path)
-        lu_data = lu_ds.GetRasterBand(1).ReadAsArray()
-
-        # Create base cost raster: water = absent_offshore, land = absent_onshore
-        water_pixels = np.isin(lu_data, list(water_ids))
-        base_data = np.where(water_pixels, absent_offshore_cost, absent_onshore_cost).astype(np.float32)
-
-        dialog.log_message(
-            f"Base costs: {np.sum(water_pixels)} water pixels (cost: {absent_offshore_cost}), {np.sum(~water_pixels)} land pixels (cost: {absent_onshore_cost})",
-            "Corridors",
-        )
-
-        # Step 4: Create corridor buffer mask
-        temp_corridor_mask = output_path.replace(".tif", "_temp_corridor_mask.tif")
-        mask_params = {
-            "INPUT": temp_buffered_corridors,
-            "FIELD": None,
-            "BURN": 1,
-            "USE_Z": False,
-            "UNITS": 0,
-            "WIDTH": width,
-            "HEIGHT": height,
-            "EXTENT": f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-            "INIT": 0,
-            "DATA_TYPE": 1,  # Byte
-            "OUTPUT": temp_corridor_mask,
-        }
-
-        dialog.log_message("Rasterizing corridor buffer zones...", "Corridors")
-        processing.run("gdal:rasterize", mask_params)
-
-        # Load corridor mask
-        mask_ds = gdal.Open(temp_corridor_mask)
-        mask_data = mask_ds.GetRasterBand(1).ReadAsArray()
-
-        # Step 5: Apply costs ONLY within corridor buffer zones
-        corridor_pixels = mask_data == 1
-        water_pixels = np.isin(lu_data, list(water_ids))
-
-        # Count pixels for logging
-        total_corridor_pixels = np.sum(corridor_pixels)
-        offshore_pixels = np.sum(corridor_pixels & water_pixels)
-        onshore_pixels = np.sum(corridor_pixels & ~water_pixels)
-
-        dialog.log_message(f"Corridor buffer zones cover {total_corridor_pixels} pixels", "Corridors")
-        dialog.log_message(f"  - {offshore_pixels} offshore pixels (cost: {present_offshore_cost})", "Corridors")
-        dialog.log_message(f"  - {onshore_pixels} onshore pixels (cost: {present_onshore_cost})", "Corridors")
-
-        if total_corridor_pixels == 0:
-            dialog.log_message(
-                "WARNING: No corridor pixels found! Check buffer distance and vector layer.", "Corridors"
-            )
-
-        # Apply corridor costs ONLY where corridors exist
-        base_data[corridor_pixels & water_pixels] = present_offshore_cost  # Corridor + Water
-        base_data[corridor_pixels & ~water_pixels] = present_onshore_cost  # Corridor + Land
-        # Everything else remains cost = 1.0 (neutral)
-
-        # Step 6: Write final raster
-        driver = gdal.GetDriverByName("GTiff")
-        out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=["COMPRESS=LZW", "BIGTIFF=YES"])
-        out_ds.SetGeoTransform(geotrans)
-        out_ds.SetProjection(proj)
-        out_ds.GetRasterBand(1).WriteArray(base_data)
-
-        # Cleanup
-        out_ds = None
-        ref_ds = None
-        lu_ds = None
-        mask_ds = None
-
-        # Remove temp files
-        for temp_file in [temp_lu_path, temp_corridor_mask, temp_buffered_corridors]:
+    # Build water IDs set from the land-use table (widget read — must stay on main thread).
+    water_ids = set()
+    for r in range(dialog.corridorLandUseTable.rowCount()):
+        item = dialog.corridorLandUseTable.item(r, 0)
+        chk = dialog.corridorLandUseTable.cellWidget(r, 2)
+        if item and chk and chk.isChecked():
             try:
-                os.remove(temp_file)
-            except BaseException:
-                pass
+                water_ids.add(float(item.text()))
+            except ValueError:
+                pass  # Skip invalid entries
 
-        dialog.log_message("Corridor cost raster created successfully", "Corridors")
+    dialog.log_message(f"Water classes: {sorted(water_ids)}", "Corridors")
+    if not water_ids:
+        raise ValueError("No water body classes selected. Please check at least one water body class.")
 
-    except Exception as e:
-        dialog.log_message(f"Corridor cost raster creation failed: {str(e)}", "Corridors")
-        raise
+    dialog.log_message("Creating corridors cost raster...", "Corridors")
+
+    return {
+        "corridor_path": get_layer_path(corridor_layer),
+        "land_use_path": get_layer_path(land_use_layer),
+        "land_use_crs": land_use_layer.crs().toWkt(),
+        "ref_path": get_layer_path(ref_layer),
+        "water_ids": water_ids,
+        "present_offshore_cost": present_offshore_cost,
+        "present_onshore_cost": present_onshore_cost,
+        "absent_offshore_cost": absent_offshore_cost,
+        "absent_onshore_cost": absent_onshore_cost,
+        "buffer_distance": buffer_distance,
+        "output_path": output_path,
+        "log": lambda msg: dialog.log_message(msg, "Corridors"),
+    }
+
+
+def _corridors_work(params: dict) -> str:
+    """Background thread: build the corridor cost raster, return its path."""
+    return create_corridor_cost_raster_with_buffers(
+        params["corridor_path"],
+        params["land_use_path"],
+        params["land_use_crs"],
+        params["ref_path"],
+        params["water_ids"],
+        params["present_offshore_cost"],
+        params["present_onshore_cost"],
+        params["absent_offshore_cost"],
+        params["absent_onshore_cost"],
+        params["buffer_distance"],
+        params["output_path"],
+        log=params["log"],
+    )
+
+
+def _corridors_publish(dialog: "AnalysisDialog", output_path: str):
+    """Main thread: load the resulting corridor cost raster into the project."""
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    new_layer = QgsRasterLayer(output_path, layer_name)
+    if not new_layer.isValid():
+        raise RuntimeError("Failed to load the resulting raster layer.")
+
+    QgsProject.instance().addMapLayer(new_layer)
+    dialog.log_message(f"Corridors cost raster created at: {output_path}", "Corridors")
