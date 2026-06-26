@@ -23,6 +23,9 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
+from ..constants import capex
+from ..constants.comet import N_CAP
+from ..core.comet import comet_cell_cost
 from ..task_manager import run_in_background
 from ..utils import update_pipeline_length, update_resolution_field
 
@@ -147,9 +150,9 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.co2densityInput = QLineEdit()
     dialog.pressureDropInput = QLineEdit()
     dialog.totalPressureDropInput = QLineEdit()
-    dialog.frictionFactorInput.setText("0.015")
+    dialog.frictionFactorInput.setText(str(capex.FRICTION_FACTOR))
     dialog.co2MassFlowRateInput.setText("1")
-    dialog.co2densityInput.setText("827")
+    dialog.co2densityInput.setText(str(capex.CO2_DENSITY))
     dialog.pressureDropInput.setText("0.02")
     dialog.totalPressureDropInput.setText("3")
     dLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
@@ -162,7 +165,7 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     # Segment cost (Ip) inputs — Ip = Bc · D · Σ(Ccell · Lcell)
     ipLayout = QFormLayout()
     dialog.standardizedCostFactorInput = QLineEdit()
-    dialog.standardizedCostFactorInput.setText("1357")
+    dialog.standardizedCostFactorInput.setText(str(capex.STANDARDIZED_COST_FACTOR))
     ipLayout.addRow(QLabel("Standardised Cost Factor (B<sub>c</sub>, €/m²):"), dialog.standardizedCostFactorInput)
     right_layout.addWidget(_make_group_box("Segment Cost (I<sub>p</sub>)", ipLayout))
 
@@ -171,9 +174,9 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.boosterEfficiencyInput = QLineEdit()
     dialog.boosterVariableCostInput = QLineEdit()
     dialog.boosterFixedCostInput = QLineEdit()
-    dialog.boosterEfficiencyInput.setText("0.75")
-    dialog.boosterVariableCostInput.setText("0.547")
-    dialog.boosterFixedCostInput.setText("0.42")
+    dialog.boosterEfficiencyInput.setText(str(capex.BOOSTER_EFFICIENCY))
+    dialog.boosterVariableCostInput.setText(str(capex.BOOSTER_VARIABLE_COST))
+    dialog.boosterFixedCostInput.setText(str(capex.BOOSTER_FIXED_COST))
     boosterLayout.addRow(QLabel("Booster Efficiency (B<sub>eff</sub>):"), dialog.boosterEfficiencyInput)
     boosterLayout.addRow(QLabel("Variable Cost (α, M€/MW):"), dialog.boosterVariableCostInput)
     boosterLayout.addRow(QLabel("Fixed Cost (β, M€):"), dialog.boosterFixedCostInput)
@@ -321,31 +324,29 @@ def run_price_estimation(dialog: "AnalysisDialog"):
         segment_costs = []
         booster_costs = []
         segment_index = 0
-        total_length = 0
 
         current_segment_cells = []
         current_segment_length = 0
-
-        Ltotal = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
         # Calculate diameter D once for the entire pipeline using total length
         D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal)) ** (1 / 5)
         dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm", "Price Estimation")
         dialog.log_message("--------------------------------------------------", "Price Estimation")
 
-        for Fc, Fs, Flu, Fci, N, Lcell in full_raster_values:
+        # Final cell detected by index, not a float-sum comparison (see #15).
+        last_index = len(full_raster_values) - 1
+        for i, (Fc, Fs, Flu, Fci, N, Lcell) in enumerate(full_raster_values):
             current_segment_cells.append((Fc, Fs, Flu, Fci, N, Lcell))
-            total_length += Lcell
             current_segment_length += Lcell
 
             segment_complete = current_segment_length >= max_segment_length
-            final_segment = total_length >= Ltotal
+            final_segment = i == last_index
 
             if segment_complete or final_segment:
                 L_segment = current_segment_length
 
                 summation = sum(
-                    fc_i * fs_i * (flu_i * (1 - 0.1 * n_i) + 0.1 * n_i * fci_i) * cl_i
+                    comet_cell_cost(fc_i, fs_i, flu_i, fci_i, n_i) * cl_i
                     for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_segment_cells
                 )
 
@@ -363,8 +364,12 @@ def run_price_estimation(dialog: "AnalysisDialog"):
                     Beff = float(dialog.boosterEfficiencyInput.text())
                     Sc_W = (M * ΔP_booster_segment) / (p * Beff)  # W (compressor power)
                     Sc_MW = Sc_W / 1e6  # converted to MW
-                    α = float(dialog.boosterVariableCostInput.text())  # M€/MW (COMET default: 0.547)
-                    β = float(dialog.boosterFixedCostInput.text())  # M€ fixed cost (COMET default: 0.42)
+                    α = float(
+                        dialog.boosterVariableCostInput.text()
+                    )  # M€/MW (COMET default: capex.BOOSTER_VARIABLE_COST)
+                    β = float(
+                        dialog.boosterFixedCostInput.text()
+                    )  # M€ fixed cost (COMET default: capex.BOOSTER_FIXED_COST)
                     Ib = (α * Sc_MW + β) * 1e6  # Convert M€ to €
                     booster_costs.append(Ib)
                     dialog.log_message(
@@ -620,8 +625,8 @@ def extract_raster_values_along_pipeline_cells(
     values = []
     for (row, col), data in cell_data.items():
         # If no infrastructure vector was provided, N defaults to 1 (preserves Fci contribution)
-        # Cap N at 10 (same as LCP)
-        n_capped = min(max(data["N"], 1 if not infrastructure_features else 0), 10)
+        # Cap N (same as LCP)
+        n_capped = min(max(data["N"], 1 if not infrastructure_features else 0), N_CAP)
         values.append((data["Fc"], data["Fs"], data["Flu"], data["Fci"], n_capped, data["L"]))
 
     dialog.log_message(
@@ -886,7 +891,7 @@ class FormulaDialog(QDialog):
             "<b>M</b> = CO₂ mass flow rate (kg/s), "
             "<b>ΔP<sub>seg</sub></b> = total pressure drop over one segment = Δp/L × segment length (Pa), "
             "<b>ρ</b> = CO₂ density (kg/m³), "
-            "<b>B<sub>eff</sub></b> = booster efficiency (default 0.75, editable in the inputs panel). "
+            f"<b>B<sub>eff</sub></b> = booster efficiency (default {capex.BOOSTER_EFFICIENCY}, editable in the inputs panel). "
             "Result is in Watts (W)."
         )
         Sc_explanation.setWordWrap(True)
@@ -902,8 +907,8 @@ class FormulaDialog(QDialog):
             "<b>Booster Station Cost (I<sub>B</sub>):</b><br><br>"
             "Investment cost for a booster station in euros (€). "
             "S<sub>c</sub> must be converted to MW before applying the formula. "
-            "<b>α</b> (default 0.547 M€/MW) is the variable cost per unit of compressor capacity; "
-            "<b>β</b> (default 0.42 M€) is the fixed installation cost regardless of station size. "
+            f"<b>α</b> (default {capex.BOOSTER_VARIABLE_COST} M€/MW) is the variable cost per unit of compressor capacity; "
+            f"<b>β</b> (default {capex.BOOSTER_FIXED_COST} M€) is the fixed installation cost regardless of station size. "
             "Both constants originate from COMET TN6.4 (van den Broek et al., 2013) and are editable in the inputs panel."
         )
         Ib_explanation.setWordWrap(True)
