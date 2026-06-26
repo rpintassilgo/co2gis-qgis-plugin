@@ -12,7 +12,6 @@ from qgis.PyQt.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -21,7 +20,8 @@ from qgis.PyQt.QtWidgets import (
 
 from ..constants.land_use import COMET_LAND_USE_COSTS
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -45,14 +45,9 @@ def setup_land_use_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     tableButtonsLayout.addWidget(dialog.landUsePopulateCometButton)
     layout.addRow(tableButtonsLayout)
 
-    dialog.landUseCostsRasterPath = QLineEdit()
-    dialog.landUseCostsRasterPath.setPlaceholderText("Choose output path for Land Use Costs Raster")
-    dialog.landUseBrowse = QPushButton("Browse")
-    dialog.landUseBrowse.clicked.connect(lambda: select_output_file(dialog.landUseCostsRasterPath, "tif"))
-
-    outputFileLayout = QHBoxLayout()
-    outputFileLayout.addWidget(dialog.landUseCostsRasterPath)
-    outputFileLayout.addWidget(dialog.landUseBrowse)
+    outputFileLayout = add_output_path_row(
+        dialog, "landUseCostsRasterPath", "landUseBrowse", "tif", "Choose output path for Land Use Costs Raster"
+    )
     layout.addRow(outputFileLayout)
 
     dialog.create_land_use_costs_button = QPushButton("Create Land Use Costs Raster")
@@ -83,7 +78,7 @@ def on_land_use_layer_changed(dialog: "AnalysisDialog"):
 def run_land_use_cost_creation(dialog: "AnalysisDialog"):
     """Create Land Use Cost Raster"""
     try:
-        land_use_layer = QgsProject.instance().mapLayer(dialog.landUseComboBox.currentData())
+        land_use_layer = layer_from_dropdown(dialog.landUseComboBox)
         class_costs = get_land_use_costs(dialog)
 
         if not land_use_layer:

@@ -6,13 +6,14 @@ import numpy as np
 from osgeo import gdal
 from qgis import processing
 from qgis.core import QgsProject, QgsRasterLayer
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QPushButton
 
 from ..constants.comet import COST_FLOOR, N_CAP
 from ..core.comet import comet_cell_cost
+from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import grass_alg_id, select_output_file
+from ..utils import grass_alg_id, layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -21,13 +22,7 @@ if TYPE_CHECKING:
 def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the LCP (Least Cost Path) tab."""
     # Combined Costs GroupBox
-    combinedCostsGroupBox = QGroupBox()
-    combinedCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     combinedCostsLayout = QFormLayout()
-    combinedCostsTitle = QLabel("Create Combined Costs Raster")
-    combinedCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    combinedCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    combinedCostsLayout.addRow(combinedCostsTitle)
     dialog.combineLandUseDropdown = QComboBox()
     dialog.combineSlopeDropdown = QComboBox()
     dialog.combineCorridorsDropdown = QComboBox()
@@ -42,43 +37,27 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
         QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.combineCrossingsDropdown
     )
     combinedCostsLayout.addRow(QLabel("Select Number of Crossings Raster (N):"), dialog.combineNRasterDropdown)
-    dialog.combinedRasterPath = QLineEdit()
-    dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
-    dialog.combinedRasterBrowse = QPushButton("Browse")
-    dialog.combinedRasterBrowse.clicked.connect(lambda: select_output_file(dialog.combinedRasterPath, "tif"))
-    combinedFileLayout = QHBoxLayout()
-    combinedFileLayout.addWidget(dialog.combinedRasterPath)
-    combinedFileLayout.addWidget(dialog.combinedRasterBrowse)
+    combinedFileLayout = add_output_path_row(
+        dialog, "combinedRasterPath", "combinedRasterBrowse", "tif", "Choose output path for Combined Raster"
+    )
     combinedCostsLayout.addRow(combinedFileLayout)
     dialog.combine_button = QPushButton("Create Combined Raster")
     combinedCostsLayout.addRow(dialog.combine_button)
-    combinedCostsGroupBox.setLayout(combinedCostsLayout)
-    layout.addWidget(combinedCostsGroupBox)
+    layout.addWidget(make_group_box("Create Combined Costs Raster", combinedCostsLayout))
 
     # LCP GroupBox
-    lcpGroupBox = QGroupBox()
-    lcpGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     lcpPathLayout = QFormLayout()
-    lcpTitle = QLabel("Create Least Cost Path")
-    lcpTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    lcpTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    lcpPathLayout.addRow(lcpTitle)
     dialog.pointsComboBox = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
     dialog.lcpInputDropdown = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
-    dialog.finalPath = QLineEdit()
-    dialog.finalPath.setPlaceholderText("Choose output path for LCP Vector")
-    dialog.finalBrowse = QPushButton("Browse")
-    dialog.finalBrowse.clicked.connect(lambda: select_output_file(dialog.finalPath, "gpkg"))
-    finalFileLayout = QHBoxLayout()
-    finalFileLayout.addWidget(dialog.finalPath)
-    finalFileLayout.addWidget(dialog.finalBrowse)
+    finalFileLayout = add_output_path_row(
+        dialog, "finalPath", "finalBrowse", "gpkg", "Choose output path for LCP Vector"
+    )
     lcpPathLayout.addRow(finalFileLayout)
     dialog.final_button = QPushButton("Create Least Cost Path")
     lcpPathLayout.addRow(dialog.final_button)
-    lcpGroupBox.setLayout(lcpPathLayout)
-    layout.addWidget(lcpGroupBox)
+    layout.addWidget(make_group_box("Create Least Cost Path", lcpPathLayout))
 
 
 def connect_lcp_signals(dialog: "AnalysisDialog"):
@@ -91,11 +70,11 @@ def run_raster_combination(dialog: "AnalysisDialog"):
     """Combine Cost Rasters using COMET formula with N factor"""
     try:
         # Load all layers
-        costs_layer = QgsProject.instance().mapLayer(dialog.combineLandUseDropdown.currentData())
-        slope_layer = QgsProject.instance().mapLayer(dialog.combineSlopeDropdown.currentData())
-        corridors_layer = QgsProject.instance().mapLayer(dialog.combineCorridorsDropdown.currentData())
-        crossings_layer = QgsProject.instance().mapLayer(dialog.combineCrossingsDropdown.currentData())
-        N_layer = QgsProject.instance().mapLayer(dialog.combineNRasterDropdown.currentData())
+        costs_layer = layer_from_dropdown(dialog.combineLandUseDropdown)
+        slope_layer = layer_from_dropdown(dialog.combineSlopeDropdown)
+        corridors_layer = layer_from_dropdown(dialog.combineCorridorsDropdown)
+        crossings_layer = layer_from_dropdown(dialog.combineCrossingsDropdown)
+        N_layer = layer_from_dropdown(dialog.combineNRasterDropdown)
         output_path = dialog.combinedRasterPath.text().strip()
 
         if not output_path:
@@ -114,8 +93,8 @@ def run_raster_combination(dialog: "AnalysisDialog"):
 def run_lcp_creation(dialog: "AnalysisDialog"):
     """Generate Least Cost Path Vector"""
     try:
-        points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
-        combined_layer = QgsProject.instance().mapLayer(dialog.lcpInputDropdown.currentData())
+        points_layer = layer_from_dropdown(dialog.pointsComboBox)
+        combined_layer = layer_from_dropdown(dialog.lcpInputDropdown)
         vector_output_path = dialog.finalPath.text().strip()
 
         if not all([points_layer, combined_layer, vector_output_path]):
@@ -235,22 +214,17 @@ def combine_rasters_with_comet_formula(
 
         resampled_path = os.path.join(os.path.dirname(output_path), f"_resampled_{name.replace(' ', '_')}.tif")
 
-        params = {
-            "INPUT": layer,
-            "SOURCE_CRS": layer.crs(),
-            "TARGET_CRS": reference_layer.crs(),
-            "RESAMPLING": 0,
-            "NODATA": None,
-            "TARGET_RESOLUTION": ref_resolution,
-            "TARGET_EXTENT": f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            "OUTPUT": resampled_path,
-            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
-        }
+        resampled_output = resample_raster(
+            layer,
+            resampled_path,
+            ref_resolution,
+            source_crs=layer.crs(),
+            target_crs=reference_layer.crs(),
+            target_extent=f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+        )
 
-        result = processing.run("gdal:warpreproject", params)
-
-        if result and "OUTPUT" in result:
-            ds = gdal.Open(result["OUTPUT"])
+        if resampled_output:
+            ds = gdal.Open(resampled_output)
             if ds is None:
                 raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
 
@@ -274,8 +248,8 @@ def combine_rasters_with_comet_formula(
 
             # Clean up temp file
             try:
-                if os.path.exists(result["OUTPUT"]):
-                    os.remove(result["OUTPUT"])
+                if os.path.exists(resampled_output):
+                    os.remove(resampled_output)
             except Exception as cleanup_error:
                 dialog.log_message(f"  ⚠️ Could not delete temp file: {cleanup_error}", "LCP")
         else:

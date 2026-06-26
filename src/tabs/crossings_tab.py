@@ -5,11 +5,11 @@ import numpy as np
 from osgeo import gdal
 from qgis import processing
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
+from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton
 
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -21,14 +21,7 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     # ============================================================
     # Section 1: Create Crossings Costs Raster
     # ============================================================
-    crossingsCostsGroupBox = QGroupBox()
-    crossingsCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     crossingsCostsLayout = QFormLayout()
-
-    crossingsCostsTitle = QLabel("Create Crossings Costs Raster")
-    crossingsCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    crossingsCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    crossingsCostsLayout.addRow(crossingsCostsTitle)
 
     dialog.crossingComboBox = QComboBox()
     crossingsCostsLayout.addRow(QLabel("Select Crossing Vector:"), dialog.crossingComboBox)
@@ -46,32 +39,20 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.crossingNoCostInput.setText("1")
     crossingsCostsLayout.addRow(QLabel("Cost for non-crossing cells:"), dialog.crossingNoCostInput)
 
-    dialog.crossingOutputPath = QLineEdit()
-    dialog.crossingOutputPath.setPlaceholderText("Choose output path for Crossings Costs Raster")
-    dialog.crossingBrowse = QPushButton("Browse")
-    dialog.crossingBrowse.clicked.connect(lambda: select_output_file(dialog.crossingOutputPath, "tif"))
-    outputCrossingLayout = QHBoxLayout()
-    outputCrossingLayout.addWidget(dialog.crossingOutputPath)
-    outputCrossingLayout.addWidget(dialog.crossingBrowse)
+    outputCrossingLayout = add_output_path_row(
+        dialog, "crossingOutputPath", "crossingBrowse", "tif", "Choose output path for Crossings Costs Raster"
+    )
     crossingsCostsLayout.addRow(outputCrossingLayout)
 
     dialog.runCreateRasterFromCrossingButton = QPushButton("Create Crossings Costs Raster")
     crossingsCostsLayout.addRow(dialog.runCreateRasterFromCrossingButton)
 
-    crossingsCostsGroupBox.setLayout(crossingsCostsLayout)
-    layout.addWidget(crossingsCostsGroupBox)
+    layout.addWidget(make_group_box("Create Crossings Costs Raster", crossingsCostsLayout))
 
     # ============================================================
     # Section 2: Create Number of Crossings Raster (N)
     # ============================================================
-    nRasterGroupBox = QGroupBox()
-    nRasterGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     nRasterLayout = QFormLayout()
-
-    nRasterTitle = QLabel("Create Number of Crossings Raster (N)")
-    nRasterTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    nRasterTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    nRasterLayout.addRow(nRasterTitle)
 
     dialog.nCrossingVectorComboBox = QComboBox()
     nRasterLayout.addRow(QLabel("Select Crossings Vector:"), dialog.nCrossingVectorComboBox)
@@ -79,20 +60,15 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.nCrossingRefRasterComboBox = QComboBox()
     nRasterLayout.addRow(QLabel("Select Reference Raster:"), dialog.nCrossingRefRasterComboBox)
 
-    dialog.nCrossingOutputPath = QLineEdit()
-    dialog.nCrossingOutputPath.setPlaceholderText("Choose output path for N Raster")
-    dialog.nCrossingBrowse = QPushButton("Browse")
-    dialog.nCrossingBrowse.clicked.connect(lambda: select_output_file(dialog.nCrossingOutputPath, "tif"))
-    outputNLayout = QHBoxLayout()
-    outputNLayout.addWidget(dialog.nCrossingOutputPath)
-    outputNLayout.addWidget(dialog.nCrossingBrowse)
+    outputNLayout = add_output_path_row(
+        dialog, "nCrossingOutputPath", "nCrossingBrowse", "tif", "Choose output path for N Raster"
+    )
     nRasterLayout.addRow(outputNLayout)
 
     dialog.runCreateNRasterButton = QPushButton("Create Number of Crossings Raster")
     nRasterLayout.addRow(dialog.runCreateNRasterButton)
 
-    nRasterGroupBox.setLayout(nRasterLayout)
-    layout.addWidget(nRasterGroupBox)
+    layout.addWidget(make_group_box("Create Number of Crossings Raster (N)", nRasterLayout))
 
 
 def connect_crossings_signals(dialog: "AnalysisDialog"):
@@ -107,8 +83,8 @@ def run_crossings_cost_creation(dialog: "AnalysisDialog"):
     """Create a single-band cost raster from a vector, aligned to a reference raster"""
     try:
         # Get selected layers and parameters
-        crossing_layer = QgsProject.instance().mapLayer(dialog.crossingComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.crossingRefRasterComboBox.currentData())
+        crossing_layer = layer_from_dropdown(dialog.crossingComboBox)
+        ref_layer = layer_from_dropdown(dialog.crossingRefRasterComboBox)
         output_path = dialog.crossingOutputPath.text().strip()
         crossing_cost = float(dialog.crossingCostInput.text())
         no_crossing_cost = float(dialog.crossingNoCostInput.text())
@@ -168,8 +144,8 @@ def run_n_raster_creation(dialog: "AnalysisDialog"):
     """
     try:
         # Get selected layers
-        crossing_layer = QgsProject.instance().mapLayer(dialog.nCrossingVectorComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.nCrossingRefRasterComboBox.currentData())
+        crossing_layer = layer_from_dropdown(dialog.nCrossingVectorComboBox)
+        ref_layer = layer_from_dropdown(dialog.nCrossingRefRasterComboBox)
         output_path = dialog.nCrossingOutputPath.text().strip()
 
         if not crossing_layer or not ref_layer or not output_path:

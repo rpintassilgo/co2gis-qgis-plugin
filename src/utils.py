@@ -9,6 +9,16 @@ if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
 
 
+def layer_from_dropdown(combo: QComboBox):
+    """Return the map layer whose id is stored as the combo's current item data.
+
+    Replaces the ``QgsProject.instance().mapLayer(<combo>.currentData())``
+    pattern repeated across every tab. Returns ``None`` if nothing is selected
+    or the layer is no longer in the project.
+    """
+    return QgsProject.instance().mapLayer(combo.currentData())
+
+
 def grass_alg_id(name: str) -> str:
     """
     Resolve a GRASS processing algorithm id across QGIS versions.
@@ -46,103 +56,87 @@ def make_searchable_dropdown(dropdown: QComboBox):
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # Case-insensitive search
 
 
+# Data-driven registry of every layer-selection dropdown.
+#
+# Each entry maps a dropdown attribute on the dialog to:
+#   - kind: which layers it accepts. "raster" -> raster layers; "vector" -> any
+#     vector layer; "point" -> point-geometry vectors; "line" -> line-geometry
+#     vectors. (A point/line vector also matches "vector".)
+#   - warning: the "no layers found" message logged when the dropdown ends up
+#     empty, or None for dropdowns that never logged a warning.
+#
+# Ordering: warning-bearing entries come first, in the exact order their
+# messages were emitted by the original hand-written code, so the System log
+# output is identical.
+DROPDOWN_REGISTRY = [
+    ("pointsComboBox", "point", "No point vector layers found."),
+    ("demComboBox", "raster", "No raster layers found for DEM."),
+    ("landUseComboBox", "raster", "No raster layers found for Land Use."),
+    ("combineLandUseDropdown", "raster", "No raster layers found for Land Use Costs Raster."),
+    ("combineSlopeDropdown", "raster", "No raster layers found for Slope Raster."),
+    ("combineCorridorsDropdown", "raster", "No raster layers found for Corridors Costs Raster."),
+    ("combineCrossingsDropdown", "raster", "No raster layers found for Crossings Costs Raster."),
+    ("clipRasterInputDropdown", "raster", "No raster layers found for clipping."),
+    ("lcpInputDropdown", "raster", "No raster layers found for least cost path calculation."),
+    ("resampleRasterComboBox", "raster", "No raster layers found for resampling."),
+    # Remaining raster dropdowns (no warning).
+    ("combineNRasterDropdown", "raster", None),
+    ("slopeLayerComboBox", "raster", None),
+    ("landUseCostsDropdown", "raster", None),
+    ("slopeCostsDropdown", "raster", None),
+    ("corridorsCostsDropdown", "raster", None),
+    ("crossingsCostsDropdown", "raster", None),
+    ("crossingRefRasterComboBox", "raster", None),
+    ("nCrossingRefRasterComboBox", "raster", None),
+    ("corridorRefRasterComboBox", "raster", None),
+    # Point-geometry vector dropdowns.
+    ("clipPointVectorComboBox", "point", None),
+    # Line-geometry vector dropdowns.
+    ("pipelineVectorDropdown", "line", None),
+    # Any-geometry vector dropdowns.
+    ("vectorComboBox", "vector", None),
+    ("vector2ComboBox", "vector", None),
+    ("crossingComboBox", "vector", None),
+    ("nCrossingVectorComboBox", "vector", None),
+    ("corridorComboBox", "vector", None),
+    ("crossingsVectorDropdown", "vector", None),
+]
+
+
+def _layer_kinds(layer: QgsMapLayer) -> set:
+    """Return the set of registry "kinds" a layer should populate."""
+    if isinstance(layer, QgsRasterLayer):
+        return {"raster"}
+    if isinstance(layer, QgsVectorLayer):
+        kinds = {"vector"}
+        geometry_type = layer.geometryType()
+        if geometry_type == QgsWkbTypes.PointGeometry:
+            kinds.add("point")
+        elif geometry_type == QgsWkbTypes.LineGeometry:
+            kinds.add("line")
+        return kinds
+    return set()
+
+
 def populate_layer_dropdowns(dialog: "AnalysisDialog"):
     """Populate all dropdowns with available layers."""
-    # ... (code from dropdowns.py)
-    # Clear all dropdowns first
-    dialog.landUseComboBox.clear()
-    dialog.demComboBox.clear()
-    dialog.combineLandUseDropdown.clear()
-    dialog.combineSlopeDropdown.clear()
-    dialog.combineCorridorsDropdown.clear()
-    dialog.combineCrossingsDropdown.clear()
-    dialog.combineNRasterDropdown.clear()
-    dialog.clipRasterInputDropdown.clear()
-    dialog.lcpInputDropdown.clear()
-    dialog.pointsComboBox.clear()
-    dialog.clipPointVectorComboBox.clear()
-    dialog.resampleRasterComboBox.clear()
-    dialog.vectorComboBox.clear()
-    dialog.vector2ComboBox.clear()
-    dialog.slopeLayerComboBox.clear()
+    # Clear all dropdowns first.
+    for attr, _kind, _warning in DROPDOWN_REGISTRY:
+        getattr(dialog, attr).clear()
 
-    # Price estimation dropdowns
-    dialog.pipelineVectorDropdown.clear()
-    dialog.landUseCostsDropdown.clear()
-    dialog.slopeCostsDropdown.clear()
-    dialog.corridorsCostsDropdown.clear()
-    dialog.crossingsCostsDropdown.clear()
-    dialog.crossingsVectorDropdown.clear()
+    # Populate each dropdown with the layers matching its kind, in project order.
+    for layer in QgsProject.instance().mapLayers().values():
+        kinds = _layer_kinds(layer)
+        if not kinds:
+            continue
+        for attr, kind, _warning in DROPDOWN_REGISTRY:
+            if kind in kinds:
+                getattr(dialog, attr).addItem(layer.name(), layer.id())
 
-    # New crossings/corridors combo boxes
-    dialog.crossingComboBox.clear()
-    dialog.crossingRefRasterComboBox.clear()
-    dialog.nCrossingVectorComboBox.clear()
-    dialog.nCrossingRefRasterComboBox.clear()
-    dialog.corridorComboBox.clear()
-    dialog.corridorRefRasterComboBox.clear()
-
-    # Get all layers from the project
-    layers = QgsProject.instance().mapLayers().values()
-
-    # Populate dropdowns based on layer type
-    for layer in layers:
-        if isinstance(layer, QgsRasterLayer):
-            # Add to raster dropdowns
-            dialog.landUseComboBox.addItem(layer.name(), layer.id())
-            dialog.demComboBox.addItem(layer.name(), layer.id())
-            dialog.combineLandUseDropdown.addItem(layer.name(), layer.id())
-            dialog.combineSlopeDropdown.addItem(layer.name(), layer.id())
-            dialog.combineCorridorsDropdown.addItem(layer.name(), layer.id())
-            dialog.combineCrossingsDropdown.addItem(layer.name(), layer.id())
-            dialog.combineNRasterDropdown.addItem(layer.name(), layer.id())
-            dialog.clipRasterInputDropdown.addItem(layer.name(), layer.id())
-            dialog.lcpInputDropdown.addItem(layer.name(), layer.id())
-            dialog.resampleRasterComboBox.addItem(layer.name(), layer.id())
-            dialog.slopeLayerComboBox.addItem(layer.name(), layer.id())
-            # Price estimation raster dropdowns
-            dialog.landUseCostsDropdown.addItem(layer.name(), layer.id())
-            dialog.slopeCostsDropdown.addItem(layer.name(), layer.id())
-            dialog.corridorsCostsDropdown.addItem(layer.name(), layer.id())
-            dialog.crossingsCostsDropdown.addItem(layer.name(), layer.id())
-            dialog.crossingRefRasterComboBox.addItem(layer.name(), layer.id())
-            dialog.nCrossingRefRasterComboBox.addItem(layer.name(), layer.id())
-            dialog.corridorRefRasterComboBox.addItem(layer.name(), layer.id())
-        elif isinstance(layer, QgsVectorLayer):
-            # Add to vector dropdowns
-            if layer.geometryType() == QgsWkbTypes.PointGeometry:
-                dialog.pointsComboBox.addItem(layer.name(), layer.id())
-                dialog.clipPointVectorComboBox.addItem(layer.name(), layer.id())
-            elif layer.geometryType() == QgsWkbTypes.LineGeometry:
-                dialog.pipelineVectorDropdown.addItem(layer.name(), layer.id())
-            dialog.vectorComboBox.addItem(layer.name(), layer.id())
-            dialog.vector2ComboBox.addItem(layer.name(), layer.id())
-            dialog.crossingComboBox.addItem(layer.name(), layer.id())
-            dialog.nCrossingVectorComboBox.addItem(layer.name(), layer.id())
-            dialog.corridorComboBox.addItem(layer.name(), layer.id())
-            dialog.crossingsVectorDropdown.addItem(layer.name(), layer.id())
-
-    # Logging messages if no layers are found
-    if dialog.pointsComboBox.count() == 0:
-        dialog.log_message("No point vector layers found.", "System")
-    if dialog.demComboBox.count() == 0:
-        dialog.log_message("No raster layers found for DEM.", "System")
-    if dialog.landUseComboBox.count() == 0:
-        dialog.log_message("No raster layers found for Land Use.", "System")
-    if dialog.combineLandUseDropdown.count() == 0:
-        dialog.log_message("No raster layers found for Land Use Costs Raster.", "System")
-    if dialog.combineSlopeDropdown.count() == 0:
-        dialog.log_message("No raster layers found for Slope Raster.", "System")
-    if dialog.combineCorridorsDropdown.count() == 0:
-        dialog.log_message("No raster layers found for Corridors Costs Raster.", "System")
-    if dialog.combineCrossingsDropdown.count() == 0:
-        dialog.log_message("No raster layers found for Crossings Costs Raster.", "System")
-    if dialog.clipRasterInputDropdown.count() == 0:
-        dialog.log_message("No raster layers found for clipping.", "System")
-    if dialog.lcpInputDropdown.count() == 0:
-        dialog.log_message("No raster layers found for least cost path calculation.", "System")
-    if dialog.resampleRasterComboBox.count() == 0:
-        dialog.log_message("No raster layers found for resampling.", "System")
+    # Log a warning for each empty dropdown that declares one.
+    for attr, _kind, warning in DROPDOWN_REGISTRY:
+        if warning and getattr(dialog, attr).count() == 0:
+            dialog.log_message(warning, "System")
 
 
 def update_resolution_field(dialog: "AnalysisDialog", combo_box: QComboBox, line_edit: QLineEdit):
@@ -215,19 +209,6 @@ def select_output_file(output_field: QLineEdit, file_type: str):
                 if not os.path.splitext(selected_file)[1]:
                     selected_file += f".{file_type}"
             output_field.setText(selected_file)
-
-
-def update_original_resolution(dialog: "AnalysisDialog"):
-    """Update the original resolution input field based on the selected raster."""
-    raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
-    if raster_layer:
-        crs = raster_layer.crs()
-        resolution_x = raster_layer.rasterUnitsPerPixelX()
-        resolution_y = raster_layer.rasterUnitsPerPixelY()
-
-        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
-        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
-        dialog.originalResolutionInput.setText(f"~{avg_resolution} {unit}")
 
 
 def get_layer_path(layer: QgsMapLayer):

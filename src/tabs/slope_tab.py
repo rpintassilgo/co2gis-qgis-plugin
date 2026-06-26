@@ -10,11 +10,9 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -23,7 +21,8 @@ from qgis.PyQt.QtWidgets import (
 
 from ..constants.slope import COMET_SLOPE_INTERVALS
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -31,42 +30,22 @@ if TYPE_CHECKING:
 
 def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the Slope tab."""
-    createSlopeGroupBox = QGroupBox()
-    createSlopeGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     createSlopeLayout = QFormLayout()
-
-    createSlopeTitle = QLabel("Create Slope from DEM")
-    createSlopeTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    createSlopeTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    createSlopeLayout.addRow(createSlopeTitle)
 
     dialog.demComboBox = QComboBox()
     createSlopeLayout.addRow(QLabel("Select DEM Layer:"), dialog.demComboBox)
 
-    dialog.slopeRasterPath = QLineEdit()
-    dialog.slopeRasterPath.setPlaceholderText("Choose output path for Slope Raster")
-    dialog.slopeRasterBrowse = QPushButton("Browse")
-    dialog.slopeRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeRasterPath, "tif"))
-
-    slopeFileLayout = QHBoxLayout()
-    slopeFileLayout.addWidget(dialog.slopeRasterPath)
-    slopeFileLayout.addWidget(dialog.slopeRasterBrowse)
+    slopeFileLayout = add_output_path_row(
+        dialog, "slopeRasterPath", "slopeRasterBrowse", "tif", "Choose output path for Slope Raster"
+    )
     createSlopeLayout.addRow(slopeFileLayout)
 
     dialog.create_slope_button = QPushButton("Create Slope Raster from DEM")
     createSlopeLayout.addRow(dialog.create_slope_button)
 
-    createSlopeGroupBox.setLayout(createSlopeLayout)
-    layout.addWidget(createSlopeGroupBox)
+    layout.addWidget(make_group_box("Create Slope from DEM", createSlopeLayout))
 
-    slopeCostsGroupBox = QGroupBox()
-    slopeCostsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     slopeCostsLayout = QFormLayout()
-
-    slopeCostsTitle = QLabel("Create Slope Costs")
-    slopeCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
-    slopeCostsLayout.addRow(slopeCostsTitle)
 
     dialog.slopeLayerComboBox = QComboBox()
     slopeCostsLayout.addRow(QLabel("Select Slope Layer:"), dialog.slopeLayerComboBox)
@@ -88,21 +67,15 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     slopeTableButtonsLayout.addWidget(dialog.slopePopulateCometButton)
     slopeCostsLayout.addRow(slopeTableButtonsLayout)
 
-    dialog.slopeCostsRasterPath = QLineEdit()
-    dialog.slopeCostsRasterPath.setPlaceholderText("Choose output path for Slope Costs Raster")
-    dialog.slopeCostsRasterBrowse = QPushButton("Browse")
-    dialog.slopeCostsRasterBrowse.clicked.connect(lambda: select_output_file(dialog.slopeCostsRasterPath, "tif"))
-
-    slopeCostsFileLayout = QHBoxLayout()
-    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterPath)
-    slopeCostsFileLayout.addWidget(dialog.slopeCostsRasterBrowse)
+    slopeCostsFileLayout = add_output_path_row(
+        dialog, "slopeCostsRasterPath", "slopeCostsRasterBrowse", "tif", "Choose output path for Slope Costs Raster"
+    )
     slopeCostsLayout.addRow(slopeCostsFileLayout)
 
     dialog.create_slope_costs_button = QPushButton("Create Slope Costs Raster")
     slopeCostsLayout.addRow(dialog.create_slope_costs_button)
 
-    slopeCostsGroupBox.setLayout(slopeCostsLayout)
-    layout.addWidget(slopeCostsGroupBox)
+    layout.addWidget(make_group_box("Create Slope Costs", slopeCostsLayout))
 
     setup_slope_cost_table_logic(dialog)
 
@@ -152,7 +125,7 @@ def run_slope_costs_creation(dialog: "AnalysisDialog"):
     """Create slope costs raster based on defined intervals."""
     try:
         intervals = get_slope_cost_intervals(dialog)
-        slope_layer = QgsProject.instance().mapLayer(dialog.slopeLayerComboBox.currentData())
+        slope_layer = layer_from_dropdown(dialog.slopeLayerComboBox)
         output_path = dialog.slopeCostsRasterPath.text()
 
         if not slope_layer:

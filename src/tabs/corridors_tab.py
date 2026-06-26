@@ -8,7 +8,6 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -16,8 +15,10 @@ from qgis.PyQt.QtWidgets import (
     QTableWidget,
 )
 
+from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import layer_from_dropdown
+from ..widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -56,12 +57,7 @@ def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     layout.addRow(dialog.corridorLandUseTable)
 
     # Output path
-    dialog.corridorOutputPath = QLineEdit()
-    dialog.corridorBrowse = QPushButton("Browse")
-    dialog.corridorBrowse.clicked.connect(lambda: select_output_file(dialog.corridorOutputPath, "tif"))
-    path_layout = QHBoxLayout()
-    path_layout.addWidget(dialog.corridorOutputPath)
-    path_layout.addWidget(dialog.corridorBrowse)
+    path_layout = add_output_path_row(dialog, "corridorOutputPath", "corridorBrowse", "tif")
     layout.addRow(path_layout)
 
     # Run button
@@ -114,9 +110,9 @@ def run_corridors_cost_creation(dialog: "AnalysisDialog"):
     """Create corridors cost raster with water body detection - simpler approach like crossings."""
     try:
         # Load inputs
-        corridor_layer = QgsProject.instance().mapLayer(dialog.corridorComboBox.currentData())
-        ref_layer = QgsProject.instance().mapLayer(dialog.corridorRefRasterComboBox.currentData())
-        land_use_layer = QgsProject.instance().mapLayer(dialog.corridorLandUseComboBox.currentData())
+        corridor_layer = layer_from_dropdown(dialog.corridorComboBox)
+        ref_layer = layer_from_dropdown(dialog.corridorRefRasterComboBox)
+        land_use_layer = layer_from_dropdown(dialog.corridorLandUseComboBox)
         output_path = dialog.corridorOutputPath.text().strip()
 
         if not all([corridor_layer, ref_layer, land_use_layer, output_path]):
@@ -220,19 +216,14 @@ def create_corridor_cost_raster_with_buffers(
 
         # Step 3: Resample land use to match reference grid
         temp_lu_path = output_path.replace(".tif", "_temp_lu_aligned.tif")
-        resample_params = {
-            "INPUT": land_use_layer,
-            "SOURCE_CRS": land_use_layer.crs(),
-            "TARGET_CRS": proj,
-            "RESAMPLING": 0,  # Nearest neighbor
-            "NODATA": None,
-            "TARGET_RESOLUTION": abs(geotrans[1]),
-            "TARGET_EXTENT": f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
-            "OUTPUT": temp_lu_path,
-            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
-        }
-
-        processing.run("gdal:warpreproject", resample_params)
+        resample_raster(
+            land_use_layer,
+            temp_lu_path,
+            abs(geotrans[1]),
+            source_crs=land_use_layer.crs(),
+            target_crs=proj,
+            target_extent=f"{geotrans[0]},{geotrans[0] + width * geotrans[1]},{geotrans[3] + height * geotrans[5]},{geotrans[3]}",
+        )
 
         # Load land use data and create base cost raster
         lu_ds = gdal.Open(temp_lu_path)
