@@ -211,19 +211,6 @@ def select_output_file(output_field: QLineEdit, file_type: str):
             output_field.setText(selected_file)
 
 
-def update_original_resolution(dialog: "AnalysisDialog"):
-    """Update the original resolution input field based on the selected raster."""
-    raster_layer = layer_from_dropdown(dialog.resampleRasterComboBox)
-    if raster_layer:
-        crs = raster_layer.crs()
-        resolution_x = raster_layer.rasterUnitsPerPixelX()
-        resolution_y = raster_layer.rasterUnitsPerPixelY()
-
-        avg_resolution = round((resolution_x + resolution_y) / 2, 2)
-        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
-        dialog.originalResolutionInput.setText(f"~{avg_resolution} {unit}")
-
-
 def get_layer_path(layer: QgsMapLayer):
     """Returns the file path of the given QgsMapLayer."""
     if layer is None:

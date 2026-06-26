@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ..core.raster import resample_raster
 from ..task_manager import run_in_background
-from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, update_original_resolution
+from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, update_resolution_field
 from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -121,7 +121,9 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
 def connect_aux_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Aux tab."""
     dialog.runCombineVectorsButton.clicked.connect(lambda checked: run_in_background(dialog, run_vector_combination))
-    dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
+    dialog.resampleRasterComboBox.currentIndexChanged.connect(
+        lambda: update_resolution_field(dialog, dialog.resampleRasterComboBox, dialog.originalResolutionInput)
+    )
     dialog.runResampleButton.clicked.connect(lambda checked: run_in_background(dialog, run_raster_resampling))
     dialog.clip_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_clipping))
 
