@@ -1,8 +1,10 @@
 """Least-cost-path domain logic: COMET raster combination + the GRASS routing chain.
 
-Pure domain — no Qt widgets, no dialog. Progress is reported through an optional
-``log(msg)`` callback so the UI can bridge it to its log panel while these
-functions stay importable and testable on their own.
+Pure domain — no Qt widgets, no dialog, no ``QgsProject`` writes. Inputs are
+plain values / source paths captured on the main thread; outputs are written to
+disk and their paths returned, so the caller can add them to the project from the
+main thread (the 3-phase task contract, #2). Progress is reported through an
+optional ``log(msg)`` callback (bridged to the thread-safe ``dialog.log_message``).
 """
 
 import gc
@@ -13,11 +15,14 @@ import tempfile
 import numpy as np
 from osgeo import gdal
 from qgis import processing
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsRasterLayer
 
 from ..constants.comet import COST_FLOOR, N_CAP
 from .comet import comet_cell_cost
 from .raster import resample_raster
+
+# Canonical COMET factor slots, in formula order.
+FACTOR_NAMES = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)", "N (count)"]
 
 
 def grass_alg_id(name: str) -> str:
@@ -41,87 +46,70 @@ def grass_alg_id(name: str) -> str:
     return f"grass:{name}"
 
 
-def combine_rasters_with_comet_formula(
-    land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer, output_path: str, log=lambda msg: None
-) -> str:
+def combine_rasters_with_comet_formula(slots: dict, output_path: str, target_crs_wkt, log=lambda msg: None) -> str:
     """
-    Combines rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]
+    Combine cost rasters with the COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]
 
-    Parameters:
-        land_use_layer: Flu (land use costs)
-        slope_layer: Fs (slope costs)
-        corridors_layer: Fc (corridor costs)
-        crossings_layer: Fci (crossing costs)
-        N_layer: N (number of infrastructure crossings per cell)
+    :param slots: maps each name in :data:`FACTOR_NAMES` to either ``None`` (absent,
+        treated as constant 1.0) or a dict ``{"path", "name", "extent", "res"}``
+        captured on the main thread. ``extent`` is ``(xmin, xmax, ymin, ymax)``.
+    :param target_crs_wkt: WKT of the reference CRS to reproject every raster to.
+    :returns: ``output_path`` (the written combined raster). Does NOT touch the
+        project — the caller adds the layer from the main thread.
 
-    Any layer can be None - will be treated as constant 1.0 (neutral)
-    N is capped at 10 to avoid negative Flu coefficients and numerical instability
+    N is capped at :data:`~src.constants.comet.N_CAP` for stability; the result is
+    floored at :data:`~src.constants.comet.COST_FLOOR` so r.drain works.
     """
+    present = [(name, slots[name]) for name in FACTOR_NAMES if slots.get(name)]
 
-    # Collect valid layers
-    all_layers = []
-    layer_names = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)", "N (count)"]
-    layer_map = {}
-
-    for idx, (layer, name) in enumerate(
-        zip([land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer], layer_names)
-    ):
-        if layer and layer.isValid():
-            all_layers.append(layer)
-            layer_map[name] = idx
-            log(f"  {name}: {layer.name()} - Valid")
+    for name in FACTOR_NAMES:
+        meta = slots.get(name)
+        if meta:
+            log(f"  {name}: {meta['name']} - Valid")
         else:
             log(f"  ⚠️ {name}: Not selected - will use constant 1.0")
 
-    if not all_layers:
+    if not present:
         raise ValueError("At least one cost raster must be provided!")
 
-    # Calculate common extent
+    # Calculate common extent (intersection of all present extents).
     log("Step 1: Calculating common extent...")
-    common_extent = all_layers[0].extent()
-    for layer in all_layers[1:]:
-        common_extent = common_extent.intersect(layer.extent())
-
-    if common_extent.isEmpty():
+    extents = [meta["extent"] for _, meta in present]
+    xmin = max(e[0] for e in extents)
+    xmax = min(e[1] for e in extents)
+    ymin = max(e[2] for e in extents)
+    ymax = min(e[3] for e in extents)
+    if xmin >= xmax or ymin >= ymax:
         raise ValueError("No common extent found - rasters do not overlap!")
 
-    # Use first valid layer as reference for resolution
-    reference_layer = all_layers[0]
-    ref_resolution = reference_layer.rasterUnitsPerPixelX()
-    log(f"Using resolution: {ref_resolution:.2f}m from {reference_layer.name()}")
+    # First present layer is the resolution reference.
+    ref_meta = present[0][1]
+    ref_resolution = ref_meta["res"]
+    log(f"Using resolution: {ref_resolution:.2f}m from {ref_meta['name']}")
 
-    # Resample all valid layers
+    # Resample all present layers to the common grid.
     log("Step 2: Resampling rasters...")
     resampled_data = {}
+    target_extent = f"{xmin},{xmax},{ymin},{ymax}"
+    total_layers = len(present)
 
-    valid_layers_to_resample = [
-        (layer, name)
-        for layer, name in zip([land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer], layer_names)
-        if layer and layer.isValid()
-    ]
-
-    total_layers = len(valid_layers_to_resample)
-    current_layer = 0
-
-    for layer, name in valid_layers_to_resample:
-        current_layer += 1
+    for current_layer, (name, meta) in enumerate(present, start=1):
         log(f"  Resampling {current_layer}/{total_layers}: {name}...")
 
         resampled_path = os.path.join(os.path.dirname(output_path), f"_resampled_{name.replace(' ', '_')}.tif")
 
         resampled_output = resample_raster(
-            layer,
+            meta["path"],
             resampled_path,
             ref_resolution,
-            source_crs=layer.crs(),
-            target_crs=reference_layer.crs(),
-            target_extent=f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+            target_crs=target_crs_wkt,
+            target_extent=target_extent,
         )
 
         if resampled_output:
             ds = gdal.Open(resampled_output)
             if ds is None:
-                raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
+                raise RuntimeError(f"Failed to open resampled raster for {name}")
 
             band = ds.GetRasterBand(1)
             data = band.ReadAsArray().astype(np.float32)
@@ -148,7 +136,7 @@ def combine_rasters_with_comet_formula(
             except Exception as cleanup_error:
                 log(f"  ⚠️ Could not delete temp file: {cleanup_error}")
         else:
-            raise RuntimeError(f"Failed to resample {layer.name()}")
+            raise RuntimeError(f"Failed to resample {name}")
 
     # Get dimensions
     meta = resampled_data["_meta"]
@@ -163,18 +151,6 @@ def combine_rasters_with_comet_formula(
     Fc = resampled_data.get("Corridors (Fc)", np.ones((height, width), dtype=np.float32))
     Fci = resampled_data.get("Crossings (Fci)", np.ones((height, width), dtype=np.float32))
     N = resampled_data.get("N (count)", np.ones((height, width), dtype=np.float32))
-
-    # Log warnings for missing layers
-    if "Land Use (Flu)" not in resampled_data:
-        log("  ⚠️ Land Use (Flu) not selected - assuming Flu=1.0 (neutral)")
-    if "Slope (Fs)" not in resampled_data:
-        log("  ⚠️ Slope (Fs) not selected - assuming Fs=1.0 (neutral)")
-    if "Corridors (Fc)" not in resampled_data:
-        log("  ⚠️ Corridors (Fc) not selected - assuming Fc=1.0 (neutral)")
-    if "Crossings (Fci)" not in resampled_data:
-        log("  ⚠️ Crossings (Fci) not selected - assuming Fci=1.0 (neutral)")
-    if "N (count)" not in resampled_data:
-        log("  ⚠️ N (count) not selected - assuming N=1.0 (one infrastructure per cell)")
 
     # Log value ranges
     log(f"  Flu range: [{np.min(Flu):.2f}, {np.max(Flu):.2f}]")
@@ -229,16 +205,8 @@ def combine_rasters_with_comet_formula(
     resampled_data = None
     gc.collect()
 
-    log("Step 5: Loading result into QGIS...")
-    # Load result into QGIS
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if new_layer.isValid():
-        QgsProject.instance().addMapLayer(new_layer)
-        log("✓ Successfully created combined cost raster using COMET formula")
-        return output_path
-    else:
-        raise RuntimeError("Failed to load the combined cost raster")
+    log("✓ Combined cost raster computed using COMET formula")
+    return output_path
 
 
 def run_r_cost(input_raster: str, start_coordinates: str, cost_output: str, direction_output: str) -> dict:
@@ -281,10 +249,12 @@ def run_r_cost(input_raster: str, start_coordinates: str, cost_output: str, dire
     return {"output": cost_output, "outdir": direction_output}
 
 
-def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output: str, log=lambda msg: None) -> None:
+def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output: str, log=lambda msg: None) -> str:
     """
-    Simple LCP extraction using r.drain → r.to.vect.
-    Proven to work reliably based on successful logs.
+    Extract the LCP with r.drain → r.thin → r.to.vect.
+
+    Writes the route to ``vector_output`` and returns its path. Does NOT load it
+    into the project — the caller adds the layer from the main thread.
     """
     out_dir = os.path.dirname(vector_output)
     if out_dir and not os.path.exists(out_dir):
@@ -367,14 +337,8 @@ def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output:
         },
     )
 
-    # Load the resulting vector
-    layer_name = os.path.splitext(os.path.basename(vector_output))[0]
-    layer = QgsVectorLayer(vector_output, layer_name, "ogr")
-    if not layer.isValid():
-        raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
-    QgsProject.instance().addMapLayer(layer)
-
     log("✓ LCP created successfully using: r.drain → r.thin → r.to.vect")
 
     # Cleanup
     shutil.rmtree(temp_dir, ignore_errors=True)
+    return vector_output

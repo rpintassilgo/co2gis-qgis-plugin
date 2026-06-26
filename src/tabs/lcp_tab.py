@@ -1,11 +1,13 @@
 import os
+import tempfile
 from typing import TYPE_CHECKING
 
+from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QPushButton
 
-from ..core.lcp import combine_rasters_with_comet_formula, run_r_cost, run_r_drain_and_vectorize
-from ..task_manager import run_in_background
-from ..utils import layer_from_dropdown
+from ..core.lcp import FACTOR_NAMES, combine_rasters_with_comet_formula, run_r_cost, run_r_drain_and_vectorize
+from ..task_manager import run_task
+from ..utils import get_layer_path, layer_from_dropdown
 from ..widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -55,93 +57,140 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
 
 def connect_lcp_signals(dialog: "AnalysisDialog"):
     """Connects signals for the LCP tab."""
-    dialog.combine_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_combination))
-    dialog.final_button.clicked.connect(lambda checked: run_in_background(dialog, run_lcp_creation))
-
-
-def run_raster_combination(dialog: "AnalysisDialog"):
-    """Combine Cost Rasters using COMET formula with N factor"""
-    try:
-        # Load all layers
-        costs_layer = layer_from_dropdown(dialog.combineLandUseDropdown)
-        slope_layer = layer_from_dropdown(dialog.combineSlopeDropdown)
-        corridors_layer = layer_from_dropdown(dialog.combineCorridorsDropdown)
-        crossings_layer = layer_from_dropdown(dialog.combineCrossingsDropdown)
-        N_layer = layer_from_dropdown(dialog.combineNRasterDropdown)
-        output_path = dialog.combinedRasterPath.text().strip()
-
-        if not output_path:
-            raise ValueError("Output path must be specified.")
-
-        dialog.log_message("Combining Cost Rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]", "LCP")
-        combine_rasters_with_comet_formula(
-            costs_layer,
-            slope_layer,
-            corridors_layer,
-            crossings_layer,
-            N_layer,
-            output_path,
-            log=lambda msg: dialog.log_message(msg, "LCP"),
+    dialog.combine_button.clicked.connect(
+        lambda checked: run_task(
+            dialog, "Combine Cost Rasters", work=_combine_work, prepare=_combine_prepare, publish=_combine_publish
         )
-        dialog.log_message(f"Combined Raster created successfully at: {output_path}", "LCP")
+    )
+    dialog.final_button.clicked.connect(
+        lambda checked: run_task(dialog, "Create LCP", work=_lcp_work, prepare=_lcp_prepare, publish=_lcp_publish)
+    )
 
-    except Exception as e:
-        dialog.log_message(f"Combining Cost Rasters Failed: {str(e)}", "LCP")
+
+# ── Combine cost rasters ──────────────────────────────────────────────────────
 
 
-def run_lcp_creation(dialog: "AnalysisDialog"):
-    """Generate Least Cost Path Vector"""
-    try:
-        points_layer = layer_from_dropdown(dialog.pointsComboBox)
-        combined_layer = layer_from_dropdown(dialog.lcpInputDropdown)
-        vector_output_path = dialog.finalPath.text().strip()
+def _combine_prepare(dialog: "AnalysisDialog") -> dict:
+    """Main thread: read widgets, resolve selected rasters to paths + metadata."""
+    combos = {
+        "Land Use (Flu)": dialog.combineLandUseDropdown,
+        "Slope (Fs)": dialog.combineSlopeDropdown,
+        "Corridors (Fc)": dialog.combineCorridorsDropdown,
+        "Crossings (Fci)": dialog.combineCrossingsDropdown,
+        "N (count)": dialog.combineNRasterDropdown,
+    }
+    output_path = dialog.combinedRasterPath.text().strip()
+    if not output_path:
+        raise ValueError("Output path must be specified.")
 
-        if not all([points_layer, combined_layer, vector_output_path]):
-            raise ValueError("All input layers and output path must be specified.")
+    slots = {}
+    target_crs_wkt = None
+    for name in FACTOR_NAMES:
+        layer = layer_from_dropdown(combos[name])
+        if layer and layer.isValid():
+            ext = layer.extent()
+            slots[name] = {
+                "path": get_layer_path(layer),
+                "name": layer.name(),
+                "extent": (ext.xMinimum(), ext.xMaximum(), ext.yMinimum(), ext.yMaximum()),
+                "res": layer.rasterUnitsPerPixelX(),
+            }
+            if target_crs_wkt is None:
+                target_crs_wkt = layer.crs().toWkt()
+        else:
+            slots[name] = None
 
-        # Create temporary paths for intermediate files
-        import tempfile
+    if not any(slots.values()):
+        raise ValueError("At least one cost raster must be provided.")
 
-        temp_dir = tempfile.mkdtemp()
-        cost_output_path = os.path.join(temp_dir, "cost_surface.tif")
-        direction_output_path = os.path.join(temp_dir, "direction_surface.tif")
+    dialog.log_message("Combining Cost Rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]", "LCP")
+    return {
+        "slots": slots,
+        "output_path": output_path,
+        "target_crs_wkt": target_crs_wkt,
+        "log": lambda msg: dialog.log_message(msg, "LCP"),
+    }
 
-        # Extract origin and destination
-        coords = []
-        for feat in points_layer.getFeatures():
-            geom = feat.geometry()
-            pt = geom.asPoint() if not geom.isMultipart() else geom.asMultiPoint()[0]
-            coords.append((pt.x(), pt.y()))
-        if len(coords) < 2:
-            raise ValueError("Need at least two points (origin, destination) for LCP.")
 
-        origin_str = f"{coords[0][0]:.6f},{coords[0][1]:.6f}"
-        dest_str = f"{coords[1][0]:.6f},{coords[1][1]:.6f}"
-        dialog.log_message(f"Using origin: {origin_str}", "LCP")
-        dialog.log_message(f"Using destination: {dest_str}", "LCP")
+def _combine_work(params: dict) -> str:
+    """Background thread: resample + apply COMET formula, write the raster."""
+    return combine_rasters_with_comet_formula(
+        params["slots"], params["output_path"], params["target_crs_wkt"], log=params["log"]
+    )
 
-        dialog.log_message("Running r.cost to compute cost surface...", "LCP")
-        dialog.log_message(f"Cost raster: {combined_layer.source()}", "LCP")
-        dialog.log_message(f"Start point: {origin_str}", "LCP")
 
-        cost_result = run_r_cost(combined_layer.source(), origin_str, cost_output_path, direction_output_path)
-        dialog.log_message("r.cost completed successfully.", "LCP")
+def _combine_publish(dialog: "AnalysisDialog", output_path: str):
+    """Main thread: load the combined raster into the project."""
+    layer_name = os.path.splitext(os.path.basename(output_path))[0]
+    layer = QgsRasterLayer(output_path, layer_name)
+    if not layer.isValid():
+        raise RuntimeError("Failed to load the combined cost raster")
+    QgsProject.instance().addMapLayer(layer)
+    dialog.log_message(f"Combined Raster created successfully at: {output_path}", "LCP")
 
-        dialog.log_message("Running r.drain to extract least cost path...", "LCP")
-        dialog.log_message(f"Destination point: {dest_str}", "LCP")
 
-        run_r_drain_and_vectorize(
-            cost_result, dest_str, vector_output_path, log=lambda msg: dialog.log_message(msg, "LCP")
-        )
-        dialog.log_message(f"Least Cost Path generated at: {vector_output_path}", "LCP")
+# ── Least cost path ───────────────────────────────────────────────────────────
 
-        # Cleanup temporary files
-        import shutil
 
-        try:
-            shutil.rmtree(temp_dir)
-        except BaseException:
-            pass  # Don't fail if cleanup fails
+def _lcp_prepare(dialog: "AnalysisDialog") -> dict:
+    """Main thread: read points + combined raster, extract origin/destination."""
+    points_layer = layer_from_dropdown(dialog.pointsComboBox)
+    combined_layer = layer_from_dropdown(dialog.lcpInputDropdown)
+    vector_output = dialog.finalPath.text().strip()
 
-    except Exception as e:
-        dialog.log_message(f"LCP Creation Process Failed: {e}", "LCP")
+    if not all([points_layer, combined_layer, vector_output]):
+        raise ValueError("All input layers and output path must be specified.")
+
+    coords = []
+    for feat in points_layer.getFeatures():
+        geom = feat.geometry()
+        pt = geom.asPoint() if not geom.isMultipart() else geom.asMultiPoint()[0]
+        coords.append((pt.x(), pt.y()))
+    if len(coords) < 2:
+        raise ValueError("Need at least two points (origin, destination) for LCP.")
+
+    origin = f"{coords[0][0]:.6f},{coords[0][1]:.6f}"
+    dest = f"{coords[1][0]:.6f},{coords[1][1]:.6f}"
+
+    log = lambda msg: dialog.log_message(msg, "LCP")  # noqa: E731
+    log(f"Using origin: {origin}")
+    log(f"Using destination: {dest}")
+    return {
+        "origin": origin,
+        "dest": dest,
+        "combined_path": combined_layer.source(),
+        "vector_output": vector_output,
+        "log": log,
+    }
+
+
+def _lcp_work(params: dict) -> str:
+    """Background thread: run the GRASS r.cost → r.drain → r.to.vect chain."""
+    log = params["log"]
+    temp_dir = tempfile.mkdtemp()
+    cost_output_path = os.path.join(temp_dir, "cost_surface.tif")
+    direction_output_path = os.path.join(temp_dir, "direction_surface.tif")
+
+    log("Running r.cost to compute cost surface...")
+    log(f"Cost raster: {params['combined_path']}")
+    log(f"Start point: {params['origin']}")
+    cost_result = run_r_cost(params["combined_path"], params["origin"], cost_output_path, direction_output_path)
+    log("r.cost completed successfully.")
+
+    log(f"Destination point: {params['dest']}")
+    vector_output = run_r_drain_and_vectorize(cost_result, params["dest"], params["vector_output"], log=log)
+
+    import shutil
+
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    return vector_output
+
+
+def _lcp_publish(dialog: "AnalysisDialog", vector_output: str):
+    """Main thread: load the LCP vector into the project."""
+    layer_name = os.path.splitext(os.path.basename(vector_output))[0]
+    layer = QgsVectorLayer(vector_output, layer_name, "ogr")
+    if not layer.isValid():
+        raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
+    QgsProject.instance().addMapLayer(layer)
+    dialog.log_message(f"Least Cost Path generated at: {vector_output}", "LCP")
