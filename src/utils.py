@@ -36,14 +36,14 @@ def make_searchable_dropdown(dropdown: QComboBox):
     User can type to filter options - matches anywhere in the text.
     """
     dropdown.setEditable(True)
-    dropdown.setInsertPolicy(QComboBox.NoInsert)  # Prevent adding new items
+    dropdown.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)  # Prevent adding new items
 
     # Configure completer for better search experience
     completer = dropdown.completer()
     if completer:
-        completer.setCompletionMode(QCompleter.PopupCompletion)
-        completer.setFilterMode(Qt.MatchContains)  # Match anywhere in text
-        completer.setCaseSensitivity(Qt.CaseInsensitive)  # Case-insensitive search
+        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)  # Match anywhere in text
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)  # Case-insensitive search
 
 
 def populate_layer_dropdowns(dialog: "AnalysisDialog"):
@@ -192,8 +192,8 @@ def update_pipeline_length(dialog: "AnalysisDialog"):
 def select_output_file(output_field: QLineEdit, file_type: str):
     """Open a file dialog to select an output file location."""
     file_dialog = QFileDialog()
-    file_dialog.setFileMode(QFileDialog.AnyFile)
-    file_dialog.setAcceptMode(QFileDialog.AcceptSave)
+    file_dialog.setFileMode(QFileDialog.FileMode.AnyFile)
+    file_dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
 
     if file_type == "tif":
         name_filter = "TIF files (*.tif)"

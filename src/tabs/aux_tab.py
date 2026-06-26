@@ -32,7 +32,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     combineVectorsGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     combineVectorsLayout = QFormLayout()
     combineVectorsTitle = QLabel("Combine Vectors")
-    combineVectorsTitle.setAlignment(Qt.AlignCenter)
+    combineVectorsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     combineVectorsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     combineVectorsLayout.addRow(combineVectorsTitle)
     infoCombineText = QLabel(
@@ -65,7 +65,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     resampleGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     resampleLayout = QFormLayout()
     resampleTitle = QLabel("Resample Raster")
-    resampleTitle.setAlignment(Qt.AlignCenter)
+    resampleTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     resampleTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     resampleLayout.addRow(resampleTitle)
     infoResampleText = QLabel(
@@ -103,7 +103,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     clipGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     clipLayout = QFormLayout()
     clipTitle = QLabel("Clip Raster to Area")
-    clipTitle.setAlignment(Qt.AlignCenter)
+    clipTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     clipTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     clipLayout.addRow(clipTitle)
     infoClipText = QLabel(

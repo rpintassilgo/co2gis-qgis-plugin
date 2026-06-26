@@ -35,7 +35,7 @@ def _make_group_box(title_html: str, form_layout: QFormLayout) -> QGroupBox:
     box = QGroupBox()
     box.setStyleSheet("QGroupBox { border: 1px solid grey; }")
     title = QLabel(title_html)
-    title.setAlignment(Qt.AlignCenter)
+    title.setAlignment(Qt.AlignmentFlag.AlignCenter)
     title.setStyleSheet("font-weight: bold; font-size: 12px;")
     form_layout.insertRow(0, title)
     box.setLayout(form_layout)
@@ -79,8 +79,8 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     descriptionScrollArea.setWidgetResizable(True)
     descriptionScrollArea.setMaximumHeight(160)
     descriptionScrollArea.setMinimumHeight(60)
-    descriptionScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-    descriptionScrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    descriptionScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    descriptionScrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     descriptionScrollArea.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
     main_layout.addWidget(descriptionScrollArea)
 
@@ -837,7 +837,7 @@ class FormulaDialog(QDialog):
             "<b>Δp/L</b> = admissible pressure drop per unit length (Pa/m)"
         )
         D_explanation.setWordWrap(True)
-        grid_layout.addWidget(D_formula_label, 0, 0, Qt.AlignCenter)
+        grid_layout.addWidget(D_formula_label, 0, 0, Qt.AlignmentFlag.AlignCenter)
         grid_layout.addWidget(D_explanation, 0, 1)
 
         # --- Ip ---
@@ -864,7 +864,7 @@ class FormulaDialog(QDialog):
             "The summation iterates over all vector segments."
         )
         Ip_explanation.setWordWrap(True)
-        grid_layout.addWidget(Ip_formula_label, 1, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Ip_formula_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
         grid_layout.addWidget(Ip_explanation, 1, 1)
 
         # --- Sc ---
@@ -890,7 +890,7 @@ class FormulaDialog(QDialog):
             "Result is in Watts (W)."
         )
         Sc_explanation.setWordWrap(True)
-        grid_layout.addWidget(Sc_formula_label, 2, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Sc_formula_label, 2, 0, Qt.AlignmentFlag.AlignCenter)
         grid_layout.addWidget(Sc_explanation, 2, 1)
 
         # --- IB ---
@@ -907,7 +907,7 @@ class FormulaDialog(QDialog):
             "Both constants originate from COMET TN6.4 (van den Broek et al., 2013) and are editable in the inputs panel."
         )
         Ib_explanation.setWordWrap(True)
-        grid_layout.addWidget(Ib_formula_label, 3, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Ib_formula_label, 3, 0, Qt.AlignmentFlag.AlignCenter)
         grid_layout.addWidget(Ib_explanation, 3, 1)
 
         # --- Itotal ---
@@ -923,14 +923,14 @@ class FormulaDialog(QDialog):
             "For longer pipelines, one booster station is added after every full segment."
         )
         Itotal_explanation.setWordWrap(True)
-        grid_layout.addWidget(Itotal_formula_label, 4, 0, Qt.AlignCenter)
+        grid_layout.addWidget(Itotal_formula_label, 4, 0, Qt.AlignmentFlag.AlignCenter)
         grid_layout.addWidget(Itotal_explanation, 4, 1)
 
         scroll_area = QScrollArea()
         scroll_area.setWidget(scroll_content)
         scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
 
         outer_layout = QVBoxLayout(self)
         outer_layout.setContentsMargins(0, 0, 0, 0)

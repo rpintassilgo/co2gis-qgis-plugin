@@ -35,7 +35,7 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     createSlopeLayout = QFormLayout()
 
     createSlopeTitle = QLabel("Create Slope from DEM")
-    createSlopeTitle.setAlignment(Qt.AlignCenter)
+    createSlopeTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     createSlopeTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     createSlopeLayout.addRow(createSlopeTitle)
 
@@ -63,7 +63,7 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     slopeCostsLayout = QFormLayout()
 
     slopeCostsTitle = QLabel("Create Slope Costs")
-    slopeCostsTitle.setAlignment(Qt.AlignCenter)
+    slopeCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     slopeCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     slopeCostsLayout.addRow(slopeCostsTitle)
 
@@ -75,7 +75,7 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.slopeCostTable = QTableWidget()
     dialog.slopeCostTable.setColumnCount(4)
     dialog.slopeCostTable.setHorizontalHeaderLabels(["Min % Slope", "Max % Slope", "Cost", "No Upper Limit"])
-    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    dialog.slopeCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     slopeCostsLayout.addRow(dialog.slopeCostTable)
 
     slopeTableButtonsLayout = QHBoxLayout()
@@ -249,13 +249,13 @@ def add_slope_row(dialog: "AnalysisDialog", min_val=None, max_val=None, cost_val
     dialog.slopeCostTable.setCellWidget(row_position, 3, no_limit_checkbox)
 
     def toggle_max_spin(state):
-        is_disabled = state == Qt.Checked
+        is_disabled = state == Qt.CheckState.Checked
         max_spin.setDisabled(is_disabled)
         if is_disabled:
             max_spin.setValue(0)
 
     no_limit_checkbox.stateChanged.connect(toggle_max_spin)
-    toggle_max_spin(Qt.Checked if no_limit else Qt.Unchecked)
+    toggle_max_spin(Qt.CheckState.Checked if no_limit else Qt.CheckState.Unchecked)
 
 
 def remove_selected_slope_row(dialog: "AnalysisDialog"):

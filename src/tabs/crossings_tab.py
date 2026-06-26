@@ -26,7 +26,7 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     crossingsCostsLayout = QFormLayout()
 
     crossingsCostsTitle = QLabel("Create Crossings Costs Raster")
-    crossingsCostsTitle.setAlignment(Qt.AlignCenter)
+    crossingsCostsTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     crossingsCostsTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     crossingsCostsLayout.addRow(crossingsCostsTitle)
 
@@ -69,7 +69,7 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     nRasterLayout = QFormLayout()
 
     nRasterTitle = QLabel("Create Number of Crossings Raster (N)")
-    nRasterTitle.setAlignment(Qt.AlignCenter)
+    nRasterTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
     nRasterTitle.setStyleSheet("font-weight: bold; font-size: 12px;")
     nRasterLayout.addRow(nRasterTitle)
 
