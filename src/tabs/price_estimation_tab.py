@@ -1,12 +1,12 @@
 from typing import TYPE_CHECKING
 import numpy as np
 import os
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
     QGroupBox, QVBoxLayout, QDialog, QGridLayout, QRadioButton, QButtonGroup,
     QScrollArea, QWidget
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry
 from qgis import processing
 from osgeo import gdal
@@ -719,7 +719,7 @@ def get_raster_value_at_point(raster_layer, point):
 def open_formulas_dialog(parent_dialog):
     """Opens the dialog that displays the formulas."""
     dialog = FormulaDialog(parent_dialog)
-    dialog.exec_()
+    dialog.exec()
 
 
 class FormulaDialog(QDialog):

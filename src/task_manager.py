@@ -1,6 +1,6 @@
 from typing import Callable, TYPE_CHECKING
 from qgis.core import QgsTask, QgsApplication
-from PyQt5.QtWidgets import QMessageBox
+from qgis.PyQt.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog

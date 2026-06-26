@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QLabel, QTableWidget, QLineEdit, QPushButton, QHBoxLayout,
     QFormLayout, QHeaderView, QTableWidgetItem, QDialog, QVBoxLayout
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer, QgsPalettedRasterRenderer
 from functools import partial
 import os
@@ -270,7 +270,7 @@ def populate_land_use_table_with_comet_defaults(dialog: 'AnalysisDialog'):
 def open_comet_values_dialog(parent_dialog):
     """Opens the dialog that displays the COMET values table."""
     dialog = CometValuesDialog(parent_dialog)
-    dialog.exec_()
+    dialog.exec()
 
 
 class CometValuesDialog(QDialog):

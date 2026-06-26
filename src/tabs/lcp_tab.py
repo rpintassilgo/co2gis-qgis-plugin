@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
     QGroupBox
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsProject, QgsRasterLayer
 from qgis import processing
 from osgeo import gdal
@@ -12,7 +12,7 @@ import os
 import gc
 
 from ..task_manager import run_in_background
-from ..utils import select_output_file
+from ..utils import select_output_file, grass_alg_id
 
 
 if TYPE_CHECKING:
@@ -408,7 +408,7 @@ def run_r_cost(input_raster: str,
     }
 
     # 4) Run r.cost to generate cost accumulation and direction surfaces
-    result = processing.run("grass7:r.cost", params)
+    result = processing.run(grass_alg_id("r.cost"), params)
 
     if not result:
         raise RuntimeError("r.cost processing failed")
@@ -480,7 +480,7 @@ def run_r_drain_and_vectorize(cost_result: dict,
     # Run r.drain from destination to trace back to origin
     # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
     # CRITICAL 2: Must set GRASS_REGION to avoid "North must be larger than South" error
-    drain_result = processing.run("grass7:r.drain", {
+    drain_result = processing.run(grass_alg_id("r.drain"), {
         'input': accum_path,
         'direction': direction_path,
         'start_coordinates': dest_coord,
@@ -499,7 +499,7 @@ def run_r_drain_and_vectorize(cost_result: dict,
         dialog.log_message("Running r.thin to prepare for vectorization...", "LCP")
 
     # Thin the raster path to avoid "crowded cell" errors in r.to.vect
-    thin_result = processing.run("grass7:r.thin", {
+    thin_result = processing.run(grass_alg_id("r.thin"), {
         'input': drain_path,
         'output': thin_out,
         'iterations': 200  # Sufficient iterations to thin properly
@@ -515,7 +515,7 @@ def run_r_drain_and_vectorize(cost_result: dict,
         dialog.log_message("Converting to vector...", "LCP")
 
     # Convert thinned raster path to vector lines
-    processing.run("grass7:r.to.vect", {
+    processing.run(grass_alg_id("r.to.vect"), {
         'input': thin_path,
         'type': 0,  # line
         'output': vector_output

@@ -1,9 +1,9 @@
 from typing import TYPE_CHECKING
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFormLayout, QTextEdit, QTabWidget, QWidget,
     QPushButton, QComboBox, QSplitter, QDialog
 )
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import Qt
 
 from .tabs.land_use_tab import setup_land_use_tab
 from .tabs.slope_tab import setup_slope_tab

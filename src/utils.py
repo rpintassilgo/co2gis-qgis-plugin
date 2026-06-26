@@ -3,11 +3,31 @@ import os
 from qgis.core import (
     QgsProject, QgsRasterLayer, QgsVectorLayer, QgsWkbTypes, QgsUnitTypes, QgsMapLayer
 )
-from PyQt5.QtWidgets import QComboBox, QLineEdit, QFileDialog, QCompleter
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtWidgets import QComboBox, QLineEdit, QFileDialog, QCompleter
+from qgis.PyQt.QtCore import Qt
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog
+
+
+def grass_alg_id(name: str) -> str:
+    """
+    Resolve a GRASS processing algorithm id across QGIS versions.
+
+    QGIS 3.x registers GRASS algorithms under the ``grass7:`` prefix; QGIS 4.x
+    renamed the provider to ``grass:``. Probe the processing registry and return
+    whichever prefix is actually available, preferring the modern ``grass:``
+    form and falling back to it when neither is found.
+
+    :param name: algorithm name without prefix, e.g. ``"r.cost"``.
+    """
+    from qgis.core import QgsApplication
+    registry = QgsApplication.processingRegistry()
+    for prefix in ("grass", "grass7"):
+        alg_id = f"{prefix}:{name}"
+        if registry.algorithmById(alg_id) is not None:
+            return alg_id
+    return f"grass:{name}"
 
 
 def make_searchable_dropdown(dropdown: QComboBox):
@@ -184,7 +204,7 @@ def select_output_file(output_field: QLineEdit, file_type: str):
 
     file_dialog.setNameFilter(name_filter)
 
-    if file_dialog.exec_():
+    if file_dialog.exec():
         selected_files = file_dialog.selectedFiles()
         if selected_files:
             selected_file = selected_files[0]
