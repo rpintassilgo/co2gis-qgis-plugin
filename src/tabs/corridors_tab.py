@@ -52,7 +52,7 @@ def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.corridorLandUseTable = QTableWidget()
     dialog.corridorLandUseTable.setColumnCount(3)
     dialog.corridorLandUseTable.setHorizontalHeaderLabels(["Class ID", "Class Name", "Water Body"])
-    dialog.corridorLandUseTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    dialog.corridorLandUseTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     layout.addRow(dialog.corridorLandUseTable)
 
     # Output path
@@ -94,10 +94,10 @@ def populate_corridor_land_use_table(dialog, layer_id):
         row = dialog.corridorLandUseTable.rowCount()
         dialog.corridorLandUseTable.insertRow(row)
         id_item = QTableWidgetItem(str(entry.value))
-        id_item.setFlags(id_item.flags() & ~Qt.ItemIsEditable)
+        id_item.setFlags(id_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         dialog.corridorLandUseTable.setItem(row, 0, id_item)
         name_item = QTableWidgetItem(entry.label)
-        name_item.setFlags(name_item.flags() & ~Qt.ItemIsEditable)
+        name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
         dialog.corridorLandUseTable.setItem(row, 1, name_item)
         chk = QCheckBox()
         chk.setStyleSheet("margin-left:50%;margin-right:50%;")

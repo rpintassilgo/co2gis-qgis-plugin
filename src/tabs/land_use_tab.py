@@ -33,7 +33,7 @@ def setup_land_use_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.landUseCostTable = QTableWidget()
     dialog.landUseCostTable.setColumnCount(3)
     dialog.landUseCostTable.setHorizontalHeaderLabels(["Class ID", "Class Name", "Cost"])
-    dialog.landUseCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+    dialog.landUseCostTable.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     layout.addRow(dialog.landUseCostTable)
 
     tableButtonsLayout = QHBoxLayout()
@@ -60,7 +60,9 @@ def setup_land_use_tab(dialog: "AnalysisDialog", layout: QFormLayout):
 
 def connect_land_use_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Land Use tab."""
-    dialog.landUseComboBox.currentIndexChanged.connect(lambda: on_land_use_layer_changed(dialog), Qt.QueuedConnection)
+    dialog.landUseComboBox.currentIndexChanged.connect(
+        lambda: on_land_use_layer_changed(dialog), Qt.ConnectionType.QueuedConnection
+    )
     dialog.create_land_use_costs_button.clicked.connect(
         lambda checked: run_in_background(dialog, run_land_use_cost_creation)
     )
@@ -198,15 +200,15 @@ def populate_land_use_table(dialog: "AnalysisDialog", layer_id: str):
         dialog.landUseCostTable.insertRow(row_position)
 
         class_id_item = QTableWidgetItem(str(entry.value))
-        class_id_item.setFlags(class_id_item.flags() ^ Qt.ItemIsEditable)
+        class_id_item.setFlags(class_id_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
         dialog.landUseCostTable.setItem(row_position, 0, class_id_item)
 
         class_name_item = QTableWidgetItem(entry.label)
-        class_name_item.setFlags(class_name_item.flags() ^ Qt.ItemIsEditable)
+        class_name_item.setFlags(class_name_item.flags() ^ Qt.ItemFlag.ItemIsEditable)
         dialog.landUseCostTable.setItem(row_position, 1, class_name_item)
 
         cost_item = QTableWidgetItem("1.0")
-        cost_item.setFlags(cost_item.flags() | Qt.ItemIsEditable)
+        cost_item.setFlags(cost_item.flags() | Qt.ItemFlag.ItemIsEditable)
         dialog.landUseCostTable.setItem(row_position, 2, cost_item)
 
     dialog.log_message(f"{len(classes)} land use classes loaded from layer style.", "Land Use")
@@ -333,7 +335,7 @@ class CometValuesDialog(QDialog):
         table = QTableWidget()
         table.setColumnCount(4)
         table.setHorizontalHeaderLabels(["Class ID", "COSc Thematic Class", "COMET Land Use", "Cost Factor"])
-        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
 
         data = [
             ("100", "Artificializado", "Áreas urbanas e associadas", "1.8"),
@@ -367,10 +369,10 @@ class CometValuesDialog(QDialog):
         table.setSpan(10, 3, 2, 1)
 
         header = table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
 
         layout.addWidget(table)
         self.setLayout(layout)

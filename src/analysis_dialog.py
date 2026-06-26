@@ -227,9 +227,11 @@ class AnalysisDialog(QDialog):
         """Thread-safe method to append a message to the log output."""
         if hasattr(self, "log_output"):
             formatted_message = f"[{tab_name}] {message}" if tab_name else message
-            QMetaObject.invokeMethod(self.log_output, "append", Qt.QueuedConnection, Q_ARG(str, formatted_message))
+            QMetaObject.invokeMethod(
+                self.log_output, "append", Qt.ConnectionType.QueuedConnection, Q_ARG(str, formatted_message)
+            )
 
     def clear_logs(self):
         """Clear the log output."""
         if hasattr(self, "log_output"):
-            QMetaObject.invokeMethod(self.log_output, "clear", Qt.QueuedConnection)
+            QMetaObject.invokeMethod(self.log_output, "clear", Qt.ConnectionType.QueuedConnection)

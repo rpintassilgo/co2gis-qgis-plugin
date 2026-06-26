@@ -130,7 +130,7 @@ def setup_ui(dialog: "AnalysisDialog"):
     log_container_layout.addWidget(log_buttons_widget)
 
     # Splitter: tabs on top, log panel on bottom — user can drag to resize
-    dialog.main_splitter = QSplitter(Qt.Vertical)
+    dialog.main_splitter = QSplitter(Qt.Orientation.Vertical)
     dialog.main_splitter.addWidget(dialog.tabs)
     dialog.main_splitter.addWidget(log_container)
     dialog.main_splitter.setStretchFactor(0, 4)
