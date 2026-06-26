@@ -1,14 +1,25 @@
-from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
-    QGroupBox, QTableWidget, QHeaderView, QSpinBox, QCheckBox, QTableWidgetItem
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRasterLayer
-from qgis import processing
-from osgeo import gdal
-import numpy as np
 import os
+from typing import TYPE_CHECKING
+
+import numpy as np
+from osgeo import gdal
+from qgis import processing
+from qgis.core import QgsProject, QgsRasterLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
@@ -17,7 +28,7 @@ if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the Slope tab."""
     createSlopeGroupBox = QGroupBox()
     createSlopeGroupBox.setStyleSheet("QGroupBox { border: 1px solid grey; }")
@@ -95,10 +106,12 @@ def setup_slope_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     setup_slope_cost_table_logic(dialog)
 
 
-def connect_slope_signals(dialog: 'AnalysisDialog'):
+def connect_slope_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Slope tab."""
     dialog.create_slope_button.clicked.connect(lambda checked: run_in_background(dialog, run_slope_creation))
-    dialog.create_slope_costs_button.clicked.connect(lambda checked: run_in_background(dialog, run_slope_costs_creation))
+    dialog.create_slope_costs_button.clicked.connect(
+        lambda checked: run_in_background(dialog, run_slope_costs_creation)
+    )
 
 
 def _get_layer_id_from_widget(widget):
@@ -108,7 +121,7 @@ def _get_layer_id_from_widget(widget):
     return widget.currentData()
 
 
-def run_slope_creation(dialog: 'AnalysisDialog'):
+def run_slope_creation(dialog: "AnalysisDialog"):
     """Create Slope Raster from DEM"""
     try:
         dem_layer = QgsProject.instance().mapLayer(_get_layer_id_from_widget(dialog.demComboBox))
@@ -134,7 +147,7 @@ def run_slope_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Creating slope data failed: {e}", "Slope")
 
 
-def run_slope_costs_creation(dialog: 'AnalysisDialog'):
+def run_slope_costs_creation(dialog: "AnalysisDialog"):
     """Create slope costs raster based on defined intervals."""
     try:
         intervals = get_slope_cost_intervals(dialog)
@@ -163,7 +176,7 @@ def run_slope_costs_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Creating Slope Costs Raster Failed: {str(e)}", "Slope")
 
 
-def get_slope_cost_intervals(dialog: 'AnalysisDialog'):
+def get_slope_cost_intervals(dialog: "AnalysisDialog"):
     """Extract slope intervals and costs from the table."""
     intervals = []
     for row in range(dialog.slopeCostTable.rowCount()):
@@ -187,7 +200,7 @@ def get_slope_cost_intervals(dialog: 'AnalysisDialog'):
     return intervals
 
 
-def setup_slope_cost_table_logic(dialog: 'AnalysisDialog'):
+def setup_slope_cost_table_logic(dialog: "AnalysisDialog"):
     """Connects buttons to their functions for the slope cost table."""
     dialog.addSlopeRowButton.clicked.connect(lambda: add_slope_row(dialog))
     dialog.removeSlopeRowButton.clicked.connect(lambda: remove_selected_slope_row(dialog))
@@ -196,7 +209,7 @@ def setup_slope_cost_table_logic(dialog: 'AnalysisDialog'):
     add_slope_row(dialog)  # Add a single empty row to start
 
 
-def populate_slope_table_with_comet_defaults(dialog: 'AnalysisDialog'):
+def populate_slope_table_with_comet_defaults(dialog: "AnalysisDialog"):
     """Clear the table and populate with COMET project default slope costs."""
     dialog.slopeCostTable.setRowCount(0)
 
@@ -205,13 +218,13 @@ def populate_slope_table_with_comet_defaults(dialog: 'AnalysisDialog'):
         (10, 20, 1.1, False),
         (20, 30, 1.2, False),
         (30, 70, 3.0, False),
-        (70, 0, 9.0, True)
+        (70, 0, 9.0, True),
     ]
     for min_val, max_val, cost, no_limit in comet_defaults:
         add_slope_row(dialog, min_val, max_val, cost, no_limit)
 
 
-def add_slope_row(dialog: 'AnalysisDialog', min_val=None, max_val=None, cost_val=None, no_limit=False):
+def add_slope_row(dialog: "AnalysisDialog", min_val=None, max_val=None, cost_val=None, no_limit=False):
     """Add a new row to the slope cost table."""
     row_position = dialog.slopeCostTable.rowCount()
     dialog.slopeCostTable.insertRow(row_position)
@@ -245,7 +258,7 @@ def add_slope_row(dialog: 'AnalysisDialog', min_val=None, max_val=None, cost_val
     toggle_max_spin(Qt.Checked if no_limit else Qt.Unchecked)
 
 
-def remove_selected_slope_row(dialog: 'AnalysisDialog'):
+def remove_selected_slope_row(dialog: "AnalysisDialog"):
     """Remove selected rows from the slope cost table."""
     selected_rows = set(idx.row() for idx in dialog.slopeCostTable.selectedIndexes())
     for row in sorted(selected_rows, reverse=True):
@@ -258,15 +271,15 @@ def create_slope_layer_from_dem(dem_layer: QgsRasterLayer, output_path: str):
         raise ValueError("Input DEM layer is not valid.")
 
     params = {
-        'INPUT': dem_layer,
-        'Z_FACTOR': 1,
-        'UNITS': 1,  # Percent
-        'OUTPUT': output_path
+        "INPUT": dem_layer,
+        "Z_FACTOR": 1,
+        "UNITS": 1,  # Percent
+        "OUTPUT": output_path,
     }
     result = processing.run("qgis:slope", params)
-    if not result or 'OUTPUT' not in result:
+    if not result or "OUTPUT" not in result:
         raise RuntimeError("Slope processing failed to return the expected output.")
-    return result['OUTPUT']
+    return result["OUTPUT"]
 
 
 def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, output_path: str):
@@ -286,13 +299,13 @@ def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, 
     # Apply costs using numpy operations
     # First set the default cost for slopes above the last interval
     if intervals:
-        output_data.fill(intervals[-1]['cost'])
+        output_data.fill(intervals[-1]["cost"])
 
     # Then apply each interval's cost
     for interval in reversed(intervals):  # Process in reverse to handle overlapping ranges correctly
-        min_slope = interval['min']
-        max_slope = interval['max']
-        cost = interval['cost']
+        min_slope = interval["min"]
+        max_slope = interval["max"]
+        cost = interval["cost"]
 
         # Create mask for values in this interval
         if max_slope is None:
@@ -304,13 +317,15 @@ def create_slope_costs_from_slope(slope_layer: QgsRasterLayer, intervals: list, 
         output_data[mask] = cost
 
     # Create output raster
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path,
-                           input_ds.RasterXSize,
-                           input_ds.RasterYSize,
-                           1,
-                           gdal.GDT_Float32,
-                           options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS', 'BIGTIFF=YES'])
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        output_path,
+        input_ds.RasterXSize,
+        input_ds.RasterYSize,
+        1,
+        gdal.GDT_Float32,
+        options=["COMPRESS=LZW", "NUM_THREADS=ALL_CPUS", "BIGTIFF=YES"],
+    )
 
     # Copy projection and geotransform
     out_ds.SetProjection(input_ds.GetProjection())

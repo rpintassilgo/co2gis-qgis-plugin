@@ -1,15 +1,27 @@
-from typing import TYPE_CHECKING
-import numpy as np
 import os
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
-    QGroupBox, QVBoxLayout, QDialog, QGridLayout, QRadioButton, QButtonGroup,
-    QScrollArea, QWidget
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRaster, QgsPointXY, QgsGeometry
-from qgis import processing
+from typing import TYPE_CHECKING
+
+import numpy as np
 from osgeo import gdal
+from qgis import processing
+from qgis.core import QgsGeometry, QgsPointXY, QgsProject, QgsRaster
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..task_manager import run_in_background
 from ..utils import update_pipeline_length, update_resolution_field
@@ -30,7 +42,7 @@ def _make_group_box(title_html: str, form_layout: QFormLayout) -> QGroupBox:
     return box
 
 
-def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
+def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     """Sets up the UI for the Price Estimation tab."""
     main_layout = QVBoxLayout()
     columns_layout = QHBoxLayout()
@@ -101,8 +113,12 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     dialog.slopeCostsResInput = QLineEdit()
     dialog.corridorsCostsResInput = QLineEdit()
     dialog.crossingsCostsResInput = QLineEdit()
-    for inp in (dialog.landUseCostsResInput, dialog.slopeCostsResInput,
-                dialog.corridorsCostsResInput, dialog.crossingsCostsResInput):
+    for inp in (
+        dialog.landUseCostsResInput,
+        dialog.slopeCostsResInput,
+        dialog.corridorsCostsResInput,
+        dialog.crossingsCostsResInput,
+    ):
         inp.setReadOnly(True)
     resolutionsLayout.addRow(QLabel("Land Use (F<sub>lu</sub>):"), dialog.landUseCostsResInput)
     resolutionsLayout.addRow(QLabel("Slope (F<sub>s</sub>):"), dialog.slopeCostsResInput)
@@ -176,8 +192,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
         "More accurate but slower for large datasets."
     )
     dialog.calcModeFastRadio.setToolTip(
-        "Samples 5 points along each vector segment, uses maximum values.\n"
-        "Faster but less spatially accurate."
+        "Samples 5 points along each vector segment, uses maximum values.\nFaster but less spatially accurate."
     )
     dialog.calcModeButtonGroup = QButtonGroup()
     dialog.calcModeButtonGroup.addButton(dialog.calcModePreciseRadio)
@@ -194,7 +209,7 @@ def setup_price_estimation_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     layout.addLayout(main_layout)
 
 
-def connect_price_estimation_signals(dialog: 'AnalysisDialog'):
+def connect_price_estimation_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Price Estimation tab."""
     dialog.calculatePriceButton.clicked.connect(lambda checked: run_in_background(dialog, run_price_estimation))
     dialog.show_formulas_button.clicked.connect(lambda: open_formulas_dialog(dialog))
@@ -218,7 +233,7 @@ def connect_price_estimation_signals(dialog: 'AnalysisDialog'):
     dialog.totalPressureDropInput.textChanged.connect(lambda: update_segment_length(dialog))
 
 
-def update_segment_length(dialog: 'AnalysisDialog'):
+def update_segment_length(dialog: "AnalysisDialog"):
     """Recomputes the read-only segment length (km) = total pressure drop / admissible pressure drop."""
     try:
         admissible = float(dialog.pressureDropInput.text())  # MPa/km
@@ -231,7 +246,7 @@ def update_segment_length(dialog: 'AnalysisDialog'):
         dialog.segmentLengthInput.setText("—")
 
 
-def run_price_estimation(dialog: 'AnalysisDialog'):
+def run_price_estimation(dialog: "AnalysisDialog"):
     """Calculates the total pipeline price based on various cost factors."""
     try:
         dialog.log_message("Calculating pipeline price...", "Price Estimation")
@@ -246,8 +261,12 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         crossings_layer = QgsProject.instance().mapLayer(dialog.crossingsCostsDropdown.currentData())
 
         # Log warnings for missing rasters (will default to 1.0)
-        for name, layer in [("Land Use (Flu)", land_use_layer), ("Slope (Fs)", slope_layer),
-                            ("Corridors (Fc)", corridors_layer), ("Crossings (Fci)", crossings_layer)]:
+        for name, layer in [
+            ("Land Use (Flu)", land_use_layer),
+            ("Slope (Fs)", slope_layer),
+            ("Corridors (Fc)", corridors_layer),
+            ("Crossings (Fci)", crossings_layer),
+        ]:
             if not layer:
                 dialog.log_message(f"  ⚠️ {name}: Not selected — will use constant 1.0 (neutral)", "Price Estimation")
 
@@ -262,12 +281,23 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
             dialog.log_message("Calculation mode: Fast (Segment-based with point sampling)", "Price Estimation")
             crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
             if not crossings_vector_layer:
-                dialog.log_message("  ⚠️ Infrastructure Vector (for N): Not selected — N will be 1 for all segments (neutral, preserves Fci contribution)", "Price Estimation")
+                dialog.log_message(
+                    "  ⚠️ Infrastructure Vector (for N): Not selected — N will be 1 for all segments (neutral, preserves Fci contribution)",
+                    "Price Estimation",
+                )
             full_raster_values = extract_raster_values_along_pipeline(
-                dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
+                dialog,
+                pipeline_layer,
+                land_use_layer,
+                slope_layer,
+                corridors_layer,
+                crossings_layer,
+                crossings_vector_layer,
             )
         if not full_raster_values:
-            raise ValueError("No valid raster values found for the pipeline path. Check if the pipeline intersects with the cost rasters.")
+            raise ValueError(
+                "No valid raster values found for the pipeline path. Check if the pipeline intersects with the cost rasters."
+            )
 
         λ = float(dialog.frictionFactorInput.text())
         M = float(dialog.co2MassFlowRateInput.text())
@@ -282,8 +312,11 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         if admissible_MPa_km <= 0:
             raise ValueError("Admissible Pressure Drop must be greater than zero.")
         max_segment_length = (total_pressure_drop / admissible_MPa_km) * 1000  # km → m
-        dialog.log_message(f"Max segment length (booster spacing): {max_segment_length / 1000:.2f} km "
-                           f"(= {total_pressure_drop} MPa / {admissible_MPa_km} MPa/km)", "Price Estimation")
+        dialog.log_message(
+            f"Max segment length (booster spacing): {max_segment_length / 1000:.2f} km "
+            f"(= {total_pressure_drop} MPa / {admissible_MPa_km} MPa/km)",
+            "Price Estimation",
+        )
 
         segment_costs = []
         booster_costs = []
@@ -296,7 +329,7 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         Ltotal = sum(cl for _, _, _, _, _, cl in full_raster_values)
 
         # Calculate diameter D once for the entire pipeline using total length
-        D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal))**(1 / 5)
+        D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal)) ** (1 / 5)
         dialog.log_message(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm", "Price Estimation")
         dialog.log_message("--------------------------------------------------", "Price Estimation")
 
@@ -318,7 +351,10 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
 
                 Ip = Bc * D * summation
                 segment_costs.append(Ip)
-                dialog.log_message(f"Segment {segment_index + 1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €", "Price Estimation")
+                dialog.log_message(
+                    f"Segment {segment_index + 1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €",
+                    "Price Estimation",
+                )
 
                 if not final_segment:
                     # Booster stations are placed at the end of each full segment.
@@ -328,10 +364,13 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
                     Sc_W = (M * ΔP_booster_segment) / (p * Beff)  # W (compressor power)
                     Sc_MW = Sc_W / 1e6  # converted to MW
                     α = float(dialog.boosterVariableCostInput.text())  # M€/MW (COMET default: 0.547)
-                    β = float(dialog.boosterFixedCostInput.text())     # M€ fixed cost (COMET default: 0.42)
+                    β = float(dialog.boosterFixedCostInput.text())  # M€ fixed cost (COMET default: 0.42)
                     Ib = (α * Sc_MW + β) * 1e6  # Convert M€ to €
                     booster_costs.append(Ib)
-                    dialog.log_message(f"Booster Station after {max_segment_length / 1000:.2f} km: ΔP_segment = {ΔP_booster_segment / 1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €", "Price Estimation")
+                    dialog.log_message(
+                        f"Booster Station after {max_segment_length / 1000:.2f} km: ΔP_segment = {ΔP_booster_segment / 1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €",
+                        "Price Estimation",
+                    )
 
                 current_segment_cells = []
                 current_segment_length = 0
@@ -347,7 +386,9 @@ def run_price_estimation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Price Estimation Failed: {str(e)}", "Price Estimation")
 
 
-def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer):
+def extract_raster_values_along_pipeline_cells(
+    dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer
+):
     """
     Extracts raster values along the pipeline using cell-based approach with resampling.
     Uses geometric intersection to calculate precise length within each cell.
@@ -356,16 +397,17 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     Returns: List of (Fc, Fs, Flu, Fci, N, cell_length) tuples grouped by cell
     """
     import tempfile
+
     from qgis.core import QgsRectangle
 
     dialog.log_message("Step 1: Resampling all cost rasters to common resolution...", "Price Estimation")
 
     # Separate valid from missing layers
     all_input = [
-        (land_use_layer, 'Land Use (Flu)'),
-        (slope_layer, 'Slope (Fs)'),
-        (corridors_layer, 'Corridors (Fc)'),
-        (crossings_layer, 'Crossings (Fci)'),
+        (land_use_layer, "Land Use (Flu)"),
+        (slope_layer, "Slope (Fs)"),
+        (corridors_layer, "Corridors (Fc)"),
+        (crossings_layer, "Crossings (Fci)"),
     ]
     valid_layers = [(lyr, n) for lyr, n in all_input if lyr and lyr.isValid()]
 
@@ -384,31 +426,33 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
     reference_layer = valid_layers[0][0]
     ref_resolution = reference_layer.rasterUnitsPerPixelX()
 
-    dialog.log_message(f"  Reference resolution: {ref_resolution:.2f}m from {reference_layer.name()}", "Price Estimation")
+    dialog.log_message(
+        f"  Reference resolution: {ref_resolution:.2f}m from {reference_layer.name()}", "Price Estimation"
+    )
 
     # Resample valid rasters only
     temp_dir = tempfile.mkdtemp()
     resampled_data = {}
 
     for layer, name in valid_layers:
-        resampled_path = os.path.join(temp_dir, f'_price_est_{name.replace(" ", "_")}.tif')
+        resampled_path = os.path.join(temp_dir, f"_price_est_{name.replace(' ', '_')}.tif")
 
         params = {
-            'INPUT': layer,
-            'SOURCE_CRS': layer.crs(),
-            'TARGET_CRS': reference_layer.crs(),
-            'RESAMPLING': 0,  # Nearest neighbor
-            'NODATA': None,
-            'TARGET_RESOLUTION': ref_resolution,
-            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            'OUTPUT': resampled_path,
-            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
+            "INPUT": layer,
+            "SOURCE_CRS": layer.crs(),
+            "TARGET_CRS": reference_layer.crs(),
+            "RESAMPLING": 0,  # Nearest neighbor
+            "NODATA": None,
+            "TARGET_RESOLUTION": ref_resolution,
+            "TARGET_EXTENT": f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+            "OUTPUT": resampled_path,
+            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
         }
 
-        result = processing.run('gdal:warpreproject', params)
+        result = processing.run("gdal:warpreproject", params)
 
-        if result and 'OUTPUT' in result:
-            ds = gdal.Open(result['OUTPUT'])
+        if result and "OUTPUT" in result:
+            ds = gdal.Open(result["OUTPUT"])
             data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
 
             # Store metadata from first raster
@@ -416,7 +460,7 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
                 width = ds.RasterXSize
                 height = ds.RasterYSize
                 geotrans = ds.GetGeoTransform()
-                resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans}
+                resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans}
 
             resampled_data[name] = data
             ds = None
@@ -425,38 +469,54 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
             raise RuntimeError(f"Failed to resample {layer.name()}")
 
     # Get dimensions
-    meta = resampled_data['_meta']
-    width, height = meta['width'], meta['height']
-    geotrans = meta['geotrans']
+    meta = resampled_data["_meta"]
+    width, height = meta["width"], meta["height"]
+    geotrans = meta["geotrans"]
     cell_width = abs(geotrans[1])
     cell_height = abs(geotrans[5])
     origin_x = geotrans[0]
     origin_y = geotrans[3]
 
-    dialog.log_message(f"  Resampled grid: {width}x{height} cells, cell size: {cell_width:.2f}m x {cell_height:.2f}m", "Price Estimation")
+    dialog.log_message(
+        f"  Resampled grid: {width}x{height} cells, cell size: {cell_width:.2f}m x {cell_height:.2f}m",
+        "Price Estimation",
+    )
 
     # Create arrays — missing rasters default to 1.0 (neutral)
-    Flu = resampled_data.get('Land Use (Flu)', np.ones((height, width), dtype=np.float32))
-    Fs = resampled_data.get('Slope (Fs)', np.ones((height, width), dtype=np.float32))
-    Fc = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
-    Fci = resampled_data.get('Crossings (Fci)', np.ones((height, width), dtype=np.float32))
+    Flu = resampled_data.get("Land Use (Flu)", np.ones((height, width), dtype=np.float32))
+    Fs = resampled_data.get("Slope (Fs)", np.ones((height, width), dtype=np.float32))
+    Fc = resampled_data.get("Corridors (Fc)", np.ones((height, width), dtype=np.float32))
+    Fci = resampled_data.get("Crossings (Fci)", np.ones((height, width), dtype=np.float32))
 
-    for name, key in [("Land Use (Flu)", 'Land Use (Flu)'), ("Slope (Fs)", 'Slope (Fs)'),
-                      ("Corridors (Fc)", 'Corridors (Fc)'), ("Crossings (Fci)", 'Crossings (Fci)')]:
+    for name, key in [
+        ("Land Use (Flu)", "Land Use (Flu)"),
+        ("Slope (Fs)", "Slope (Fs)"),
+        ("Corridors (Fc)", "Corridors (Fc)"),
+        ("Crossings (Fci)", "Crossings (Fci)"),
+    ]:
         if key not in resampled_data:
             dialog.log_message(f"  ⚠️ {name}: Not selected — assuming constant 1.0 (neutral)", "Price Estimation")
 
     dialog.log_message("Step 2: Extracting pipeline segments and calculating cell intersections...", "Price Estimation")
 
     # Get infrastructure vector for N calculation
-    crossings_vector_layer = QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData()) if hasattr(dialog, 'crossingsVectorDropdown') else None
+    crossings_vector_layer = (
+        QgsProject.instance().mapLayer(dialog.crossingsVectorDropdown.currentData())
+        if hasattr(dialog, "crossingsVectorDropdown")
+        else None
+    )
 
     if not crossings_vector_layer:
-        dialog.log_message("  ⚠️ No infrastructure vector selected - N will be 1 for all cells (neutral, preserves Fci contribution)", "Price Estimation")
+        dialog.log_message(
+            "  ⚠️ No infrastructure vector selected - N will be 1 for all cells (neutral, preserves Fci contribution)",
+            "Price Estimation",
+        )
         infrastructure_features = []
     else:
         infrastructure_features = list(crossings_vector_layer.getFeatures())
-        dialog.log_message(f"  Loaded {len(infrastructure_features)} infrastructure features for N calculation", "Price Estimation")
+        dialog.log_message(
+            f"  Loaded {len(infrastructure_features)} infrastructure features for N calculation", "Price Estimation"
+        )
 
     # PRE-PASS: Quick count of total unique cells (fast, no heavy geometry operations)
     dialog.log_message("  Counting total unique cells...", "Price Estimation")
@@ -468,10 +528,7 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
             for i in range(len(line) - 1):
                 start, end = line[i], line[i + 1]
                 cells_touched = get_intersected_cells(
-                    start.x(), start.y(), end.x(), end.y(),
-                    origin_x, origin_y,
-                    cell_width, cell_height,
-                    width, height
+                    start.x(), start.y(), end.x(), end.y(), origin_x, origin_y, cell_width, cell_height, width, height
                 )
                 unique_cells_set.update(cells_touched)
 
@@ -499,10 +556,7 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
 
                 # Get cells intersected by this segment
                 cells_touched = get_intersected_cells(
-                    start.x(), start.y(), end.x(), end.y(),
-                    origin_x, origin_y,
-                    cell_width, cell_height,
-                    width, height
+                    start.x(), start.y(), end.x(), end.y(), origin_x, origin_y, cell_width, cell_height, width, height
                 )
 
                 # For each cell touched by this segment
@@ -539,44 +593,46 @@ def extract_raster_values_along_pipeline_cells(dialog, pipeline_layer, land_use_
                     is_new_cell = cell_key not in cell_data
                     if is_new_cell:
                         cell_data[cell_key] = {
-                            'Fc': float(Fc[row, col]),
-                            'Fs': float(Fs[row, col]),
-                            'Flu': float(Flu[row, col]),
-                            'Fci': float(Fci[row, col]),
-                            'L': 0.0,
-                            'N': 0
+                            "Fc": float(Fc[row, col]),
+                            "Fs": float(Fs[row, col]),
+                            "Flu": float(Flu[row, col]),
+                            "Fci": float(Fci[row, col]),
+                            "L": 0.0,
+                            "N": 0,
                         }
                         processed_cells += 1
 
                         # Log every single unique cell processed with total
-                        dialog.log_message(f"  Processing unique cell {processed_cells}/{total_unique_cells} (row={row}, col={col})", "Price Estimation")
+                        dialog.log_message(
+                            f"  Processing unique cell {processed_cells}/{total_unique_cells} (row={row}, col={col})",
+                            "Price Estimation",
+                        )
 
                     # Accumulate length and N
-                    cell_data[cell_key]['L'] += length_in_cell
-                    cell_data[cell_key]['N'] += n_in_cell
+                    cell_data[cell_key]["L"] += length_in_cell
+                    cell_data[cell_key]["N"] += n_in_cell
 
-    dialog.log_message(f"  Processed {total_segments} segments across {len(cell_data)} unique cells", "Price Estimation")
+    dialog.log_message(
+        f"  Processed {total_segments} segments across {len(cell_data)} unique cells", "Price Estimation"
+    )
 
     # Convert dictionary to list of tuples
     values = []
     for (row, col), data in cell_data.items():
         # If no infrastructure vector was provided, N defaults to 1 (preserves Fci contribution)
         # Cap N at 10 (same as LCP)
-        n_capped = min(max(data['N'], 1 if not infrastructure_features else 0), 10)
-        values.append((
-            data['Fc'],
-            data['Fs'],
-            data['Flu'],
-            data['Fci'],
-            n_capped,
-            data['L']
-        ))
+        n_capped = min(max(data["N"], 1 if not infrastructure_features else 0), 10)
+        values.append((data["Fc"], data["Fs"], data["Flu"], data["Fci"], n_capped, data["L"]))
 
-    dialog.log_message(f"  ✓ Extracted {len(values)} cell entries with total length: {sum(v[5] for v in values):.2f}m", "Price Estimation")
+    dialog.log_message(
+        f"  ✓ Extracted {len(values)} cell entries with total length: {sum(v[5] for v in values):.2f}m",
+        "Price Estimation",
+    )
 
     # Cleanup temp files
     try:
         import shutil
+
         shutil.rmtree(temp_dir)
     except BaseException:
         pass
@@ -644,7 +700,9 @@ def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_h
     return list(cells)
 
 
-def extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer):
+def extract_raster_values_along_pipeline(
+    dialog, pipeline_layer, land_use_layer, slope_layer, corridors_layer, crossings_layer, crossings_vector_layer
+):
     """
     Extracts raster values at multiple points along each segment of the pipeline, returning the maximum value for each raster.
     Missing rasters default to 1.0 (neutral). Missing infrastructure vector defaults to N=0.
@@ -652,8 +710,12 @@ def extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer,
     values = []
 
     # Log warnings for missing inputs
-    for name, layer in [("Land Use (Flu)", land_use_layer), ("Slope (Fs)", slope_layer),
-                        ("Corridors (Fc)", corridors_layer), ("Crossings (Fci)", crossings_layer)]:
+    for name, layer in [
+        ("Land Use (Flu)", land_use_layer),
+        ("Slope (Fs)", slope_layer),
+        ("Corridors (Fc)", corridors_layer),
+        ("Crossings (Fci)", crossings_layer),
+    ]:
         if not layer:
             dialog.log_message(f"  ⚠️ {name}: Not selected — assuming constant 1.0 (neutral)", "Price Estimation")
 
@@ -694,14 +756,16 @@ def extract_raster_values_along_pipeline(dialog, pipeline_layer, land_use_layer,
                     land_use_vals.append(Flu if Flu is not None else 1.0)
                     crossings_vals.append(Fci if Fci is not None else 1.0)
 
-                values.append((
-                    max(corridors_vals),
-                    max(slope_vals),
-                    max(land_use_vals),
-                    max(crossings_vals),
-                    num_intersections,
-                    cell_length
-                ))
+                values.append(
+                    (
+                        max(corridors_vals),
+                        max(slope_vals),
+                        max(land_use_vals),
+                        max(crossings_vals),
+                        num_intersections,
+                        cell_length,
+                    )
+                )
     return values
 
 

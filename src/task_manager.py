@@ -1,5 +1,6 @@
-from typing import Callable, TYPE_CHECKING
-from qgis.core import QgsTask, QgsApplication
+from typing import TYPE_CHECKING, Callable
+
+from qgis.core import QgsApplication, QgsTask
 from qgis.PyQt.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
@@ -9,9 +10,9 @@ if TYPE_CHECKING:
 class Task(QgsTask):
     """Generic task class for executing functions asynchronously."""
 
-    def __init__(self, dialog: 'AnalysisDialog', run_logic: Callable, description: str):
+    def __init__(self, dialog: "AnalysisDialog", run_logic: Callable, description: str):
         super().__init__(description, QgsTask.CanCancel)
-        self.dialog: 'AnalysisDialog' = dialog
+        self.dialog: "AnalysisDialog" = dialog
         self.run_logic = run_logic
         self.error = None
         self.exception = None
@@ -44,11 +45,11 @@ class Task(QgsTask):
 _running_tasks = {}
 
 
-def run_in_background(dialog: 'AnalysisDialog', run_logic: Callable):
+def run_in_background(dialog: "AnalysisDialog", run_logic: Callable):
     """Run a function as a background task with proper logging."""
     try:
         # Get a more readable name for the task
-        name = run_logic.__name__.replace('_', ' ').title()
+        name = run_logic.__name__.replace("_", " ").title()
 
         # Check if this task is already running
         task_key = f"{name}_{id(dialog)}"

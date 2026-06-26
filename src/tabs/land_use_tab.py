@@ -1,23 +1,32 @@
-from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QTableWidget, QLineEdit, QPushButton, QHBoxLayout,
-    QFormLayout, QHeaderView, QTableWidgetItem, QDialog, QVBoxLayout
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRasterLayer, QgsPalettedRasterRenderer
-from functools import partial
 import os
+from functools import partial
+from typing import TYPE_CHECKING
+
+import numpy as np
+from osgeo import gdal
+from qgis.core import QgsPalettedRasterRenderer, QgsProject, QgsRasterLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+)
 
 from ..task_manager import run_in_background
 from ..utils import select_output_file
-from osgeo import gdal
-import numpy as np
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_land_use_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+def setup_land_use_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the Land Use tab."""
     layout.addRow(QLabel("Select Land Use Layer:"), dialog.landUseComboBox)
 
@@ -49,12 +58,9 @@ def setup_land_use_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     layout.addRow(dialog.create_land_use_costs_button)
 
 
-def connect_land_use_signals(dialog: 'AnalysisDialog'):
+def connect_land_use_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Land Use tab."""
-    dialog.landUseComboBox.currentIndexChanged.connect(
-        lambda: on_land_use_layer_changed(dialog),
-        Qt.QueuedConnection
-    )
+    dialog.landUseComboBox.currentIndexChanged.connect(lambda: on_land_use_layer_changed(dialog), Qt.QueuedConnection)
     dialog.create_land_use_costs_button.clicked.connect(
         lambda checked: run_in_background(dialog, run_land_use_cost_creation)
     )
@@ -66,12 +72,12 @@ def connect_land_use_signals(dialog: 'AnalysisDialog'):
     dialog.log_message("Connection for 'Populate according to COMET' button has been established.", "Land Use")
 
 
-def on_land_use_layer_changed(dialog: 'AnalysisDialog'):
+def on_land_use_layer_changed(dialog: "AnalysisDialog"):
     """Handles changes in the land use layer selection, populating the table."""
     populate_land_use_table(dialog, dialog.landUseComboBox.currentData())
 
 
-def run_land_use_cost_creation(dialog: 'AnalysisDialog'):
+def run_land_use_cost_creation(dialog: "AnalysisDialog"):
     """Create Land Use Cost Raster"""
     try:
         land_use_layer = QgsProject.instance().mapLayer(dialog.landUseComboBox.currentData())
@@ -93,7 +99,7 @@ def run_land_use_cost_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Land Use Cost Raster creation Failed: {str(e)}", "Land Use")
 
 
-def get_land_use_costs(dialog: 'AnalysisDialog'):
+def get_land_use_costs(dialog: "AnalysisDialog"):
     """Extracts land use class costs from the table."""
     costs = {}
     for row in range(dialog.landUseCostTable.rowCount()):
@@ -106,7 +112,9 @@ def get_land_use_costs(dialog: 'AnalysisDialog'):
     return costs
 
 
-def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRasterLayer, class_costs: dict, output_path: str):
+def create_land_use_cost_raster(
+    dialog: "AnalysisDialog", land_use_layer: QgsRasterLayer, class_costs: dict, output_path: str
+):
     """Creates a land use cost raster from a layer and a dictionary of costs."""
     # Open the input raster
     input_ds = gdal.Open(land_use_layer.source())
@@ -132,13 +140,15 @@ def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRas
         output_data[input_data == class_id] = cost
 
     # Create output raster
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path,
-                           input_ds.RasterXSize,
-                           input_ds.RasterYSize,
-                           1,
-                           gdal.GDT_Float32,
-                           options=['COMPRESS=LZW', 'NUM_THREADS=ALL_CPUS', 'BIGTIFF=YES'])
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(
+        output_path,
+        input_ds.RasterXSize,
+        input_ds.RasterYSize,
+        1,
+        gdal.GDT_Float32,
+        options=["COMPRESS=LZW", "NUM_THREADS=ALL_CPUS", "BIGTIFF=YES"],
+    )
 
     # Copy projection and geotransform
     out_ds.SetProjection(input_ds.GetProjection())
@@ -161,7 +171,7 @@ def create_land_use_cost_raster(dialog: 'AnalysisDialog', land_use_layer: QgsRas
         dialog.log_message("Failed to load the created Land Use Costs raster.", "Land Use")
 
 
-def populate_land_use_table(dialog: 'AnalysisDialog', layer_id: str):
+def populate_land_use_table(dialog: "AnalysisDialog", layer_id: str):
     """Populates the table with unique land use classes from the selected raster's symbology."""
     dialog.landUseCostTable.setRowCount(0)
 
@@ -207,7 +217,7 @@ def get_unique_values_from_raster_renderer(renderer: QgsPalettedRasterRenderer):
     return [c.value for c in renderer.classes()]
 
 
-def populate_land_use_table_with_comet_defaults(dialog: 'AnalysisDialog'):
+def populate_land_use_table_with_comet_defaults(dialog: "AnalysisDialog"):
     """
     Populates the land use cost table with values from the COMET project.
     This function performs a strict check to ensure the selected layer is
@@ -226,7 +236,9 @@ def populate_land_use_table_with_comet_defaults(dialog: 'AnalysisDialog'):
 
         renderer = layer.renderer()
         if not isinstance(renderer, QgsPalettedRasterRenderer):
-            dialog.log_message("Cannot populate: The selected raster does not have a paletted (unique values) renderer.", "Land Use")
+            dialog.log_message(
+                "Cannot populate: The selected raster does not have a paletted (unique values) renderer.", "Land Use"
+            )
             return
 
         unique_values = get_unique_values_from_raster_renderer(renderer)
@@ -235,13 +247,28 @@ def populate_land_use_table_with_comet_defaults(dialog: 'AnalysisDialog'):
         unique_values_as_int = {int(v) for v in unique_values}
 
         if not unique_values_as_int.intersection(comet_class_ids):
-            dialog.log_message("Cannot populate: The selected land use layer must be a 'Carta de Ocupação do Solo Conjuntural' from Direção-Geral do Território.", "Land Use")
+            dialog.log_message(
+                "Cannot populate: The selected land use layer must be a 'Carta de Ocupação do Solo Conjuntural' from Direção-Geral do Território.",
+                "Land Use",
+            )
             return
 
         comet_costs = {
-            100: 1.8, 211: 1.1, 212: 1.1, 213: 1.1,
-            311: 1.3, 312: 1.3, 313: 1.3, 321: 1.3, 322: 1.3, 323: 1.3,
-            410: 1.1, 420: 1.1, 500: 1.0, 610: 1.2, 620: 4.0
+            100: 1.8,
+            211: 1.1,
+            212: 1.1,
+            213: 1.1,
+            311: 1.3,
+            312: 1.3,
+            313: 1.3,
+            321: 1.3,
+            322: 1.3,
+            323: 1.3,
+            410: 1.1,
+            420: 1.1,
+            500: 1.0,
+            610: 1.2,
+            620: 4.0,
         }
 
         populated_count = 0
@@ -259,9 +286,14 @@ def populate_land_use_table_with_comet_defaults(dialog: 'AnalysisDialog'):
                     continue
 
         if populated_count > 0:
-            dialog.log_message(f"Land use costs populated with COMET default values for {populated_count} classes.", "Land Use")
+            dialog.log_message(
+                f"Land use costs populated with COMET default values for {populated_count} classes.", "Land Use"
+            )
         else:
-            dialog.log_message("A COMET-compatible layer was detected, but no matching class IDs were found in the table to update.", "Land Use")
+            dialog.log_message(
+                "A COMET-compatible layer was detected, but no matching class IDs were found in the table to update.",
+                "Land Use",
+            )
 
     except Exception as e:
         dialog.log_message(f"An unexpected error occurred while populating COMET values: {e}", "Land Use")

@@ -1,25 +1,22 @@
-from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
-    QGroupBox
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsRasterLayer
-from qgis import processing
-from osgeo import gdal
-import numpy as np
-import os
 import gc
+import os
+from typing import TYPE_CHECKING
+
+import numpy as np
+from osgeo import gdal
+from qgis import processing
+from qgis.core import QgsProject, QgsRasterLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
 from ..task_manager import run_in_background
-from ..utils import select_output_file, grass_alg_id
-
+from ..utils import grass_alg_id, select_output_file
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
+def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     """Sets up the LCP (Least Cost Path) tab."""
     # Combined Costs GroupBox
     combinedCostsGroupBox = QGroupBox()
@@ -36,8 +33,12 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     dialog.combineNRasterDropdown = QComboBox()
     combinedCostsLayout.addRow(QLabel("Select Land Use Costs Raster (F<sub>lu</sub>):"), dialog.combineLandUseDropdown)
     combinedCostsLayout.addRow(QLabel("Select Slope Costs Raster (F<sub>s</sub>):"), dialog.combineSlopeDropdown)
-    combinedCostsLayout.addRow(QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.combineCorridorsDropdown)
-    combinedCostsLayout.addRow(QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.combineCrossingsDropdown)
+    combinedCostsLayout.addRow(
+        QLabel("Select Corridors Costs Raster (F<sub>c</sub>):"), dialog.combineCorridorsDropdown
+    )
+    combinedCostsLayout.addRow(
+        QLabel("Select Crossings Costs Raster (F<sub>ci</sub>):"), dialog.combineCrossingsDropdown
+    )
     combinedCostsLayout.addRow(QLabel("Select Number of Crossings Raster (N):"), dialog.combineNRasterDropdown)
     dialog.combinedRasterPath = QLineEdit()
     dialog.combinedRasterPath.setPlaceholderText("Choose output path for Combined Raster")
@@ -78,13 +79,13 @@ def setup_lcp_tab(dialog: 'AnalysisDialog', layout: QFormLayout):
     layout.addWidget(lcpGroupBox)
 
 
-def connect_lcp_signals(dialog: 'AnalysisDialog'):
+def connect_lcp_signals(dialog: "AnalysisDialog"):
     """Connects signals for the LCP tab."""
     dialog.combine_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_combination))
     dialog.final_button.clicked.connect(lambda checked: run_in_background(dialog, run_lcp_creation))
 
 
-def run_raster_combination(dialog: 'AnalysisDialog'):
+def run_raster_combination(dialog: "AnalysisDialog"):
     """Combine Cost Rasters using COMET formula with N factor"""
     try:
         # Load all layers
@@ -100,9 +101,7 @@ def run_raster_combination(dialog: 'AnalysisDialog'):
 
         dialog.log_message("Combining Cost Rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]", "LCP")
         combine_rasters_with_comet_formula(
-            costs_layer, slope_layer, corridors_layer, crossings_layer, N_layer,
-            output_path,
-            dialog
+            costs_layer, slope_layer, corridors_layer, crossings_layer, N_layer, output_path, dialog
         )
         dialog.log_message(f"Combined Raster created successfully at: {output_path}", "LCP")
 
@@ -110,7 +109,7 @@ def run_raster_combination(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Combining Cost Rasters Failed: {str(e)}", "LCP")
 
 
-def run_lcp_creation(dialog: 'AnalysisDialog'):
+def run_lcp_creation(dialog: "AnalysisDialog"):
     """Generate Least Cost Path Vector"""
     try:
         points_layer = QgsProject.instance().mapLayer(dialog.pointsComboBox.currentData())
@@ -122,6 +121,7 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
 
         # Create temporary paths for intermediate files
         import tempfile
+
         temp_dir = tempfile.mkdtemp()
         cost_output_path = os.path.join(temp_dir, "cost_surface.tif")
         direction_output_path = os.path.join(temp_dir, "direction_surface.tif")
@@ -144,8 +144,7 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Cost raster: {combined_layer.source()}", "LCP")
         dialog.log_message(f"Start point: {origin_str}", "LCP")
 
-        cost_result = run_r_cost(combined_layer.source(), origin_str,
-                                 cost_output_path, direction_output_path)
+        cost_result = run_r_cost(combined_layer.source(), origin_str, cost_output_path, direction_output_path)
         dialog.log_message("r.cost completed successfully.", "LCP")
 
         dialog.log_message("Running r.drain to extract least cost path...", "LCP")
@@ -156,6 +155,7 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
 
         # Cleanup temporary files
         import shutil
+
         try:
             shutil.rmtree(temp_dir)
         except BaseException:
@@ -166,9 +166,7 @@ def run_lcp_creation(dialog: 'AnalysisDialog'):
 
 
 def combine_rasters_with_comet_formula(
-    land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer,
-    output_path: str,
-    dialog: 'AnalysisDialog'
+    land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer, output_path: str, dialog: "AnalysisDialog"
 ) -> str:
     """
     Combines rasters using COMET formula: Fc × Fs × [Flu × (1-0.1N) + 0.1N × Fci]
@@ -186,13 +184,12 @@ def combine_rasters_with_comet_formula(
 
     # Collect valid layers
     all_layers = []
-    layer_names = ['Land Use (Flu)', 'Slope (Fs)', 'Corridors (Fc)', 'Crossings (Fci)', 'N (count)']
+    layer_names = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)", "N (count)"]
     layer_map = {}
 
-    for idx, (layer, name) in enumerate(zip(
-        [land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer],
-        layer_names
-    )):
+    for idx, (layer, name) in enumerate(
+        zip([land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer], layer_names)
+    ):
         if layer and layer.isValid():
             all_layers.append(layer)
             layer_map[name] = idx
@@ -221,10 +218,11 @@ def combine_rasters_with_comet_formula(
     dialog.log_message("Step 2: Resampling rasters...", "LCP")
     resampled_data = {}
 
-    valid_layers_to_resample = [(layer, name) for layer, name in zip(
-        [land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer],
-        layer_names
-    ) if layer and layer.isValid()]
+    valid_layers_to_resample = [
+        (layer, name)
+        for layer, name in zip([land_use_layer, slope_layer, corridors_layer, crossings_layer, N_layer], layer_names)
+        if layer and layer.isValid()
+    ]
 
     total_layers = len(valid_layers_to_resample)
     current_layer = 0
@@ -233,24 +231,24 @@ def combine_rasters_with_comet_formula(
         current_layer += 1
         dialog.log_message(f"  Resampling {current_layer}/{total_layers}: {name}...", "LCP")
 
-        resampled_path = os.path.join(os.path.dirname(output_path), f'_resampled_{name.replace(" ", "_")}.tif')
+        resampled_path = os.path.join(os.path.dirname(output_path), f"_resampled_{name.replace(' ', '_')}.tif")
 
         params = {
-            'INPUT': layer,
-            'SOURCE_CRS': layer.crs(),
-            'TARGET_CRS': reference_layer.crs(),
-            'RESAMPLING': 0,
-            'NODATA': None,
-            'TARGET_RESOLUTION': ref_resolution,
-            'TARGET_EXTENT': f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
-            'OUTPUT': resampled_path,
-            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
+            "INPUT": layer,
+            "SOURCE_CRS": layer.crs(),
+            "TARGET_CRS": reference_layer.crs(),
+            "RESAMPLING": 0,
+            "NODATA": None,
+            "TARGET_RESOLUTION": ref_resolution,
+            "TARGET_EXTENT": f"{common_extent.xMinimum()},{common_extent.xMaximum()},{common_extent.yMinimum()},{common_extent.yMaximum()}",
+            "OUTPUT": resampled_path,
+            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
         }
 
-        result = processing.run('gdal:warpreproject', params)
+        result = processing.run("gdal:warpreproject", params)
 
-        if result and 'OUTPUT' in result:
-            ds = gdal.Open(result['OUTPUT'])
+        if result and "OUTPUT" in result:
+            ds = gdal.Open(result["OUTPUT"])
             if ds is None:
                 raise RuntimeError(f"Failed to open resampled raster for {layer.name()}")
 
@@ -263,7 +261,7 @@ def combine_rasters_with_comet_formula(
                 height = ds.RasterYSize
                 geotrans = ds.GetGeoTransform()
                 proj = ds.GetProjection()
-                resampled_data['_meta'] = {'width': width, 'height': height, 'geotrans': geotrans, 'proj': proj}
+                resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans, "proj": proj}
                 dialog.log_message(f"  Target grid: {width}x{height} pixels ({width * height:,} total cells)", "LCP")
 
             resampled_data[name] = data
@@ -274,37 +272,37 @@ def combine_rasters_with_comet_formula(
 
             # Clean up temp file
             try:
-                if os.path.exists(result['OUTPUT']):
-                    os.remove(result['OUTPUT'])
+                if os.path.exists(result["OUTPUT"]):
+                    os.remove(result["OUTPUT"])
             except Exception as cleanup_error:
                 dialog.log_message(f"  ⚠️ Could not delete temp file: {cleanup_error}", "LCP")
         else:
             raise RuntimeError(f"Failed to resample {layer.name()}")
 
     # Get dimensions
-    meta = resampled_data['_meta']
-    width, height = meta['width'], meta['height']
-    geotrans, proj = meta['geotrans'], meta['proj']
+    meta = resampled_data["_meta"]
+    width, height = meta["width"], meta["height"]
+    geotrans, proj = meta["geotrans"], meta["proj"]
 
     dialog.log_message("Step 3: Applying COMET formula...", "LCP")
 
     # Create arrays with default value 1.0 for missing layers
-    Flu = resampled_data.get('Land Use (Flu)', np.ones((height, width), dtype=np.float32))
-    Fs = resampled_data.get('Slope (Fs)', np.ones((height, width), dtype=np.float32))
-    Fc = resampled_data.get('Corridors (Fc)', np.ones((height, width), dtype=np.float32))
-    Fci = resampled_data.get('Crossings (Fci)', np.ones((height, width), dtype=np.float32))
-    N = resampled_data.get('N (count)', np.ones((height, width), dtype=np.float32))
+    Flu = resampled_data.get("Land Use (Flu)", np.ones((height, width), dtype=np.float32))
+    Fs = resampled_data.get("Slope (Fs)", np.ones((height, width), dtype=np.float32))
+    Fc = resampled_data.get("Corridors (Fc)", np.ones((height, width), dtype=np.float32))
+    Fci = resampled_data.get("Crossings (Fci)", np.ones((height, width), dtype=np.float32))
+    N = resampled_data.get("N (count)", np.ones((height, width), dtype=np.float32))
 
     # Log warnings for missing layers
-    if 'Land Use (Flu)' not in resampled_data:
+    if "Land Use (Flu)" not in resampled_data:
         dialog.log_message("  ⚠️ Land Use (Flu) not selected - assuming Flu=1.0 (neutral)", "LCP")
-    if 'Slope (Fs)' not in resampled_data:
+    if "Slope (Fs)" not in resampled_data:
         dialog.log_message("  ⚠️ Slope (Fs) not selected - assuming Fs=1.0 (neutral)", "LCP")
-    if 'Corridors (Fc)' not in resampled_data:
+    if "Corridors (Fc)" not in resampled_data:
         dialog.log_message("  ⚠️ Corridors (Fc) not selected - assuming Fc=1.0 (neutral)", "LCP")
-    if 'Crossings (Fci)' not in resampled_data:
+    if "Crossings (Fci)" not in resampled_data:
         dialog.log_message("  ⚠️ Crossings (Fci) not selected - assuming Fci=1.0 (neutral)", "LCP")
-    if 'N (count)' not in resampled_data:
+    if "N (count)" not in resampled_data:
         dialog.log_message("  ⚠️ N (count) not selected - assuming N=1.0 (one infrastructure per cell)", "LCP")
 
     # Log value ranges
@@ -337,8 +335,8 @@ def combine_rasters_with_comet_formula(
 
     # Write final output
     dialog.log_message("Step 4: Writing output raster...", "LCP")
-    driver = gdal.GetDriverByName('GTiff')
-    out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=['COMPRESS=LZW', 'BIGTIFF=YES'])
+    driver = gdal.GetDriverByName("GTiff")
+    out_ds = driver.Create(output_path, width, height, 1, gdal.GDT_Float32, options=["COMPRESS=LZW", "BIGTIFF=YES"])
     out_ds.SetGeoTransform(geotrans)
     out_ds.SetProjection(proj)
     out_band = out_ds.GetRasterBand(1)
@@ -374,10 +372,7 @@ def combine_rasters_with_comet_formula(
         raise RuntimeError("Failed to load the combined cost raster")
 
 
-def run_r_cost(input_raster: str,
-               start_coordinates: str,
-               cost_output: str,
-               direction_output: str) -> dict:
+def run_r_cost(input_raster: str, start_coordinates: str, cost_output: str, direction_output: str) -> dict:
     """
     Runs the r.cost GRASS algorithm using start coordinates.
     """
@@ -396,15 +391,15 @@ def run_r_cost(input_raster: str,
 
     # 3) Build parameters for r.cost - use start_points for the origin
     params = {
-        'input': input_raster,
-        'start_coordinates': start_coordinates,    # Use start_points for r.cost
-        '-n': True,                 # Use Knight's move
-        'max_cost': 0,                    # no maximum cost
-        'memory': 8000,  # Increased memory for large rasters (8GB)
-        'output': cost_output,
-        'outdir': direction_output,
-        'GRASS_REGION_PARAMETER': region,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0
+        "input": input_raster,
+        "start_coordinates": start_coordinates,  # Use start_points for r.cost
+        "-n": True,  # Use Knight's move
+        "max_cost": 0,  # no maximum cost
+        "memory": 8000,  # Increased memory for large rasters (8GB)
+        "output": cost_output,
+        "outdir": direction_output,
+        "GRASS_REGION_PARAMETER": region,
+        "GRASS_REGION_CELLSIZE_PARAMETER": 0,
     }
 
     # 4) Run r.cost to generate cost accumulation and direction surfaces
@@ -414,24 +409,20 @@ def run_r_cost(input_raster: str,
         raise RuntimeError("r.cost processing failed")
 
     # 5) Return the result for downstream use
-    return {
-        'output': cost_output,
-        'outdir': direction_output
-    }
+    return {"output": cost_output, "outdir": direction_output}
 
 
-def run_r_drain_and_vectorize(cost_result: dict,
-                              dest_coord: str,
-                              vector_output: str) -> None:
+def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output: str) -> None:
     """
     Simple LCP extraction using r.drain → r.to.vect.
     Proven to work reliably based on successful logs.
     """
     import os
-    import tempfile
     import shutil
-    from qgis.core import QgsProject, QgsVectorLayer
+    import tempfile
+
     from qgis import processing
+    from qgis.core import QgsProject, QgsVectorLayer
 
     out_dir = os.path.dirname(vector_output)
     if out_dir and not os.path.exists(out_dir):
@@ -441,8 +432,8 @@ def run_r_drain_and_vectorize(cost_result: dict,
 
     # r.drain needs the accumulation raster (cost_result['output']) and start from DESTINATION.
     # It traces the steepest descent (lowest cost) to the source encoded by r.cost.
-    accum_path = cost_result['output']
-    direction_path = cost_result['outdir']
+    accum_path = cost_result["output"]
+    direction_path = cost_result["outdir"]
 
     if not os.path.exists(accum_path):
         raise RuntimeError(f"Cost accumulation raster not found: {accum_path}")
@@ -465,10 +456,11 @@ def run_r_drain_and_vectorize(cost_result: dict,
     dialog = None
     try:
         import inspect
+
         frame = inspect.currentframe()
         while frame:
-            if 'dialog' in frame.f_locals:
-                dialog = frame.f_locals['dialog']
+            if "dialog" in frame.f_locals:
+                dialog = frame.f_locals["dialog"]
                 break
             frame = frame.f_back
     except BaseException:
@@ -480,46 +472,55 @@ def run_r_drain_and_vectorize(cost_result: dict,
     # Run r.drain from destination to trace back to origin
     # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
     # CRITICAL 2: Must set GRASS_REGION to avoid "North must be larger than South" error
-    drain_result = processing.run(grass_alg_id("r.drain"), {
-        'input': accum_path,
-        'direction': direction_path,
-        'start_coordinates': dest_coord,
-        'output': drain_out,
-        'GRASS_REGION_PARAMETER': region,
-        'GRASS_REGION_CELLSIZE_PARAMETER': 0
-    })
+    drain_result = processing.run(
+        grass_alg_id("r.drain"),
+        {
+            "input": accum_path,
+            "direction": direction_path,
+            "start_coordinates": dest_coord,
+            "output": drain_out,
+            "GRASS_REGION_PARAMETER": region,
+            "GRASS_REGION_CELLSIZE_PARAMETER": 0,
+        },
+    )
 
-    if not drain_result or 'output' not in drain_result:
+    if not drain_result or "output" not in drain_result:
         raise RuntimeError("r.drain failed to produce output")
 
-    drain_path = drain_result['output']
+    drain_path = drain_result["output"]
 
     if dialog:
         dialog.log_message(f"r.drain output: {drain_path}", "LCP")
         dialog.log_message("Running r.thin to prepare for vectorization...", "LCP")
 
     # Thin the raster path to avoid "crowded cell" errors in r.to.vect
-    thin_result = processing.run(grass_alg_id("r.thin"), {
-        'input': drain_path,
-        'output': thin_out,
-        'iterations': 200  # Sufficient iterations to thin properly
-    })
+    thin_result = processing.run(
+        grass_alg_id("r.thin"),
+        {
+            "input": drain_path,
+            "output": thin_out,
+            "iterations": 200,  # Sufficient iterations to thin properly
+        },
+    )
 
-    if not thin_result or 'output' not in thin_result:
+    if not thin_result or "output" not in thin_result:
         raise RuntimeError("r.thin failed to produce output")
 
-    thin_path = thin_result['output']
+    thin_path = thin_result["output"]
 
     if dialog:
         dialog.log_message(f"r.thin output: {thin_path}", "LCP")
         dialog.log_message("Converting to vector...", "LCP")
 
     # Convert thinned raster path to vector lines
-    processing.run(grass_alg_id("r.to.vect"), {
-        'input': thin_path,
-        'type': 0,  # line
-        'output': vector_output
-    })
+    processing.run(
+        grass_alg_id("r.to.vect"),
+        {
+            "input": thin_path,
+            "type": 0,  # line
+            "output": vector_output,
+        },
+    )
 
     # Load the resulting vector
     layer_name = os.path.splitext(os.path.basename(vector_output))[0]

@@ -1,21 +1,31 @@
-from typing import TYPE_CHECKING
-from qgis.PyQt.QtWidgets import (
-    QLabel, QComboBox, QLineEdit, QPushButton, QHBoxLayout, QFormLayout,
-    QGroupBox, QCheckBox, QVBoxLayout, QRadioButton, QButtonGroup
-)
-from qgis.PyQt.QtCore import Qt
-from qgis.core import QgsProject, QgsVectorLayer, QgsRasterLayer, QgsRectangle
-import processing
 import os
+from typing import TYPE_CHECKING
+
+import processing
+from qgis.core import QgsProject, QgsRasterLayer, QgsRectangle, QgsVectorLayer
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+)
 
 from ..task_manager import run_in_background
-from ..utils import select_output_file, update_original_resolution, apply_symbology, get_layer_path
+from ..utils import apply_symbology, get_layer_path, select_output_file, update_original_resolution
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
 
 
-def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
+def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     """Sets up the Aux tab with its various functionalities."""
     # Combine Vectors GroupBox
     combineVectorsGroupBox = QGroupBox()
@@ -141,7 +151,7 @@ def setup_aux_tab(dialog: 'AnalysisDialog', layout: QVBoxLayout):
     layout.addWidget(clipGroupBox)
 
 
-def connect_aux_signals(dialog: 'AnalysisDialog'):
+def connect_aux_signals(dialog: "AnalysisDialog"):
     """Connects signals for the Aux tab."""
     dialog.runCombineVectorsButton.clicked.connect(lambda checked: run_in_background(dialog, run_vector_combination))
     dialog.resampleRasterComboBox.currentIndexChanged.connect(lambda: update_original_resolution(dialog))
@@ -149,7 +159,7 @@ def connect_aux_signals(dialog: 'AnalysisDialog'):
     dialog.clip_button.clicked.connect(lambda checked: run_in_background(dialog, run_raster_clipping))
 
 
-def run_vector_combination(dialog: 'AnalysisDialog'):
+def run_vector_combination(dialog: "AnalysisDialog"):
     """Combine two vector layers into one"""
     try:
         layer1 = QgsProject.instance().mapLayer(dialog.vectorComboBox.currentData())
@@ -162,21 +172,18 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
         dialog.log_message("Combining vector layers...", "Aux")
 
         # Use the modern QGIS processing algorithm for merging vectors
-        params = {
-            'LAYERS': [layer1, layer2],
-            'OUTPUT': output_path
-        }
+        params = {"LAYERS": [layer1, layer2], "OUTPUT": output_path}
 
         result = processing.run("native:mergevectorlayers", params)
 
-        if not result or 'OUTPUT' not in result:
+        if not result or "OUTPUT" not in result:
             raise RuntimeError("Vector merge processing failed to return the expected output.")
 
         dialog.log_message("Vectors combined successfully.", "Aux")
 
         # Load the combined layer
-        layer_name = os.path.splitext(os.path.basename(result['OUTPUT']))[0]
-        combined_layer = QgsVectorLayer(result['OUTPUT'], layer_name, "ogr")
+        layer_name = os.path.splitext(os.path.basename(result["OUTPUT"]))[0]
+        combined_layer = QgsVectorLayer(result["OUTPUT"], layer_name, "ogr")
         if combined_layer.isValid():
             QgsProject.instance().addMapLayer(combined_layer)
             dialog.log_message(f"Combined vector layer loaded with {combined_layer.featureCount()} features.", "Aux")
@@ -187,7 +194,7 @@ def run_vector_combination(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Vector Combination Failed: {str(e)}", "Aux")
 
 
-def run_raster_resampling(dialog: 'AnalysisDialog'):
+def run_raster_resampling(dialog: "AnalysisDialog"):
     """Resample Raster"""
     try:
         raster_layer = QgsProject.instance().mapLayer(dialog.resampleRasterComboBox.currentData())
@@ -198,18 +205,16 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
         if not all([raster_layer, target_resolution, output_path]):
             raise ValueError("Raster layer, target resolution, and output path must be specified.")
 
-        resampling_map = {
-            "Nearest Neighbor": 0, "Bilinear": 1, "Cubic": 2, "Cubic Spline": 3, "Lanczos": 4
-        }
+        resampling_map = {"Nearest Neighbor": 0, "Bilinear": 1, "Cubic": 2, "Cubic Spline": 3, "Lanczos": 4}
         resampling_method = resampling_map.get(resampling_method_text, 0)
 
         dialog.log_message(f"Resampling raster '{raster_layer.name()}'...", "Aux")
         params = {
-            'INPUT': raster_layer,
-            'TARGET_RESOLUTION': target_resolution,
-            'RESAMPLING': resampling_method,
-            'OUTPUT': output_path,
-            'EXTRA': '-co COMPRESS=LZW -co BIGTIFF=YES'
+            "INPUT": raster_layer,
+            "TARGET_RESOLUTION": target_resolution,
+            "RESAMPLING": resampling_method,
+            "OUTPUT": output_path,
+            "EXTRA": "-co COMPRESS=LZW -co BIGTIFF=YES",
         }
         processing.run("gdal:warpreproject", params)
         dialog.log_message(f"Resampled raster saved successfully at: {output_path}", "Aux")
@@ -225,7 +230,7 @@ def run_raster_resampling(dialog: 'AnalysisDialog'):
         dialog.log_message(f"Resampling Raster Failed: {str(e)}", "Aux")
 
 
-def run_raster_clipping(dialog: 'AnalysisDialog'):
+def run_raster_clipping(dialog: "AnalysisDialog"):
     """Clip Combined Raster"""
     try:
         points_layer = QgsProject.instance().mapLayer(dialog.clipPointVectorComboBox.currentData())
@@ -276,6 +281,7 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
 
     # Get the raster's original extent
     from osgeo import gdal
+
     raster_ds = gdal.Open(raster_path)
     if not raster_ds:
         raise RuntimeError(f"Could not open raster: {raster_path}")
@@ -306,7 +312,7 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
             vector_extent.xMinimum() - buffer_distance,
             vector_extent.yMinimum() - buffer_distance,
             vector_extent.xMaximum() + buffer_distance,
-            vector_extent.yMaximum() + buffer_distance
+            vector_extent.yMaximum() + buffer_distance,
         )
     elif clip_mode == "x":
         # Clip X only, keep full Y extent from original raster
@@ -314,7 +320,7 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
             vector_extent.xMinimum() - buffer_distance,
             raster_ymin,  # Use full raster Y extent
             vector_extent.xMaximum() + buffer_distance,
-            raster_ymax
+            raster_ymax,
         )
     elif clip_mode == "y":
         # Clip Y only, keep full X extent from original raster
@@ -322,21 +328,21 @@ def clip_raster_to_vector(raster_path, vector_layer, output_path, clip_mode="xy"
             raster_xmin,  # Use full raster X extent
             vector_extent.yMinimum() - buffer_distance,
             raster_xmax,
-            vector_extent.yMaximum() + buffer_distance
+            vector_extent.yMaximum() + buffer_distance,
         )
     else:
         raise ValueError(f"Invalid clip_mode: {clip_mode}. Must be 'xy', 'x', or 'y'.")
 
     params = {
-        'INPUT': raster_path,
-        'PROJWIN': clipped_extent,
-        'NODATA': None,
-        'OUTPUT': output_path,
+        "INPUT": raster_path,
+        "PROJWIN": clipped_extent,
+        "NODATA": None,
+        "OUTPUT": output_path,
     }
 
     result = processing.run("gdal:cliprasterbyextent", params)
 
-    if result and 'OUTPUT' in result:
-        return result['OUTPUT']
+    if result and "OUTPUT" in result:
+        return result["OUTPUT"]
     else:
         raise RuntimeError("gdal:cliprasterbyextent processing failed")
