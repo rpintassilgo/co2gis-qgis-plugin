@@ -19,6 +19,7 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
+from ..constants.land_use import COMET_LAND_USE_COSTS
 from ..task_manager import run_in_background
 from ..utils import select_output_file
 
@@ -244,7 +245,7 @@ def populate_land_use_table_with_comet_defaults(dialog: "AnalysisDialog"):
             return
 
         unique_values = get_unique_values_from_raster_renderer(renderer)
-        comet_class_ids = {100, 211, 212, 213, 311, 312, 313, 321, 322, 323, 410, 420, 500, 610, 620}
+        comet_class_ids = set(COMET_LAND_USE_COSTS)
 
         unique_values_as_int = {int(v) for v in unique_values}
 
@@ -255,24 +256,6 @@ def populate_land_use_table_with_comet_defaults(dialog: "AnalysisDialog"):
             )
             return
 
-        comet_costs = {
-            100: 1.8,
-            211: 1.1,
-            212: 1.1,
-            213: 1.1,
-            311: 1.3,
-            312: 1.3,
-            313: 1.3,
-            321: 1.3,
-            322: 1.3,
-            323: 1.3,
-            410: 1.1,
-            420: 1.1,
-            500: 1.0,
-            610: 1.2,
-            620: 4.0,
-        }
-
         populated_count = 0
         for row in range(dialog.landUseCostTable.rowCount()):
             class_id_item = dialog.landUseCostTable.item(row, 0)
@@ -281,8 +264,8 @@ def populate_land_use_table_with_comet_defaults(dialog: "AnalysisDialog"):
             if class_id_item and cost_item:
                 try:
                     class_id = int(float(class_id_item.text()))
-                    if class_id in comet_costs:
-                        cost_item.setText(str(comet_costs[class_id]))
+                    if class_id in COMET_LAND_USE_COSTS:
+                        cost_item.setText(str(COMET_LAND_USE_COSTS[class_id]))
                         populated_count += 1
                 except ValueError:
                     continue

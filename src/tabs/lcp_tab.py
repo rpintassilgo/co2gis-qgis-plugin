@@ -9,6 +9,8 @@ from qgis.core import QgsProject, QgsRasterLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
+from ..constants.comet import COST_FLOOR, N_CAP
+from ..core.comet import comet_cell_cost
 from ..task_manager import run_in_background
 from ..utils import grass_alg_id, select_output_file
 
@@ -312,26 +314,25 @@ def combine_rasters_with_comet_formula(
     dialog.log_message(f"  Fci range: [{np.min(Fci):.2f}, {np.max(Fci):.2f}]", "LCP")
     dialog.log_message(f"  N range (before cap): [{np.min(N):.2f}, {np.max(N):.2f}]", "LCP")
 
-    # Cap N at 10 (critical for formula stability)
-    N_capped = np.minimum(N, 10)
+    # Cap N (critical for formula stability)
+    N_capped = np.minimum(N, N_CAP)
 
-    if np.max(N) > 10:
-        num_capped = np.sum(N > 10)
-        dialog.log_message(f"  ⚠️ {num_capped:,} pixels had N > 10 and were capped to 10", "LCP")
+    if np.max(N) > N_CAP:
+        num_capped = np.sum(N > N_CAP)
+        dialog.log_message(f"  ⚠️ {num_capped:,} pixels had N > {N_CAP} and were capped to {N_CAP}", "LCP")
 
     dialog.log_message(f"  N range (after cap): [{np.min(N_capped):.2f}, {np.max(N_capped):.2f}]", "LCP")
 
     # Apply COMET formula: Fc × Fs × [Flu × (1 - 0.1N) + 0.1N × Fci]
     dialog.log_message(f"  Calculating formula for {width * height:,} pixels...", "LCP")
-    inner_term = Flu * (1 - 0.1 * N_capped) + 0.1 * N_capped * Fci
-    output_data = Fc * Fs * inner_term
+    output_data = comet_cell_cost(Fc, Fs, Flu, Fci, N_capped)
     dialog.log_message("  ✓ Formula applied successfully", "LCP")
 
     # Log final cost range
     dialog.log_message(f"  Combined cost range: [{np.min(output_data):.2f}, {np.max(output_data):.2f}]", "LCP")
 
     # Ensure minimum cost > 0 (avoid issues with r.drain)
-    output_data = np.maximum(output_data, 0.001)
+    output_data = np.maximum(output_data, COST_FLOOR)
 
     # Write final output
     dialog.log_message("Step 4: Writing output raster...", "LCP")
@@ -356,7 +357,6 @@ def combine_rasters_with_comet_formula(
     Fci = None
     N = None
     N_capped = None
-    inner_term = None
     resampled_data = None
     gc.collect()
 

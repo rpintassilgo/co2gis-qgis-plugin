@@ -21,6 +21,7 @@ from qgis.PyQt.QtWidgets import (
     QTableWidgetItem,
 )
 
+from ..constants.slope import COMET_SLOPE_INTERVALS
 from ..task_manager import run_in_background
 from ..utils import select_output_file
 
@@ -213,14 +214,7 @@ def populate_slope_table_with_comet_defaults(dialog: "AnalysisDialog"):
     """Clear the table and populate with COMET project default slope costs."""
     dialog.slopeCostTable.setRowCount(0)
 
-    comet_defaults = [
-        (0, 10, 1.0, False),
-        (10, 20, 1.1, False),
-        (20, 30, 1.2, False),
-        (30, 70, 3.0, False),
-        (70, 0, 9.0, True),
-    ]
-    for min_val, max_val, cost, no_limit in comet_defaults:
+    for min_val, max_val, cost, no_limit in COMET_SLOPE_INTERVALS:
         add_slope_row(dialog, min_val, max_val, cost, no_limit)
 
 
