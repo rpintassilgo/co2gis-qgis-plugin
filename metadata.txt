@@ -7,12 +7,12 @@
 name=CO2GIS
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
-description=CO₂ transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
+description=CO2 transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
 version=0.2.1
 author=Rodrigo Pintassilgo
 email=co2gis.support@gmail.com
 
-about=CO2GIS is an open-source QGIS plugin for planning CO₂ transport pipeline infrastructure. It integrates raster-based least-cost path (LCP) routing with cell-level capital-cost (CAPEX) estimation, enabling optimal pipeline corridor selection under multi-criteria land constraints. The plugin implements the COMET cost surface framework, hydraulic pipeline sizing via the Darcy-Weisbach equation, and automatic booster station placement on long segments. Two estimation modes — precise cell-by-cell and fast point-sampling — let users tune the accuracy/speed trade-off. Requires the GRASS GIS provider bundled with QGIS.
+about=CO2GIS is an open-source QGIS plugin for planning CO2 transport pipeline infrastructure. It integrates raster-based least-cost path (LCP) routing with cell-level capital-cost (CAPEX) estimation, enabling optimal pipeline corridor selection under multi-criteria land constraints. The plugin implements the COMET cost surface framework, hydraulic pipeline sizing via the Darcy-Weisbach equation, and automatic booster station placement on long segments. Two estimation modes — precise cell-by-cell and fast point-sampling — let users tune the accuracy/speed trade-off. Requires the GRASS GIS provider bundled with QGIS.
 
 tracker=https://github.com/rpintassilgo/co2gis-qgis-plugin/issues
 repository=https://github.com/rpintassilgo/co2gis-qgis-plugin
@@ -29,7 +29,7 @@ changelog=0.2.1 - Packaging: exclude dev-only config (.pre-commit-config.yaml, p
 # Tags are comma separated with spaces allowed
 tags=carbon capture and storage, CCS, CO2, pipeline, least cost path, LCP, CAPEX, routing, raster, GRASS
 
-homepage=https://github.com/rpintassilgo/co2gis-qgis-plugin
+homepage=https://co2gis.pages.dev/
 category=Plugins
 icon=icon.png
 
