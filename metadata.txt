@@ -8,7 +8,7 @@ name=CO2GIS
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
 description=CO₂ transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
-version=0.1.0
+version=0.2.0
 author=Rodrigo Pintassilgo
 email=co2gis.support@gmail.com
 
@@ -22,7 +22,8 @@ repository=https://github.com/rpintassilgo/co2gis-qgis-plugin
 
 hasProcessingProvider=no
 
-changelog=0.1.0 - Initial release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes.
+changelog=0.2.0 - QGIS 4 / Qt6 support; fixes: worker-thread crashes, false success on errors, price estimation returning 0; internal refactor (centralized COMET model, core/UI separation, DRY); added Ruff + pre-commit.
+    0.1.0 - Initial release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes.
 
 # Tags are comma separated with spaces allowed
 tags=carbon capture and storage, CCS, CO2, pipeline, least cost path, LCP, CAPEX, routing, raster, GRASS
