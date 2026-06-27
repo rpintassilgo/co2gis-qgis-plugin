@@ -7,6 +7,7 @@ git sha              : $TemplateVCSFormat
 
 import getpass
 import sys
+import urllib.parse
 import xmlrpc.client
 from optparse import OptionParser
 
@@ -24,10 +25,12 @@ def main(parameters, arguments):
     :param parameters: Command line parameters.
     :param arguments: Command line arguments.
     """
+    # URL-encode the credentials so special characters (@ : / & # ...) in the
+    # username/password don't break the basic-auth URL.
     address = "{protocol}://{username}:{password}@{server}:{port}{endpoint}".format(
         protocol=PROTOCOL,
-        username=parameters.username,
-        password=parameters.password,
+        username=urllib.parse.quote(parameters.username, safe=""),
+        password=urllib.parse.quote(parameters.password, safe=""),
         server=parameters.server,
         port=parameters.port,
         endpoint=ENDPOINT,
@@ -47,10 +50,12 @@ def main(parameters, arguments):
         print("HTTP/HTTPS headers: %s" % err.headers)
         print("Error code: %d" % err.errcode)
         print("Error message: %s" % err.errmsg)
+        sys.exit(1)
     except xmlrpc.client.Fault as err:
         print("A fault occurred")
         print("Fault code: %d" % err.faultCode)
         print("Fault string: %s" % err.faultString)
+        sys.exit(1)
 
 
 def hide_password(url, start=6):
