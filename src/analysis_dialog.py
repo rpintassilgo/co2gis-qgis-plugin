@@ -153,9 +153,10 @@ class AnalysisDialog(QDialog):
         # Make all dropdowns searchable
         self._make_all_dropdowns_searchable()
 
-        # Populate dropdowns
+        # Populate dropdowns, and keep them in sync as layers are added.
+        # Connect a bound method (not a lambda) so it can be disconnected in cleanup().
         populate_layer_dropdowns(self)
-        QgsProject.instance().layersAdded.connect(lambda: populate_layer_dropdowns(self))
+        QgsProject.instance().layersAdded.connect(self._on_layers_added)
 
         # Manually trigger updates for Price Estimation tab after population
         update_pipeline_length(self)
@@ -184,6 +185,17 @@ class AnalysisDialog(QDialog):
         connect_crossings_signals(self)
         connect_corridors_signals(self)
         self.clear_log_button.clicked.connect(self.clear_logs)
+
+    def _on_layers_added(self):
+        """Slot for QgsProject.layersAdded — refresh the layer dropdowns."""
+        populate_layer_dropdowns(self)
+
+    def cleanup(self):
+        """Disconnect global signals before the dialog is disposed (plugin unload)."""
+        try:
+            QgsProject.instance().layersAdded.disconnect(self._on_layers_added)
+        except (TypeError, RuntimeError):
+            pass  # already disconnected / nothing connected
 
     def log_message(self, message: str, tab_name: Optional[str] = None):
         """Thread-safe method to append a message to the log output."""
