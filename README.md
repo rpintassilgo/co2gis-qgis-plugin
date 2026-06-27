@@ -94,6 +94,12 @@ Issues and pull requests are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md
 
 ---
 
+## Support
+
+CO2GIS is free and open-source. If you're using it for commercial CCS/CCUS projects and need custom development or priority enterprise support, reach out at **co2gis.support@gmail.com**.
+
+---
+
 ## Acknowledgments
 
 CO2GIS began as the practical component of a Master's dissertation in Computer Engineering at the **[Polytechnic University of Leiria](https://www.ipleiria.pt/)** (ESTG) — and is now developed independently and in the open.
