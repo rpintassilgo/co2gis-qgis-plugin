@@ -14,10 +14,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - name: Derive version from tag
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -36,12 +32,25 @@ jobs:
         run: git archive --format=zip --prefix=co2gis/ -o co2gis.zip "${GITHUB_REF_NAME}"
 
       - name: Create GitHub release
+        # Attaches co2gis.zip. Publishing to plugins.qgis.org is done MANUALLY:
+        # download co2gis.zip from this release and upload it on the website.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${GITHUB_REF_NAME}" co2gis.zip --title "${GITHUB_REF_NAME}" --generate-notes
 
-      - name: Upload to plugins.qgis.org
-        env:
-          OSGEO_USERNAME: ${{ secrets.OSGEO_USERNAME }}
-          OSGEO_PASSWORD: ${{ secrets.OSGEO_PASSWORD }}
-        run: python plugin_upload.py -u "$OSGEO_USERNAME" -w "$OSGEO_PASSWORD" co2gis.zip
+      # ── Optional: automatic upload to plugins.qgis.org (disabled) ────────────
+      # Left here on purpose. We publish manually for now (no OSGeo password in a
+      # public repo's CI). To re-enable automatic publishing in the future:
+      #   1. Add the OSGEO_USERNAME / OSGEO_PASSWORD repository secrets.
+      #   2. Uncomment the two steps below.
+      # plugin_upload.py URL-encodes the credentials and exits non-zero on
+      # failure, so the run fails loudly if the upload is rejected.
+      #
+      # - uses: actions/setup-python@v5
+      #   with:
+      #     python-version: "3.11"
+      # - name: Upload to plugins.qgis.org
+      #   env:
+      #     OSGEO_USERNAME: ${{ secrets.OSGEO_USERNAME }}
+      #     OSGEO_PASSWORD: ${{ secrets.OSGEO_PASSWORD }}
+      #   run: python plugin_upload.py -u "$OSGEO_USERNAME" -w "$OSGEO_PASSWORD" co2gis.zip
