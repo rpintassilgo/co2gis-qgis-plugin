@@ -1,13 +1,8 @@
 """Background-task runner.
 
-Two APIs live here during the #2 migration:
-
-- ``run_task`` — the 3-phase contract (prepare / work / publish). ``prepare`` and
-  ``publish`` run on the **main thread**; only ``work`` runs on the background
-  thread and must not touch Qt widgets or ``QgsProject``. New code uses this.
-- ``run_in_background`` — the legacy single-callable form that runs
-  ``run_logic(dialog)`` entirely on the background thread. Kept so unmigrated
-  tabs keep working; remove once every action is migrated (#2).
+Tasks use the 3-phase contract via :func:`run_task` (prepare / work / publish):
+``prepare`` and ``publish`` run on the **main thread**; only ``work`` runs on the
+background thread and must not touch Qt widgets or ``QgsProject`` (#2).
 
 Errors are never swallowed: a failing ``work``/``publish`` marks the task failed,
 logs it and shows a QMessageBox (fixes the false-success bug, #7).
@@ -127,20 +122,3 @@ def run_task(
         return
 
     _schedule(dialog, name, Task(dialog, name, work, params, publish), task_key)
-
-
-def run_in_background(dialog: "AnalysisDialog", run_logic: Callable):
-    """Legacy: run ``run_logic(dialog)`` entirely on the background thread.
-
-    Deprecated — kept only for tabs not yet migrated to :func:`run_task` (#2).
-    Reads widgets and writes ``QgsProject`` from the worker thread, which is the
-    bug #2 tracks; do not use for new code.
-    """
-    name = run_logic.__name__.replace("_", " ").title()
-    task_key = f"{name}_{id(dialog)}"
-    if _is_running(task_key):
-        dialog.log_message(f"Task '{name}' is already running", "Task Manager")
-        return
-
-    # Wrap the legacy callable as a work() that takes the dialog as its params.
-    _schedule(dialog, name, Task(dialog, name, lambda d: run_logic(d), dialog, None), task_key)
