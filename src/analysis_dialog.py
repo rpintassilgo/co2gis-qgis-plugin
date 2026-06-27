@@ -14,13 +14,13 @@ from qgis.PyQt.QtWidgets import (
     QTextEdit,
 )
 
-from .tabs.aux_tab import connect_aux_signals
-from .tabs.corridors_tab import connect_corridors_signals
-from .tabs.crossings_tab import connect_crossings_signals
-from .tabs.land_use_tab import connect_land_use_signals
-from .tabs.lcp_tab import connect_lcp_signals
-from .tabs.price_estimation_tab import connect_price_estimation_signals
-from .tabs.slope_tab import connect_slope_signals
+from .ui.aux_tab import connect_aux_signals
+from .ui.corridors_tab import connect_corridors_signals
+from .ui.crossings_tab import connect_crossings_signals
+from .ui.land_use_tab import connect_land_use_signals
+from .ui.lcp_tab import connect_lcp_signals
+from .ui.price_estimation_tab import connect_price_estimation_signals
+from .ui.slope_tab import connect_slope_signals
 from .ui_manager import setup_ui
 from .utils import populate_layer_dropdowns, update_pipeline_length, update_resolution_field
 
