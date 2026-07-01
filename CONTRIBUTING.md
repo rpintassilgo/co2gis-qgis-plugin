@@ -28,7 +28,7 @@ git clone https://github.com/<your-username>/co2gis-qgis-plugin.git
 
 Then enable **CO2GIS** in *Plugins → Manage and Install Plugins → Installed*. Edits take effect on the next plugin reload — the [Plugin Reloader](https://plugins.qgis.org/plugins/plugin_reloader/) plugin is handy during development.
 
-**Requirements:** QGIS 3.0+ with the **GRASS provider** enabled (routing calls `grass7:r.cost` / `r.drain`) and the Processing framework. No extra Python packages — only PyQGIS, PyQt5, GDAL/OGR and NumPy, all shipped with QGIS.
+**Requirements:** QGIS 3.16+ with the **GRASS provider** enabled (routing calls `grass7:r.cost` / `r.drain`) and the Processing framework. No extra Python packages — only PyQGIS, PyQt5, GDAL/OGR and NumPy, all shipped with QGIS.
 
 ## Code style
 
@@ -40,11 +40,28 @@ pylint --rcfile=pylintrc <file>
 
 Run it inside a QGIS-aware Python environment (PyQGIS imports only resolve against the QGIS-bundled interpreter).
 
+## Testing
+
+Two layers — please cover both before opening a PR:
+
+- **Unit tests** — the pure domain math (COMET cell cost, Darcy–Weisbach diameter, segment/booster splitting) lives in `src/core` with no QGIS dependency, so it runs with plain `pytest` — no QGIS, no display:
+
+  ```bash
+  pip install pytest numpy
+  pytest tests/unit        # or: make test
+  ```
+
+  Add or update a test whenever you change that math. (Integration tests that drive QGIS/GRASS are not set up yet — see [#10](https://github.com/rpintassilgo/co2gis-qgis-plugin/issues/10).)
+
+- **Manual testing** — because the plugin runs *inside* QGIS, always reload it and exercise the affected tab/workflow in QGIS before opening a PR. The in-dialog log panel helps. This is the primary check for anything touching the UI or the GRASS routing.
+
+A `.pre-commit-config.yaml` is provided (Ruff lint + format); install [`pre-commit`](https://pre-commit.com/) and run `pre-commit install` once so checks run automatically on commit.
+
 ## Commits & pull requests
 
 - Work on a branch in your fork, then open a pull request against `master`.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply.
 - Keep pull requests focused — one logical change per PR, with a short description of what and why.
-- Make sure the plugin still loads and the affected workflow runs in QGIS before opening the PR.
+- Before opening the PR, run `pytest tests/unit` and make sure the plugin still loads and the affected workflow runs in QGIS (see [Testing](#testing)).
 
 For commercial CCUS work needing custom development or priority support, reach out at **co2gis.support@gmail.com**.
