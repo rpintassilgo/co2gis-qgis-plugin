@@ -14,7 +14,7 @@ Please search existing issues first to avoid duplicates.
 
 ## Development setup
 
-CO2GIS is a QGIS 3.x plugin (PyQGIS / PyQt5) — there's no standalone entry point, it runs inside QGIS. The repository **is** the installed plugin, so it has to live in your QGIS plugins directory:
+CO2GIS is a QGIS plugin (3.16+, including QGIS 4) built on PyQGIS, with Qt accessed through the `qgis.PyQt` wrapper — so the same code runs on both Qt5 (QGIS 3) and Qt6 (QGIS 4). There's no standalone entry point, it runs inside QGIS. The repository **is** the installed plugin, so it has to live in your QGIS plugins directory (swap `QGIS3` for `QGIS4` in the paths below if you run QGIS 4):
 
 - **Linux:** `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
 - **macOS:** `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
@@ -28,7 +28,7 @@ git clone https://github.com/<your-username>/co2gis-qgis-plugin.git
 
 Then enable **CO2GIS** in *Plugins → Manage and Install Plugins → Installed*. Edits take effect on the next plugin reload — the [Plugin Reloader](https://plugins.qgis.org/plugins/plugin_reloader/) plugin is handy during development.
 
-**Requirements:** QGIS 3.16+ with the **GRASS provider** enabled (routing calls `grass7:r.cost` / `r.drain`) and the Processing framework. No extra Python packages — only PyQGIS, PyQt5, GDAL/OGR and NumPy, all shipped with QGIS.
+**Requirements:** QGIS 3.16+ with the **GRASS provider** enabled (routing calls `grass7:r.cost` / `r.drain`) and the Processing framework. No extra Python packages — only PyQGIS (Qt via the `qgis.PyQt` wrapper), GDAL/OGR and NumPy, all shipped with QGIS.
 
 ## Code style
 
