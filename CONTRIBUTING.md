@@ -32,13 +32,20 @@ Then enable **CO2GIS** in *Plugins → Manage and Install Plugins → Installed*
 
 ## Code style
 
-Keep changes consistent with the surrounding code. A `pylintrc` is provided:
+Formatting and linting are handled by [Ruff](https://docs.astral.sh/ruff/), configured in `pyproject.toml` (line length 120). The easiest way to stay consistent is to let it run automatically on every commit via [pre-commit](https://pre-commit.com/):
 
 ```bash
-pylint --rcfile=pylintrc <file>
+pip install pre-commit
+pre-commit install        # once, in your clone — Ruff then runs on each commit
 ```
 
-Run it inside a QGIS-aware Python environment (PyQGIS imports only resolve against the QGIS-bundled interpreter).
+You can also run the checks manually at any time:
+
+```bash
+pre-commit run --all-files      # or: ruff check . && ruff format .
+```
+
+A `pylintrc` is also provided for deeper, optional analysis (`pylint --rcfile=pylintrc <file>`) — run it inside a QGIS-aware Python environment (PyQGIS imports only resolve against the QGIS-bundled interpreter).
 
 ## Testing
 
@@ -54,8 +61,6 @@ Two layers — please cover both before opening a PR:
   Add or update a test whenever you change that math. (Integration tests that drive QGIS/GRASS are not set up yet — see [#10](https://github.com/rpintassilgo/co2gis-qgis-plugin/issues/10).)
 
 - **Manual testing** — because the plugin runs *inside* QGIS, always reload it and exercise the affected tab/workflow in QGIS before opening a PR. The in-dialog log panel helps. This is the primary check for anything touching the UI or the GRASS routing.
-
-A `.pre-commit-config.yaml` is provided (Ruff lint + format); install [`pre-commit`](https://pre-commit.com/) and run `pre-commit install` once so checks run automatically on commit.
 
 ## Commits & pull requests
 
