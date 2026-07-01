@@ -2,12 +2,12 @@
 
 **Route CO₂ pipelines the least-cost way — and price them — inside QGIS.**
 
-![QGIS](https://img.shields.io/badge/QGIS-3.0%2B-589632?logo=qgis&logoColor=white)
+![QGIS](https://img.shields.io/badge/QGIS-3.16%2B-589632?logo=qgis&logoColor=white)
 ![License](https://img.shields.io/badge/license-GPL--2.0--or--later-blue)
 
 CO2GIS turns land use, slope, crossings and existing corridors into a [COMET](https://doi.org/10.1016/j.egypro.2013.06.200) cost surface, finds the globally optimal corridor between a source and a sink, and estimates its CAPEX down to the cell — all in one tabbed QGIS interface, no programming required.
 
-▶ **[Watch the 2-minute demo](https://www.youtube.com/watch?v=j7pniEh9YSc)**
+▶ **[Watch the 2-minute demo](https://www.youtube.com/watch?v=j7pniEh9YSc)**  ·  🌐 **[Website & docs](https://co2gis.pages.dev/)**
 
 Planning a CO₂ pipeline is a multi-criteria spatial problem — the best corridor depends on land, terrain and infrastructure, while the cost depends on length, diameter and pressure. General GIS does routing but has no CO₂ cost model; network optimisers price graphs, not continuous terrain. CO2GIS joins a COMET raster cost surface, raster least-cost routing and engineering-grade cell-level CAPEX in a single workflow.
 
@@ -25,6 +25,8 @@ Planning a CO₂ pipeline is a multi-criteria spatial problem — the best corri
 
 ## How it works
 
+> Every coefficient and threshold below is a **reference default** — all are editable in the plugin's Price Estimation tab. For the full parameter reference, formulas and derivations, see the **[documentation](https://co2gis.pages.dev/docs)**.
+
 ### 1 · Cost surface
 
 Each raster cell gets a relative crossing cost from the COMET formula:
@@ -37,7 +39,7 @@ C_cell = Fc · Fs · [ Flu · (1 − 0.1·N) + 0.1·N · Fci ]
 
 ### 2 · Least-cost path
 
-`r.cost` propagates accumulated cost from the origin; `r.drain` back-traces the minimum-cost path from the destination; `r.thin → r.to.vect` turn it into a clean line. The result is the route that minimises total accumulated cost across the whole territory.
+`r.cost` propagates accumulated cost from the origin; `r.drain` back-traces the minimum-cost path from the destination; `r.thin → r.to.vect` turn it into a clean line. The result minimises cost, not distance — the globally optimal corridor across the whole territory, not a greedy local path.
 
 ### 3 · CAPEX
 
@@ -54,7 +56,15 @@ Ip      = Bc · D · Σ ( C_cell · L_cell )
 I_total = Σ Ip + Σ I_B
 ```
 
-Runs past the hydraulic limit (≈150 km at Δp/L = 0.02 MPa/km, 3 MPa max drop) are split with intermediate **booster stations**, `I_B = 0.547·Sc + 0.42` (M€₂₀₁₀).
+Routes past the pressure budget are split into segments with intermediate **booster stations**. The segment length limit is *derived*, not fixed — by default `total drop (3 MPa) ÷ admissible drop (0.02 MPa/km) ≈ 150 km`. Each booster's cost scales with its compressor power `Sc`:
+
+```
+I_B = α · Sc + β
+```
+
+**Precise mode** (default) prices every crossed cell exactly; **fast mode** samples a few points per segment for quick scenario exploration — accuracy vs speed.
+
+Defaults (all editable): `Bc = 1357 €/m²`, `λ = 0.015`, `ρ = 827 kg/m³`, `Δp/L = 0.02 MPa/km`, `Δp = 3 MPa`, `α = 0.547 M€/MW`, `β = 0.42 M€`. Full derivation in the **[cost-model docs](https://co2gis.pages.dev/docs/capex-segments-boosters)**.
 
 ---
 
@@ -64,7 +74,7 @@ Runs past the hydraulic limit (≈150 km at Δp/L = 0.02 MPa/km, 3 MPa max drop)
 
 **From ZIP** — download a [release](https://github.com/rpintassilgo/co2gis-qgis-plugin/releases) and use **Plugins → Manage and Install Plugins → Install from ZIP**.
 
-**Requirements:** QGIS **3.0+** with the bundled **GRASS provider** and **Processing** framework (both ship with the standard QGIS installers). No extra Python packages — the plugin uses only PyQGIS, PyQt5, GDAL/OGR and NumPy.
+**Requirements:** QGIS **3.16+** with the bundled **GRASS provider** and **Processing** framework (both ship with the standard QGIS installers). No extra Python packages — the plugin uses only PyQGIS, PyQt5, GDAL/OGR and NumPy.
 
 Once enabled, a **CO2GIS** action appears in the Plugins menu and toolbar.
 
