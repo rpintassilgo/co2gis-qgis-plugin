@@ -90,7 +90,7 @@ Two layers — please cover both before opening a PR:
 ## Commits & pull requests
 
 - Work on a branch in your fork, then open a pull request against `master`.
-- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply. Don't add LLM/AI co-author trailers.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply.
 - Keep pull requests focused — one logical change per PR, with a short description of what and why.
 - Before opening the PR, run `pytest tests/unit` and make sure the plugin still loads and the affected workflow runs in QGIS (see [Testing](#testing)).
 
