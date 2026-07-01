@@ -74,7 +74,7 @@ Defaults (all editable): `Bc = 1357 €/m²`, `λ = 0.015`, `ρ = 827 kg/m³`, `
 
 **From ZIP** — download a [release](https://github.com/rpintassilgo/co2gis-qgis-plugin/releases) and use **Plugins → Manage and Install Plugins → Install from ZIP**.
 
-**Requirements:** QGIS **3.16+** with the bundled **GRASS provider** and **Processing** framework (both ship with the standard QGIS installers). No extra Python packages — the plugin uses only PyQGIS, PyQt5, GDAL/OGR and NumPy.
+**Requirements:** QGIS **3.16+** with the bundled **GRASS provider** and **Processing** framework (both ship with the standard QGIS installers). No extra Python packages — the plugin uses only PyQGIS (Qt via the `qgis.PyQt` wrapper), GDAL/OGR and NumPy.
 
 Once enabled, a **CO2GIS** action appears in the Plugins menu and toolbar.
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A **QGIS 3.x plugin** (PyQGIS / PyQt5) for CO₂ pipeline routing and CAPEX estimation. It implements the COMET multi-criteria cost model, raster least-cost-path routing via GRASS, and engineering-grade CAPEX estimation with a hydraulically-derived pipeline diameter. The plugin runs *inside* QGIS — there is no standalone entry point. See `README.md` for the full cost model, formulas, parameters, and the Portuguese case study.
+A **QGIS plugin** (3.16+, including QGIS 4; PyQGIS with Qt via the `qgis.PyQt` wrapper) for CO₂ pipeline routing and CAPEX estimation. It implements the COMET multi-criteria cost model, raster least-cost-path routing via GRASS, and engineering-grade CAPEX estimation with a hydraulically-derived pipeline diameter. The plugin runs *inside* QGIS — there is no standalone entry point. See `README.md` for the full cost model, formulas, parameters, and the Portuguese case study.
 
 The repo lives directly in the QGIS plugins directory (this checkout *is* the installed plugin), so edits take effect on the next QGIS restart / plugin reload — no deploy step needed during development.
 
