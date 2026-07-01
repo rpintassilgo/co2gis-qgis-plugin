@@ -12,6 +12,14 @@ Open an issue through the [templates](https://github.com/rpintassilgo/co2gis-qgi
 
 Please search existing issues first to avoid duplicates.
 
+**Labels** use two orthogonal axes plus a type label:
+
+- `priority: low | medium | high` — how soon it should be addressed. Applies to **every** issue.
+- `severity: low | medium | high` — how bad the impact is if it happens. Applies to **bugs only**.
+- A type label: `bug` / `enhancement` / `documentation`.
+
+Priority and severity are independent — a bug can be high-severity but low-priority (rare edge case) or vice versa. Maintainers usually set the labels; feel free to suggest them.
+
 ## Development setup
 
 CO2GIS is a QGIS plugin (3.16+, including QGIS 4) built on PyQGIS, with Qt accessed through the `qgis.PyQt` wrapper — so the same code runs on both Qt5 (QGIS 3) and Qt6 (QGIS 4). There's no standalone entry point, it runs inside QGIS. Because the repository **is** the installed plugin, the simplest setup is to clone it directly into your QGIS plugins directory — or symlink it there (swap `QGIS3` for `QGIS4` in the paths below if you run QGIS 4):
@@ -47,6 +55,23 @@ pre-commit run --all-files      # or: ruff check . && ruff format .
 
 A `pylintrc` is also provided for deeper, optional analysis (`pylint --rcfile=pylintrc <file>`) — run it inside a QGIS-aware Python environment (PyQGIS imports only resolve against the QGIS-bundled interpreter).
 
+## Coding standards
+
+Keep the codebase small, modular and consistent with what's already there.
+
+- **File size.** Aim for **150–500 lines** per file; treat **~1000 lines** as a hard ceiling and a signal to refactor. Keep `__init__.py` minimal (essentially just `classFactory`).
+- **Module layout.** Preserve the separation:
+  - `src/core/` — domain/processing logic (COMET, LCP, CAPEX). **No Qt, no widgets** — importable and unit-testable without the UI, and safe to run off the UI thread.
+  - `src/constants/` — pure data (default values), no logic.
+  - `src/ui/` — per-tab widget building, signal wiring and handlers.
+  - `src/widgets/` — reusable Qt widgets.
+  - `src/utils/` — shared helpers.
+- **KISS / DRY.** Prefer the simplest thing that works, and reuse existing helpers instead of duplicating. The COMET formula has a single source of truth (`src/core/comet.py`) — the routing surface and the CAPEX estimate must both call it, never re-implement it.
+- **Qt imports** go through the `qgis.PyQt` wrapper (`from qgis.PyQt.QtWidgets import …`), never `PyQt5` / `PyQt6` directly — that's what keeps the plugin working on both QGIS 3 (Qt5) and QGIS 4 (Qt6).
+- **Validate before you use.** Check `layer.isValid()` after loading a layer, and validate user inputs before running (don't assume a field holds a valid number or path).
+- **Threading.** Long-running work runs off the UI thread via `run_task` (`src/task_manager.py`). Never touch widgets from a background task; report progress through the thread-safe `dialog.log_message`.
+- **Naming.** Match the surrounding code. Each tab module exposes `setup_<tab>_tab`, `connect_<tab>_signals` and `run_<action>`.
+
 ## Testing
 
 Two layers — please cover both before opening a PR:
@@ -65,7 +90,7 @@ Two layers — please cover both before opening a PR:
 ## Commits & pull requests
 
 - Work on a branch in your fork, then open a pull request against `master`.
-- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply.
+- Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat`, `fix`, `chore`, `docs`, `refactor`, …). Reference issues with a `Closes #N` footer where they apply. Don't add LLM/AI co-author trailers.
 - Keep pull requests focused — one logical change per PR, with a short description of what and why.
 - Before opening the PR, run `pytest tests/unit` and make sure the plugin still loads and the affected workflow runs in QGIS (see [Testing](#testing)).
 
