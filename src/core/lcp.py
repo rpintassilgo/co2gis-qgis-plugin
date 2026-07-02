@@ -260,16 +260,23 @@ def run_r_cost(
     return {"output": cost_output, "outdir": direction_output}
 
 
-def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output: str, log=lambda msg: None) -> str:
+def run_r_drain_and_vectorize(
+    cost_result: dict, dest_coord: str, vector_output: str, drain_output: str = None, log=lambda msg: None
+) -> str:
     """
     Extract the LCP with r.drain → r.thin → r.to.vect.
 
     Writes the route to ``vector_output`` and returns its path. Does NOT load it
     into the project — the caller adds the layer from the main thread.
+
+    ``drain_output`` optionally persists the raw r.drain raster (the rasterized route
+    *before* r.thin) to that path so the caller can load it as a diagnostic layer; when
+    ``None`` it goes to a temp dir and is discarded.
     """
-    out_dir = os.path.dirname(vector_output)
-    if out_dir and not os.path.exists(out_dir):
-        os.makedirs(out_dir, exist_ok=True)
+    for path in (vector_output, drain_output):
+        d = os.path.dirname(path) if path else None
+        if d and not os.path.exists(d):
+            os.makedirs(d, exist_ok=True)
 
     temp_dir = tempfile.mkdtemp()
 
@@ -283,8 +290,9 @@ def run_r_drain_and_vectorize(cost_result: dict, dest_coord: str, vector_output:
     if not os.path.exists(direction_path):
         raise RuntimeError(f"Direction raster not found: {direction_path}")
 
-    # r.drain → raster path, then r.to.vect lines to GPKG
-    drain_out = os.path.join(temp_dir, "drain_path.tif")
+    # r.drain → raster path, then r.to.vect lines to GPKG. The raw drain raster is persisted to
+    # ``drain_output`` when given (so it survives temp cleanup), else kept in temp and discarded.
+    drain_out = drain_output or os.path.join(temp_dir, "drain_path.tif")
     thin_out = os.path.join(temp_dir, "drain_thin.tif")
 
     # Get the region from the accumulation raster to use in r.drain
