@@ -12,9 +12,6 @@ CLAUDE.local.md   export-ignore
 CONTRIBUTING.md   export-ignore
 Makefile          export-ignore
 pylintrc          export-ignore
-pb_tool.cfg       export-ignore
 plugin_upload.py  export-ignore
 tests             export-ignore
-scripts           export-ignore
 docs              export-ignore
-help              export-ignore
