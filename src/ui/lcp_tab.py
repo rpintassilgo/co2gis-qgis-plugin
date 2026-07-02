@@ -160,6 +160,7 @@ def _lcp_prepare(dialog: "AnalysisDialog") -> dict:
         "dest": dest,
         "combined_path": combined_layer.source(),
         "vector_output": vector_output,
+        "memory": dialog.rcost_memory_mb,
         "log": log,
     }
 
@@ -174,7 +175,10 @@ def _lcp_work(params: dict) -> str:
     log("Running r.cost to compute cost surface...")
     log(f"Cost raster: {params['combined_path']}")
     log(f"Start point: {params['origin']}")
-    cost_result = run_r_cost(params["combined_path"], params["origin"], cost_output_path, direction_output_path)
+    log(f"r.cost memory budget: {params['memory']} MB")
+    cost_result = run_r_cost(
+        params["combined_path"], params["origin"], cost_output_path, direction_output_path, memory=params["memory"]
+    )
     log("r.cost completed successfully.")
 
     log(f"Destination point: {params['dest']}")

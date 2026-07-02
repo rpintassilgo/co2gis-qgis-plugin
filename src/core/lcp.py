@@ -18,6 +18,7 @@ from qgis import processing
 from qgis.core import QgsRasterLayer
 
 from ..constants.comet import COST_FLOOR, N_CAP
+from ..constants.lcp import DEFAULT_RCOST_MEMORY_MB
 from .comet import comet_cell_cost
 from .raster import resample_raster
 
@@ -209,9 +210,19 @@ def combine_rasters_with_comet_formula(slots: dict, output_path: str, target_crs
     return output_path
 
 
-def run_r_cost(input_raster: str, start_coordinates: str, cost_output: str, direction_output: str) -> dict:
+def run_r_cost(
+    input_raster: str,
+    start_coordinates: str,
+    cost_output: str,
+    direction_output: str,
+    memory: int = DEFAULT_RCOST_MEMORY_MB,
+) -> dict:
     """
     Runs the r.cost GRASS algorithm using start coordinates.
+
+    ``memory`` is the RAM budget (MB) handed to r.cost; larger values speed up big rasters
+    but must fit in available memory. Callers pass the user-configured value; the default
+    is the shared ``constants.lcp.DEFAULT_RCOST_MEMORY_MB``.
     """
     # 1) Make sure output folders exist
     for path in (cost_output, direction_output):
@@ -232,7 +243,7 @@ def run_r_cost(input_raster: str, start_coordinates: str, cost_output: str, dire
         "start_coordinates": start_coordinates,  # Use start_points for r.cost
         "-n": True,  # Use Knight's move
         "max_cost": 0,  # no maximum cost
-        "memory": 8000,  # Increased memory for large rasters (8GB)
+        "memory": memory,  # RAM budget (MB) for large rasters; set via the Settings dialog
         "output": cost_output,
         "outdir": direction_output,
         "GRASS_REGION_PARAMETER": region,

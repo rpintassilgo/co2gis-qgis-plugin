@@ -20,6 +20,7 @@ from .ui.crossings_tab import connect_crossings_signals, setup_crossings_tab
 from .ui.land_use_tab import setup_land_use_tab
 from .ui.lcp_tab import setup_lcp_tab
 from .ui.price_estimation_tab import setup_price_estimation_tab
+from .ui.settings_dialog import open_settings_dialog
 from .ui.slope_tab import setup_slope_tab
 
 if TYPE_CHECKING:
@@ -54,6 +55,17 @@ def setup_ui(dialog: "AnalysisDialog"):
     main_layout = QVBoxLayout()
 
     dialog.tabs = QTabWidget()
+
+    # Settings button tucked into the tab bar's top-right corner
+    dialog.settings_button = QPushButton("⚙ Settings")
+    dialog.settings_button.setAutoDefault(False)
+    dialog.settings_button.setDefault(False)
+    dialog.settings_button.clicked.connect(lambda: open_settings_dialog(dialog))
+    settings_corner = QWidget()
+    settings_corner_layout = QHBoxLayout(settings_corner)
+    settings_corner_layout.setContentsMargins(0, 0, 0, 6)
+    settings_corner_layout.addWidget(dialog.settings_button)
+    dialog.tabs.setCornerWidget(settings_corner, Qt.Corner.TopRightCorner)
 
     # Create tab widgets
     land_use_tab = QWidget()
