@@ -46,6 +46,31 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
     dialog.lcpInputDropdown = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
+    # Optional r.cost byproducts: only saved + loaded if a path is given, else kept in temp.
+    costFileLayout = add_output_path_row(
+        dialog,
+        "costRasterPath",
+        "costRasterBrowse",
+        "tif",
+        "Choose output path for Cumulative Cost Raster (optional)",
+    )
+    lcpPathLayout.addRow(costFileLayout)
+    directionFileLayout = add_output_path_row(
+        dialog,
+        "directionRasterPath",
+        "directionRasterBrowse",
+        "tif",
+        "Choose output path for Movement Directions Raster (optional, diagnostic)",
+    )
+    lcpPathLayout.addRow(directionFileLayout)
+    drainFileLayout = add_output_path_row(
+        dialog,
+        "drainRasterPath",
+        "drainRasterBrowse",
+        "tif",
+        "Choose output path for Drain Raster (optional, diagnostic — rasterized route pre-thinning)",
+    )
+    lcpPathLayout.addRow(drainFileLayout)
     finalFileLayout = add_output_path_row(
         dialog, "finalPath", "finalBrowse", "gpkg", "Choose output path for LCP Vector"
     )
@@ -139,7 +164,10 @@ def _lcp_prepare(dialog: "AnalysisDialog") -> dict:
     vector_output = dialog.finalPath.text().strip()
 
     if not all([points_layer, combined_layer, vector_output]):
-        raise ValueError("All input layers and output path must be specified.")
+        raise ValueError(
+            "Point layer, combined raster, and the LCP Vector output path must be specified "
+            "(The cumulative-cost, movement-directions and drain raster paths are optional)."
+        )
 
     coords = []
     for feat in points_layer.getFeatures():
@@ -160,17 +188,25 @@ def _lcp_prepare(dialog: "AnalysisDialog") -> dict:
         "dest": dest,
         "combined_path": combined_layer.source(),
         "vector_output": vector_output,
+        "cost_output": dialog.costRasterPath.text().strip() or None,
+        "direction_output": dialog.directionRasterPath.text().strip() or None,
+        "drain_output": dialog.drainRasterPath.text().strip() or None,
         "memory": dialog.rcost_memory_mb,
         "log": log,
     }
 
 
-def _lcp_work(params: dict) -> str:
-    """Background thread: run the GRASS r.cost → r.drain → r.to.vect chain."""
+def _lcp_work(params: dict) -> dict:
+    """Background thread: run the GRASS r.cost → r.drain → r.to.vect chain.
+
+    The r.cost cumulative-cost and movement-direction surfaces are always needed by r.drain.
+    When the user gave an output path for one, it is written there (persistent) and reported so
+    ``publish`` can load it; otherwise it goes to a temp dir and is discarded after r.drain.
+    """
     log = params["log"]
     temp_dir = tempfile.mkdtemp()
-    cost_output_path = os.path.join(temp_dir, "cost_surface.tif")
-    direction_output_path = os.path.join(temp_dir, "direction_surface.tif")
+    cost_output_path = params["cost_output"] or os.path.join(temp_dir, "cost_surface.tif")
+    direction_output_path = params["direction_output"] or os.path.join(temp_dir, "direction_surface.tif")
 
     log("Running r.cost to compute cost surface...")
     log(f"Cost raster: {params['combined_path']}")
@@ -182,19 +218,42 @@ def _lcp_work(params: dict) -> str:
     log("r.cost completed successfully.")
 
     log(f"Destination point: {params['dest']}")
-    vector_output = run_r_drain_and_vectorize(cost_result, params["dest"], params["vector_output"], log=log)
+    vector_output = run_r_drain_and_vectorize(
+        cost_result, params["dest"], params["vector_output"], drain_output=params["drain_output"], log=log
+    )
 
     import shutil
 
     shutil.rmtree(temp_dir, ignore_errors=True)
-    return vector_output
+    return {
+        "vector_output": vector_output,
+        "cost_output": params["cost_output"],
+        "direction_output": params["direction_output"],
+        "drain_output": params["drain_output"],
+    }
 
 
-def _lcp_publish(dialog: "AnalysisDialog", vector_output: str):
-    """Main thread: load the LCP vector into the project."""
+def _lcp_publish(dialog: "AnalysisDialog", result: dict):
+    """Main thread: load the LCP vector plus any optional r.cost rasters into the project."""
+    vector_output = result["vector_output"]
     layer_name = os.path.splitext(os.path.basename(vector_output))[0]
     layer = QgsVectorLayer(vector_output, layer_name, "ogr")
     if not layer.isValid():
         raise RuntimeError(f"Failed to load LCP vector: {vector_output}")
     QgsProject.instance().addMapLayer(layer)
     dialog.log_message(f"Least Cost Path generated at: {vector_output}", "LCP")
+
+    for path, label in (
+        (result.get("cost_output"), "Cumulative Cost"),
+        (result.get("direction_output"), "Movement Directions"),
+        (result.get("drain_output"), "Drain Raster"),
+    ):
+        if not path:
+            continue
+        raster_name = os.path.splitext(os.path.basename(path))[0]
+        raster_layer = QgsRasterLayer(path, raster_name)
+        if raster_layer.isValid():
+            QgsProject.instance().addMapLayer(raster_layer)
+            dialog.log_message(f"{label} raster saved and loaded: {path}", "LCP")
+        else:
+            dialog.log_message(f"Warning: {label} raster saved but failed to load: {path}", "LCP")
