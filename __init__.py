@@ -2,6 +2,7 @@
 from qgis.PyQt.QtWidgets import QAction
 
 from .src.analysis_dialog import AnalysisDialog
+from .src.task_manager import cancel_tasks_for_dialog
 
 
 class CO2GISPlugin:
@@ -21,6 +22,8 @@ class CO2GISPlugin:
         # Dispose the dialog and disconnect its global signals to avoid ghost UI
         # and a dangling layersAdded connection after reload/disable.
         if self.analysis_dialog is not None:
+            # Cancel in-flight tasks first, so none touches the dialog after it is deleted.
+            cancel_tasks_for_dialog(self.analysis_dialog)
             self.analysis_dialog.cleanup()
             self.analysis_dialog.close()
             self.analysis_dialog.deleteLater()

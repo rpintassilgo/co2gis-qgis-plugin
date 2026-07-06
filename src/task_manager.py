@@ -11,6 +11,7 @@ logs it and shows a QMessageBox (fixes the false-success bug, #7).
 from typing import TYPE_CHECKING, Callable, Optional
 
 from qgis.core import QgsApplication, QgsTask
+from qgis.PyQt import sip
 from qgis.PyQt.QtWidgets import QMessageBox
 
 if TYPE_CHECKING:
@@ -31,6 +32,17 @@ class Task(QgsTask):
         self.error = None
         self.exception = None
 
+    def _dialog_alive(self) -> bool:
+        """True only while the dialog's C++ object still exists.
+
+        ``finished``/``cancel`` run on the main thread and may fire *after* the plugin was
+        unloaded/reloaded, which calls ``deleteLater()`` on the dialog. The Python
+        wrapper ``self.dialog`` survives but the underlying QDialog is gone; touching it then
+        raises ``RuntimeError: wrapped C++ object ... has been deleted`` (or segfaults).
+        ``sip.isdeleted`` is the only reliable check — the Python attribute is not enough.
+        """
+        return self.dialog is not None and not sip.isdeleted(self.dialog)
+
     def run(self):
         """Background thread: pure work only (no widgets, no QgsProject)."""
         try:
@@ -43,6 +55,10 @@ class Task(QgsTask):
 
     def finished(self, ok):
         """Main thread: publish results on success, surface errors on failure."""
+        # Dialog disposed while the task ran (plugin unload/reload) — nothing to publish to.
+        if not self._dialog_alive():
+            return
+
         if not ok:
             msg = self.error or "unknown error"
             self.dialog.log_message(f"Task '{self.name}' failed: {msg}", "Task Manager")
@@ -60,12 +76,29 @@ class Task(QgsTask):
         self.dialog.log_message(f"Task '{self.name}' completed successfully", "Task Manager")
 
     def cancel(self):
-        self.dialog.log_message(f"Task '{self.name}' was cancelled", "Task Manager")
+        if self._dialog_alive():
+            self.dialog.log_message(f"Task '{self.name}' was cancelled", "Task Manager")
         super().cancel()
 
 
 # Keep track of running tasks to prevent duplicates (keyed by action name + dialog).
 _running_tasks = {}
+
+
+def cancel_tasks_for_dialog(dialog: "AnalysisDialog") -> None:
+    """Cancel any running tasks bound to ``dialog`` — called from ``unload()`` before the dialog
+    is deleted, so a still-running :class:`QgsTask` does not touch a destroyed dialog.
+
+    Cancellation is asynchronous: ``run()`` finishes, then ``finished()`` fires later on the main
+    thread. By then the dialog may be gone, so ``Task._dialog_alive`` still guards that path — this
+    just stops work promptly and logs the cancellation while the dialog is still alive.
+    """
+    for task_key, task in list(_running_tasks.items()):
+        if task.dialog is not dialog:
+            continue
+        if task.status() in (QgsTask.Running, QgsTask.Queued):
+            task.cancel()
+        _running_tasks.pop(task_key, None)
 
 
 def _is_running(task_key: str) -> bool:
