@@ -214,6 +214,11 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
     total_segments = 0
     processed_cells = 0
 
+    # Throttle progress logging to ~every 5% of unique cells (at least every cell for short
+    # routes). Logging every single cell floods the thread-safe log queue on long, fine-grid
+    # routes and stutters the UI; the heavy per-cell computation below is unchanged.
+    log_interval = max(1, total_unique_cells // 20)
+
     # Process pipeline segments
     for x1, y1, x2, y2 in segments:
         total_segments += 1
@@ -268,8 +273,10 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
                 }
                 processed_cells += 1
 
-                # Log every single unique cell processed with total
-                log(f"  Processing unique cell {processed_cells}/{total_unique_cells} (row={row}, col={col})")
+                # Report progress on a throttled cadence (every ~5%) plus a final 100% line.
+                if processed_cells % log_interval == 0 or processed_cells == total_unique_cells:
+                    pct = processed_cells / total_unique_cells * 100
+                    log(f"  Processing cells: {processed_cells}/{total_unique_cells} ({pct:.0f}%)")
 
             # Accumulate length and N
             cell_data[cell_key]["L"] += length_in_cell
