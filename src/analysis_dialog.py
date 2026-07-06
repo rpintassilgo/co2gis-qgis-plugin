@@ -1,6 +1,7 @@
 from typing import Optional
 
 from qgis.core import QgsProject
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Q_ARG, QMetaObject, Qt
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
@@ -202,9 +203,18 @@ class AnalysisDialog(QDialog):
         except (TypeError, RuntimeError):
             pass  # already disconnected / nothing connected
 
+    def _log_output_alive(self) -> bool:
+        """True only if the log widget exists and its C++ object is not deleted.
+
+        ``hasattr`` alone is not enough: after the dialog is disposed on plugin unload the
+        Python attribute survives while the underlying QTextEdit is gone, so invoking a method on
+        it raises ``RuntimeError``. ``sip.isdeleted`` is the reliable guard.
+        """
+        return hasattr(self, "log_output") and not sip.isdeleted(self.log_output)
+
     def log_message(self, message: str, tab_name: Optional[str] = None):
         """Thread-safe method to append a message to the log output."""
-        if hasattr(self, "log_output"):
+        if self._log_output_alive():
             formatted_message = f"[{tab_name}] {message}" if tab_name else message
             QMetaObject.invokeMethod(
                 self.log_output, "append", Qt.ConnectionType.QueuedConnection, Q_ARG(str, formatted_message)
@@ -212,5 +222,5 @@ class AnalysisDialog(QDialog):
 
     def clear_logs(self):
         """Clear the log output."""
-        if hasattr(self, "log_output"):
+        if self._log_output_alive():
             QMetaObject.invokeMethod(self.log_output, "clear", Qt.ConnectionType.QueuedConnection)
