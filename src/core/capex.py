@@ -333,7 +333,22 @@ def extract_points(cost_paths, segments, crossings_geoms, log):
     land_use_layer = layers["Land Use (Flu)"]
     crossings_layer = layers["Crossings (Fci)"]
 
-    for x1, y1, x2, y2 in segments:
+    if not crossings_geoms:
+        log(
+            "  ⚠️ No infrastructure vector selected - N will be 1 for all route sections "
+            "(neutral, preserves Fci contribution)"
+        )
+    else:
+        log(f"  Loaded {len(crossings_geoms)} infrastructure features for N calculation")
+
+    # Each item is one vertex-to-vertex section of the route polyline ("route section" to avoid
+    # clashing with the pressure-budget "segments" between boosters that compute_capex logs later).
+    total_sections = len(segments)
+    log(f"  Sampling {total_sections} route sections (5 points each)...")
+    # Throttle progress to ~every 5% (at least every section for short routes), mirroring extract_cells.
+    log_interval = max(1, total_sections // 20)
+
+    for i, (x1, y1, x2, y2) in enumerate(segments, start=1):
         start = QgsPointXY(x1, y1)
         end = QgsPointXY(x2, y2)
 
@@ -375,6 +390,12 @@ def extract_points(cost_paths, segments, crossings_geoms, log):
                 cell_length,
             )
         )
+
+        # Report progress on a throttled cadence (every ~5%) plus a final 100% line.
+        if i % log_interval == 0 or i == total_sections:
+            pct = i / total_sections * 100
+            log(f"  Processing route sections: {i}/{total_sections} ({pct:.0f}%)")
+
     return values
 
 
