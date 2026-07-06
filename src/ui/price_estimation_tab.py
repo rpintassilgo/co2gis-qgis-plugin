@@ -285,13 +285,9 @@ def _price_prepare(dialog: "AnalysisDialog") -> dict:
     else:
         log("Calculation mode: Fast (Segment-based with point sampling)")
 
-    # Infrastructure (crossings) vector → detached geometry copies for N counting.
+    # Infrastructure (crossings) vector → detached geometry copies for N counting. Both backends
+    # log the feature count / "not selected" warning themselves (extract_cells / extract_points).
     crossings_layer = layer_from_dropdown(dialog.crossingsVectorDropdown)
-    if mode == "fast" and not crossings_layer:
-        log(
-            "  ⚠️ Infrastructure Vector (for N): Not selected — N will be 1 for all segments "
-            "(neutral, preserves Fci contribution)"
-        )
     infra_geoms = []
     if crossings_layer:
         for feat in crossings_layer.getFeatures():

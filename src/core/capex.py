@@ -214,6 +214,11 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
     total_segments = 0
     processed_cells = 0
 
+    # Throttle progress logging to ~every 5% of unique cells (at least every cell for short
+    # routes). Logging every single cell floods the thread-safe log queue on long, fine-grid
+    # routes and stutters the UI; the heavy per-cell computation below is unchanged.
+    log_interval = max(1, total_unique_cells // 20)
+
     # Process pipeline segments
     for x1, y1, x2, y2 in segments:
         total_segments += 1
@@ -268,8 +273,10 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
                 }
                 processed_cells += 1
 
-                # Log every single unique cell processed with total
-                log(f"  Processing unique cell {processed_cells}/{total_unique_cells} (row={row}, col={col})")
+                # Report progress on a throttled cadence (every ~5%) plus a final 100% line.
+                if processed_cells % log_interval == 0 or processed_cells == total_unique_cells:
+                    pct = processed_cells / total_unique_cells * 100
+                    log(f"  Processing cells: {processed_cells}/{total_unique_cells} ({pct:.0f}%)")
 
             # Accumulate length and N
             cell_data[cell_key]["L"] += length_in_cell
@@ -326,7 +333,22 @@ def extract_points(cost_paths, segments, crossings_geoms, log):
     land_use_layer = layers["Land Use (Flu)"]
     crossings_layer = layers["Crossings (Fci)"]
 
-    for x1, y1, x2, y2 in segments:
+    if not crossings_geoms:
+        log(
+            "  ⚠️ No infrastructure vector selected - N will be 1 for all route sections "
+            "(neutral, preserves Fci contribution)"
+        )
+    else:
+        log(f"  Loaded {len(crossings_geoms)} infrastructure features for N calculation")
+
+    # Each item is one vertex-to-vertex section of the route polyline ("route section" to avoid
+    # clashing with the pressure-budget "segments" between boosters that compute_capex logs later).
+    total_sections = len(segments)
+    log(f"  Sampling {total_sections} route sections (5 points each)...")
+    # Throttle progress to ~every 5% (at least every section for short routes), mirroring extract_cells.
+    log_interval = max(1, total_sections // 20)
+
+    for i, (x1, y1, x2, y2) in enumerate(segments, start=1):
         start = QgsPointXY(x1, y1)
         end = QgsPointXY(x2, y2)
 
@@ -368,6 +390,12 @@ def extract_points(cost_paths, segments, crossings_geoms, log):
                 cell_length,
             )
         )
+
+        # Report progress on a throttled cadence (every ~5%) plus a final 100% line.
+        if i % log_interval == 0 or i == total_sections:
+            pct = i / total_sections * 100
+            log(f"  Processing route sections: {i}/{total_sections} ({pct:.0f}%)")
+
     return values
 
 
