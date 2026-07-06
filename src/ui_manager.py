@@ -16,7 +16,7 @@ from qgis.PyQt.QtWidgets import (
 
 from .ui.aux_tab import setup_aux_tab
 from .ui.corridors_tab import setup_corridors_tab
-from .ui.crossings_tab import connect_crossings_signals, setup_crossings_tab
+from .ui.crossings_tab import setup_crossings_tab
 from .ui.land_use_tab import setup_land_use_tab
 from .ui.lcp_tab import setup_lcp_tab
 from .ui.price_estimation_tab import setup_price_estimation_tab
@@ -114,9 +114,6 @@ def setup_ui(dialog: "AnalysisDialog"):
     setup_aux_tab(dialog, aux_main_layout)
     setup_lcp_tab(dialog, lcp_layout)
     setup_price_estimation_tab(dialog, price_estimation_layout)
-
-    # Connect signals
-    connect_crossings_signals(dialog)
 
     # --- Log panel ---
     dialog.log_output = QTextEdit()
