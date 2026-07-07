@@ -84,3 +84,15 @@ def assign_star(sources: Iterable[Node], sinks: Iterable[Node]) -> list[Edge]:
     if not sinks:
         raise ValueError("No sinks provided.")
     return [Edge(source_id=s.id, sink_id=nearest_sink(s, sinks).id, flow=s.flow) for s in sources]
+
+
+def group_by_sink(edges: Iterable[Edge]) -> dict[str, list[Edge]]:
+    """Group ``edges`` by their ``sink_id``, preserving first-seen order.
+
+    Lets the routing stage run one ``r.cost`` accumulation per distinct used sink
+    (then one ``r.drain`` per source), instead of routing each source from scratch.
+    """
+    grouped: dict[str, list[Edge]] = {}
+    for edge in edges:
+        grouped.setdefault(edge.sink_id, []).append(edge)
+    return grouped
