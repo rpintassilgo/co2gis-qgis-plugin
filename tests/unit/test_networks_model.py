@@ -4,7 +4,7 @@
 
 import pytest
 
-from src.core.networks.model import SINK, SOURCE, Node, assign_star, distance, nearest_sink
+from src.core.networks.model import SINK, SOURCE, Node, assign_star, distance, group_by_sink, nearest_sink
 
 
 def _src(node_id, x, y, flow=1.0):
@@ -60,3 +60,23 @@ def test_assign_star_requires_sources_and_sinks():
         assign_star([], [_snk("X", 0, 0)])
     with pytest.raises(ValueError):
         assign_star([_src("A", 0, 0)], [])
+
+
+def test_group_by_sink_groups_sources_sharing_a_sink():
+    edges = assign_star([_src("A", 0, 0), _src("B", 1, 0)], [_snk("X", 0, 0)])
+    grouped = group_by_sink(edges)
+    assert set(grouped) == {"X"}
+    assert {e.source_id for e in grouped["X"]} == {"A", "B"}
+
+
+def test_group_by_sink_separates_distinct_sinks():
+    sources = [_src("A", 0, 0), _src("B", 100, 0)]
+    sinks = [_snk("X", 0, 0), _snk("Y", 100, 0)]
+    grouped = group_by_sink(assign_star(sources, sinks))
+    assert set(grouped) == {"X", "Y"}
+    assert [e.source_id for e in grouped["X"]] == ["A"]
+    assert [e.source_id for e in grouped["Y"]] == ["B"]
+
+
+def test_group_by_sink_empty():
+    assert group_by_sink([]) == {}
