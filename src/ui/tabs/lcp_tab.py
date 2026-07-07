@@ -15,14 +15,14 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from ..core.lcp import FACTOR_NAMES, combine_rasters_with_comet_formula, run_r_cost, run_r_drain_and_vectorize
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_path_row, make_group_box
+from ...core.lcp import FACTOR_NAMES, combine_rasters_with_comet_formula, run_r_cost, run_r_drain_and_vectorize
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_path_row, make_group_box
 from .networks_ui import connect_network_signals, setup_network_page
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):

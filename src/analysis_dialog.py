@@ -18,14 +18,14 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from .ui.aux_tab import connect_aux_signals
-from .ui.corridors_tab import connect_corridors_signals
-from .ui.crossings_tab import connect_crossings_signals
-from .ui.land_use_tab import connect_land_use_signals
-from .ui.lcp_tab import connect_lcp_signals
-from .ui.price_estimation_tab import connect_price_estimation_signals
 from .ui.settings_dialog import load_network_mode_experimental, load_rcost_memory_mb
-from .ui.slope_tab import connect_slope_signals
+from .ui.tabs.aux_tab import connect_aux_signals
+from .ui.tabs.corridors_tab import connect_corridors_signals
+from .ui.tabs.crossings_tab import connect_crossings_signals
+from .ui.tabs.land_use_tab import connect_land_use_signals
+from .ui.tabs.lcp_tab import connect_lcp_signals
+from .ui.tabs.price_estimation_tab import connect_price_estimation_signals
+from .ui.tabs.slope_tab import connect_slope_signals
 from .ui_manager import setup_ui
 from .utils import populate_layer_dropdowns, update_pipeline_length, update_resolution_field
 

@@ -40,7 +40,7 @@ cleanup is `severity: medium` + `priority: low`.
 
 Entry point is `__init__.py` → `classFactory` → `CO2GISPlugin`, which adds one toolbar/menu action that opens `AnalysisDialog` (`src/analysis_dialog.py`). Everything happens in that single dialog.
 
-**The dialog is a god-object passed everywhere.** `AnalysisDialog.__init__` declares every widget as a typed attribute (for IDE hinting), then `setup_ui` (`src/ui_manager.py`) builds a 7-tab `QTabWidget` and the bottom log panel. Each tab lives in `src/ui/<name>_tab.py` and exposes the same module-level function pattern — **not classes**:
+**The dialog is a god-object passed everywhere.** `AnalysisDialog.__init__` declares every widget as a typed attribute (for IDE hinting), then `setup_ui` (`src/ui_manager.py`) builds a 7-tab `QTabWidget` and the bottom log panel. Each tab lives in `src/ui/tabs/<name>_tab.py` and exposes the same module-level function pattern — **not classes** (non-tab UI like the Settings dialog stays directly in `src/ui/`):
 
 - `setup_<tab>_tab(dialog, layout)` — builds the widgets, assigns them onto `dialog` (e.g. `dialog.combineLandUseDropdown = QComboBox()`).
 - `connect_<tab>_signals(dialog)` — wires buttons to handlers, typically `lambda: run_task(dialog, name, work=…, prepare=…)`.
@@ -64,7 +64,9 @@ So `dialog` is the shared bus for both widgets and the logger. When adding a wid
 The COMET formula `Fc · Fs · [Flu·(1−0.1N) + 0.1N·Fci]` has **one implementation** — `comet_cell_cost` in `src/core/comet.py` — called by **two** places that **must stay in agreement** (the routing surface and the cost estimate), otherwise the least-cost route is no longer the cheapest to build:
 
 - **Routing surface:** `combine_rasters_with_comet_formula` in `src/core/lcp.py` — resamples all rasters to a common extent/resolution with `gdal:warpreproject`, applies `comet_cell_cost` as NumPy arrays, caps `N` at 10, floors output at 0.001 (so `r.drain` works). The LCP itself is the GRASS chain `r.cost` (accumulate from origin) → `r.drain` (back-trace from destination) → thin/vectorize, in `run_r_cost` / `run_r_drain_and_vectorize` (same file).
-- **CAPEX:** `compute_capex` in `src/core/capex.py` — computes diameter `D` once from Darcy-Weisbach, walks the route cell-by-cell (calling `comet_cell_cost` per cell), splits into segments by a pressure budget (`max_segment_length = total_pressure_drop / admissible_pressure_drop`), inserts booster stations between segments. Two sampling backends (chosen by a radio button, wired in `src/ui/price_estimation_tab.py`'s `_price_prepare` / `_price_work`): `extract_cells` (precise, exact cell intersection) vs `extract_points` (fast, 5 sample points/segment, takes the max).
+- **CAPEX:** `compute_capex` in `src/core/capex.py` — computes diameter `D` once from Darcy-Weisbach, walks the route cell-by-cell (calling `comet_cell_cost` per cell), splits into segments by a pressure budget (`max_segment_length = total_pressure_drop / admissible_pressure_drop`), inserts booster stations between segments. Two sampling backends (chosen by a radio button, wired in `src/ui/tabs/price_estimation_tab.py`'s `_price_prepare` / `_price_work`): `extract_cells` (precise, exact cell intersection) vs `extract_points` (fast, 5 sample points/segment, takes the max).
+
+The four **cost-factor rasters** that feed the formula (Flu, Fs, Fc, Fci, plus the N count) are each built by one module in **`src/core/factors/`** (`land_use.py`, `slope.py`, `corridors.py`, `crossings.py`) — one per cost tab. `comet.py` (the combiner) and `capex.py`/`lcp.py` stay at the `src/core/` top level.
 
 Missing cost rasters default to a neutral `1.0` in both paths. Greek/symbol identifiers (`λ`, `ρ`, `Δp`) are used intentionally to match the paper — preserve them.
 

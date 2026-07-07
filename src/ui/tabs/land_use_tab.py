@@ -16,14 +16,14 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..constants.land_use import COMET_LAND_USE_COSTS
-from ..core.land_use import create_land_use_cost_raster
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_path_row
+from ...constants.land_use import COMET_LAND_USE_COSTS
+from ...core.factors.land_use import create_land_use_cost_raster
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_land_use_tab(dialog: "AnalysisDialog", layout: QFormLayout):

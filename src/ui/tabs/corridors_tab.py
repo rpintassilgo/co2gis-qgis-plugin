@@ -14,13 +14,13 @@ from qgis.PyQt.QtWidgets import (
     QTableWidget,
 )
 
-from ..core.corridors import create_corridor_cost_raster_with_buffers
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_path_row
+from ...core.factors.corridors import create_corridor_cost_raster_with_buffers
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):

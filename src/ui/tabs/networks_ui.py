@@ -20,15 +20,15 @@ from qgis.core import QgsProject, QgsVectorLayer
 from qgis.gui import QgsFieldComboBox
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton, QWidget
 
-from ..core.networks.io import build_nodes
-from ..core.networks.model import SINK, SOURCE
-from ..core.networks.routing import route_star
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_folder_row
+from ...core.networks.io import build_nodes
+from ...core.networks.model import SINK, SOURCE
+from ...core.networks.routing import route_star
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_folder_row
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_network_page(dialog: "AnalysisDialog") -> QWidget:

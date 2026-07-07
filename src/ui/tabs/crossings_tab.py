@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton
 
-from ..core.crossings import create_crossings_cost_raster, create_n_crossings_raster
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_path_row, make_group_box
+from ...core.factors.crossings import create_crossings_cost_raster, create_n_crossings_raster
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
