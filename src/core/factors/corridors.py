@@ -13,7 +13,7 @@ import numpy as np
 from osgeo import gdal
 from qgis import processing
 
-from .raster import resample_raster
+from ..raster import resample_raster
 
 
 def create_corridor_cost_raster_with_buffers(

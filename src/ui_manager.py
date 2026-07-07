@@ -14,14 +14,14 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from .ui.aux_tab import setup_aux_tab
-from .ui.corridors_tab import setup_corridors_tab
-from .ui.crossings_tab import setup_crossings_tab
-from .ui.land_use_tab import setup_land_use_tab
-from .ui.lcp_tab import setup_lcp_tab
-from .ui.price_estimation_tab import setup_price_estimation_tab
 from .ui.settings_dialog import open_settings_dialog
-from .ui.slope_tab import setup_slope_tab
+from .ui.tabs.aux_tab import setup_aux_tab
+from .ui.tabs.corridors_tab import setup_corridors_tab
+from .ui.tabs.crossings_tab import setup_crossings_tab
+from .ui.tabs.land_use_tab import setup_land_use_tab
+from .ui.tabs.lcp_tab import setup_lcp_tab
+from .ui.tabs.price_estimation_tab import setup_price_estimation_tab
+from .ui.tabs.slope_tab import setup_slope_tab
 
 if TYPE_CHECKING:
     from .analysis_dialog import AnalysisDialog

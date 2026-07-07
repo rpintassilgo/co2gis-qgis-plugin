@@ -16,14 +16,14 @@ from qgis.PyQt.QtWidgets import (
     QTableWidgetItem,
 )
 
-from ..constants.slope import COMET_SLOPE_INTERVALS
-from ..core.slope import create_slope_costs_from_slope, create_slope_layer_from_dem
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown
-from ..widgets.browse_row import add_output_path_row, make_group_box
+from ...constants.slope import COMET_SLOPE_INTERVALS
+from ...core.factors.slope import create_slope_costs_from_slope, create_slope_layer_from_dem
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown
+from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):

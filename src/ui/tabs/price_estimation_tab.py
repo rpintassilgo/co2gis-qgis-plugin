@@ -18,14 +18,14 @@ from qgis.PyQt.QtWidgets import (
     QWidget,
 )
 
-from ..constants import capex
-from ..core.capex import COST_NAMES, compute_capex, extract_cells, extract_points
-from ..task_manager import run_task
-from ..utils import get_layer_path, layer_from_dropdown, update_pipeline_length, update_resolution_field
-from ..widgets.browse_row import make_group_box
+from ...constants import capex
+from ...core.capex import COST_NAMES, compute_capex, extract_cells, extract_points
+from ...task_manager import run_task
+from ...utils import get_layer_path, layer_from_dropdown, update_pipeline_length, update_resolution_field
+from ...widgets.browse_row import make_group_box
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):

@@ -15,14 +15,14 @@ from qgis.PyQt.QtWidgets import (
     QVBoxLayout,
 )
 
-from ..core.aux import clip_raster_to_vector, combine_vectors
-from ..core.raster import resample_raster
-from ..task_manager import run_task
-from ..utils import apply_symbology, get_layer_path, layer_from_dropdown, update_resolution_field
-from ..widgets.browse_row import add_output_path_row, make_group_box
+from ...core.aux import clip_raster_to_vector, combine_vectors
+from ...core.raster import resample_raster
+from ...task_manager import run_task
+from ...utils import apply_symbology, get_layer_path, layer_from_dropdown, update_resolution_field
+from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
-    from ..analysis_dialog import AnalysisDialog
+    from ...analysis_dialog import AnalysisDialog
 
 
 def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
