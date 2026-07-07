@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
-from ..utils import select_output_file
+from ..utils import select_output_file, select_output_folder
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -38,6 +38,33 @@ def add_output_path_row(
         line_edit.setPlaceholderText(placeholder)
     browse = QPushButton("Browse")
     browse.clicked.connect(lambda: select_output_file(line_edit, extension))
+
+    setattr(dialog, line_edit_attr, line_edit)
+    setattr(dialog, browse_attr, browse)
+
+    row = QHBoxLayout()
+    row.addWidget(line_edit)
+    row.addWidget(browse)
+    return row
+
+
+def add_output_folder_row(
+    dialog: "AnalysisDialog",
+    line_edit_attr: str,
+    browse_attr: str,
+    placeholder: Optional[str] = None,
+) -> QHBoxLayout:
+    """Build an output-folder row: a ``QLineEdit`` + a "Browse" button.
+
+    Like :func:`add_output_path_row` but the button picks an existing directory
+    (via ``select_output_folder``) — used where an action writes several files
+    into a folder rather than a single file.
+    """
+    line_edit = QLineEdit()
+    if placeholder:
+        line_edit.setPlaceholderText(placeholder)
+    browse = QPushButton("Browse")
+    browse.clicked.connect(lambda: select_output_folder(line_edit))
 
     setattr(dialog, line_edit_attr, line_edit)
     setattr(dialog, browse_attr, browse)

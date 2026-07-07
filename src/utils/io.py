@@ -31,3 +31,10 @@ def select_output_file(output_field: QLineEdit, file_type: str):
                 if not os.path.splitext(selected_file)[1]:
                     selected_file += f".{file_type}"
             output_field.setText(selected_file)
+
+
+def select_output_folder(output_field: QLineEdit):
+    """Open a dialog to choose an output directory and write it to the line edit."""
+    directory = QFileDialog.getExistingDirectory(None, "Select output folder")
+    if directory:
+        output_field.setText(directory)

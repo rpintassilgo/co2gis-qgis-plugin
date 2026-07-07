@@ -1,6 +1,7 @@
 from typing import Optional
 
 from qgis.core import QgsProject
+from qgis.gui import QgsFieldComboBox
 from qgis.PyQt import sip
 from qgis.PyQt.QtCore import Q_ARG, QMetaObject, Qt
 from qgis.PyQt.QtWidgets import (
@@ -11,8 +12,10 @@ from qgis.PyQt.QtWidgets import (
     QLineEdit,
     QPushButton,
     QRadioButton,
+    QStackedWidget,
     QTableWidget,
     QTextEdit,
+    QWidget,
 )
 
 from .ui.aux_tab import connect_aux_signals
@@ -116,6 +119,22 @@ class AnalysisDialog(QDialog):
         self.finalPath: QLineEdit
         self.finalBrowse: QPushButton
         self.final_button: QPushButton
+
+        # LCP tab — Single/Network routing (Network experimental; built always, mode selector shown
+        # only when the toggle is on). The combined-raster picker (lcpInputDropdown) is shared.
+        self.lcpModeSingleRadio: QRadioButton
+        self.lcpModeNetworkRadio: QRadioButton
+        self.lcpModeButtonGroup: QButtonGroup
+        self._routingModeRow: QWidget
+        self._routingStack: QStackedWidget
+        self.networkSourcesDropdown: QComboBox
+        self.networkSinksDropdown: QComboBox
+        self.networkFlowField: QgsFieldComboBox
+        self.networkCapacityField: QgsFieldComboBox
+        self.networkCaptureTargetInput: QLineEdit
+        self.networkOutputFolder: QLineEdit
+        self.networkOutputBrowse: QPushButton
+        self.network_button: QPushButton
 
         self.pipelineVectorDropdown: QComboBox
         self.landUseCostsDropdown: QComboBox

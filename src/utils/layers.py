@@ -55,6 +55,8 @@ DROPDOWN_REGISTRY = [
     ("corridorRefRasterComboBox", "raster", None),
     # Point-geometry vector dropdowns.
     ("clipPointVectorComboBox", "point", None),
+    ("networkSourcesDropdown", "point", None),
+    ("networkSinksDropdown", "point", None),
     # Line-geometry vector dropdowns.
     ("pipelineVectorDropdown", "line", None),
     # Any-geometry vector dropdowns.

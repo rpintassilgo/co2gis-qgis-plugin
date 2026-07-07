@@ -3,12 +3,23 @@ import tempfile
 from typing import TYPE_CHECKING
 
 from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QPushButton
+from qgis.PyQt.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QStackedWidget,
+    QWidget,
+)
 
 from ..core.lcp import FACTOR_NAMES, combine_rasters_with_comet_formula, run_r_cost, run_r_drain_and_vectorize
 from ..task_manager import run_task
 from ..utils import get_layer_path, layer_from_dropdown
 from ..widgets.browse_row import add_output_path_row, make_group_box
+from .networks_ui import connect_network_signals, setup_network_page
 
 if TYPE_CHECKING:
     from ..analysis_dialog import AnalysisDialog
@@ -40,44 +51,88 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     combinedCostsLayout.addRow(dialog.combine_button)
     layout.addWidget(make_group_box("Create Combined Costs Raster", combinedCostsLayout))
 
-    # LCP GroupBox
-    lcpPathLayout = QFormLayout()
+    # ── Routing: one "Routing" group box holding the Single/Network mode selector, the shared
+    # combined-raster picker, and a stack whose page swaps with the mode. Widgets are always built
+    # (so the dropdown registry resolves); the mode selector is only shown when the toggle is on, in
+    # which case the box is titled "Routing" — otherwise it stays "Create Least Cost Path", unchanged.
+    routingLayout = QFormLayout()
+
+    dialog.lcpModeSingleRadio = QRadioButton("Single (origin → destination)")
+    dialog.lcpModeNetworkRadio = QRadioButton("Network (N sources → M sinks)")
+    dialog.lcpModeSingleRadio.setChecked(True)
+    dialog.lcpModeButtonGroup = QButtonGroup()
+    dialog.lcpModeButtonGroup.addButton(dialog.lcpModeSingleRadio)
+    dialog.lcpModeButtonGroup.addButton(dialog.lcpModeNetworkRadio)
+    dialog._routingModeRow = QWidget()
+    modeLayout = QHBoxLayout(dialog._routingModeRow)
+    modeLayout.setContentsMargins(0, 0, 0, 0)
+    modeLayout.addWidget(QLabel("Mode:"))
+    modeLayout.addWidget(dialog.lcpModeSingleRadio)
+    modeLayout.addWidget(dialog.lcpModeNetworkRadio)
+    modeLayout.addStretch()
+    routingLayout.addRow(dialog._routingModeRow)
+
+    # Combined raster: shared by both modes.
+    dialog.lcpInputDropdown = QComboBox()
+    routingLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
+
+    # Mode-specific pages, swapped by the radio.
+    dialog._routingStack = QStackedWidget()
+    dialog._routingStack.addWidget(_build_single_page(dialog))
+    dialog._routingStack.addWidget(setup_network_page(dialog))
+    routingLayout.addRow(dialog._routingStack)
+
+    routing_title = "Routing" if dialog.network_mode_experimental else "Create Least Cost Path"
+    layout.addWidget(make_group_box(routing_title, routingLayout))
+
+    if not dialog.network_mode_experimental:
+        dialog._routingModeRow.setVisible(False)
+        dialog._routingStack.setCurrentIndex(0)
+
+
+def _build_single_page(dialog: "AnalysisDialog") -> QWidget:
+    """Single-mode page: origin/destination points + optional diagnostic outputs + run button.
+
+    The combined-raster picker lives on the tab (shared with Network mode), not here.
+    """
+    page = QWidget()
+    lcpPathLayout = QFormLayout(page)
     dialog.pointsComboBox = QComboBox()
     lcpPathLayout.addRow(QLabel("Select Point Vector Layer:"), dialog.pointsComboBox)
-    dialog.lcpInputDropdown = QComboBox()
-    lcpPathLayout.addRow(QLabel("Select Combined Raster:"), dialog.lcpInputDropdown)
     # Optional r.cost byproducts: only saved + loaded if a path is given, else kept in temp.
-    costFileLayout = add_output_path_row(
-        dialog,
-        "costRasterPath",
-        "costRasterBrowse",
-        "tif",
-        "Choose output path for Cumulative Cost Raster (optional)",
+    lcpPathLayout.addRow(
+        add_output_path_row(
+            dialog,
+            "costRasterPath",
+            "costRasterBrowse",
+            "tif",
+            "Choose output path for Cumulative Cost Raster (optional)",
+        )
     )
-    lcpPathLayout.addRow(costFileLayout)
-    directionFileLayout = add_output_path_row(
-        dialog,
-        "directionRasterPath",
-        "directionRasterBrowse",
-        "tif",
-        "Choose output path for Movement Directions Raster (optional, diagnostic)",
+    lcpPathLayout.addRow(
+        add_output_path_row(
+            dialog,
+            "directionRasterPath",
+            "directionRasterBrowse",
+            "tif",
+            "Choose output path for Movement Directions Raster (optional, diagnostic)",
+        )
     )
-    lcpPathLayout.addRow(directionFileLayout)
-    drainFileLayout = add_output_path_row(
-        dialog,
-        "drainRasterPath",
-        "drainRasterBrowse",
-        "tif",
-        "Choose output path for Drain Raster (optional, diagnostic — rasterized route pre-thinning)",
+    lcpPathLayout.addRow(
+        add_output_path_row(
+            dialog,
+            "drainRasterPath",
+            "drainRasterBrowse",
+            "tif",
+            "Choose output path for Drain Raster (optional, diagnostic — rasterized route pre-thinning)",
+        )
     )
-    lcpPathLayout.addRow(drainFileLayout)
-    finalFileLayout = add_output_path_row(
-        dialog, "finalPath", "finalBrowse", "gpkg", "Choose output path for LCP Vector"
+    lcpPathLayout.addRow(
+        add_output_path_row(dialog, "finalPath", "finalBrowse", "gpkg", "Choose output path for LCP Vector")
     )
-    lcpPathLayout.addRow(finalFileLayout)
     dialog.final_button = QPushButton("Create Least Cost Path")
     lcpPathLayout.addRow(dialog.final_button)
-    layout.addWidget(make_group_box("Create Least Cost Path", lcpPathLayout))
+    return page
 
 
 def connect_lcp_signals(dialog: "AnalysisDialog"):
@@ -90,6 +145,12 @@ def connect_lcp_signals(dialog: "AnalysisDialog"):
     dialog.final_button.clicked.connect(
         lambda checked: run_task(dialog, "Create LCP", work=_lcp_work, prepare=_lcp_prepare, publish=_lcp_publish)
     )
+    # Radio swaps the routing stack page (0 = Single, 1 = Network). QStackedWidget shows one page at
+    # a time, so there is no both-visible flicker when switching.
+    dialog.lcpModeNetworkRadio.toggled.connect(
+        lambda checked: dialog._routingStack.setCurrentIndex(1 if dialog.lcpModeNetworkRadio.isChecked() else 0)
+    )
+    connect_network_signals(dialog)
 
 
 # ── Combine cost rasters ──────────────────────────────────────────────────────
