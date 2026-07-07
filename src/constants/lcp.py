@@ -10,3 +10,8 @@ DEFAULT_RCOST_MEMORY_MB = 8000
 MIN_RCOST_MEMORY_MB = 100
 MAX_RCOST_MEMORY_MB = 64000
 RCOST_MEMORY_STEP_MB = 512
+
+# QgsSettings key + default for the work-in-progress N:M network mode toggle. Off by default so the
+# LCP tab is unchanged for users; enabling it reveals the Single/Network switch (after a reload).
+NETWORK_MODE_EXPERIMENTAL_KEY = "least_cost_pipeline/network_mode_experimental"
+DEFAULT_NETWORK_MODE_EXPERIMENTAL = False
