@@ -127,6 +127,9 @@ class AnalysisDialog(QDialog):
         self.lcpModeButtonGroup: QButtonGroup
         self._routingModeRow: QWidget
         self._routingStack: QStackedWidget
+        self.networkMethodHeuristicRadio: QRadioButton
+        self.networkMethodMilpRadio: QRadioButton
+        self.networkMethodButtonGroup: QButtonGroup
         self.networkSourcesDropdown: QComboBox
         self.networkSinksDropdown: QComboBox
         self.networkFlowField: QgsFieldComboBox

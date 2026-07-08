@@ -18,11 +18,21 @@ from typing import TYPE_CHECKING
 
 from qgis.core import QgsProject, QgsVectorLayer
 from qgis.gui import QgsFieldComboBox
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton, QWidget
+from qgis.PyQt.QtWidgets import (
+    QButtonGroup,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QWidget,
+)
 
 from ...core.networks.io import build_nodes
 from ...core.networks.model import SINK, SOURCE
-from ...core.networks.routing import route_star
+from ...core.networks.trunks import route_network_heuristic
 from ...task_manager import run_task
 from ...utils import get_layer_path, layer_from_dropdown
 from ...widgets.browse_row import add_output_folder_row
@@ -41,6 +51,27 @@ def setup_network_page(dialog: "AnalysisDialog") -> QWidget:
     """
     page = QWidget()
     layout = QFormLayout(page)
+
+    # Optimization method: Heuristic (this level) vs MILP (Level 3). MILP is disabled for now (not yet
+    # implemented; at Level 3 it will be gated on the solver being installed). Two methods to design the
+    # network — like Price Estimation's precise/fast — not a fallback.
+    dialog.networkMethodHeuristicRadio = QRadioButton("Heuristic (fast)")
+    dialog.networkMethodMilpRadio = QRadioButton("MILP (optimal)")
+    dialog.networkMethodHeuristicRadio.setChecked(True)
+    dialog.networkMethodMilpRadio.setEnabled(False)
+    dialog.networkMethodMilpRadio.setToolTip(
+        "Optimal MILP network design — coming in a later version. Will require the solver (pip install highspy)."
+    )
+    dialog.networkMethodButtonGroup = QButtonGroup()
+    dialog.networkMethodButtonGroup.addButton(dialog.networkMethodHeuristicRadio)
+    dialog.networkMethodButtonGroup.addButton(dialog.networkMethodMilpRadio)
+    methodRow = QWidget()
+    methodLayout = QHBoxLayout(methodRow)
+    methodLayout.setContentsMargins(0, 0, 0, 0)
+    methodLayout.addWidget(dialog.networkMethodHeuristicRadio)
+    methodLayout.addWidget(dialog.networkMethodMilpRadio)
+    methodLayout.addStretch()
+    layout.addRow(QLabel("Optimization method:"), methodRow)
 
     dialog.networkSourcesDropdown = QComboBox()
     dialog.networkFlowField = QgsFieldComboBox()
@@ -127,8 +158,8 @@ def _network_prepare(dialog: "AnalysisDialog") -> dict:
 
 
 def _network_work(params: dict) -> dict:
-    """Background thread: run the star routing."""
-    return route_star(
+    """Background thread: run the heuristic network design (nearest-sink + shared trunks)."""
+    return route_network_heuristic(
         params["combined_path"],
         params["sources"],
         params["sinks"],
@@ -139,15 +170,24 @@ def _network_work(params: dict) -> dict:
 
 
 def _network_publish(dialog: "AnalysisDialog", result: dict):
-    """Main thread: load the merged network layer and log a per-edge summary."""
+    """Main thread: load the network vector (per-segment ``flow`` — the trunks)."""
     network_path = result["network_path"]
-    layer_name = os.path.splitext(os.path.basename(network_path))[0]
-    layer = QgsVectorLayer(network_path, layer_name, "ogr")
+    layer = QgsVectorLayer(network_path, os.path.splitext(os.path.basename(network_path))[0], "ogr")
     if not layer.isValid():
         raise RuntimeError(f"Failed to load network vector: {network_path}")
     QgsProject.instance().addMapLayer(layer)
-    dialog.log_message(f"Network created at: {network_path}", "Network")
+    dialog.log_message(f"Network: {network_path}", "Network")
+
+    # Each segment carries the flow it transports — trunks (merged spurs) carry the sum. Identify a
+    # segment or style by 'flow' (graduated width) to see spurs thicken into trunks at the junctions.
+    segments = result.get("segments", [])
+    dialog.log_message(f"  {len(segments)} segment(s); flows (Mt/yr): {_summarize_flows(segments)}", "Network")
     for edge in result["edges"]:
-        dialog.log_message(
-            f"  {edge.source_id} → {edge.sink_id}: length={edge.length:.1f} m, cost={edge.cost:.2f}", "Network"
-        )
+        dialog.log_message(f"  route {edge.source_id} → {edge.sink_id}: flow {edge.flow} Mt/yr", "Network")
+
+
+def _summarize_flows(segments) -> str:
+    """Short, sorted preview of the distinct segment flows (largest first)."""
+    flows = sorted({round(float(seg.flow), 3) for seg in segments}, reverse=True)
+    preview = ", ".join(f"{f:g}" for f in flows[:8])
+    return preview + (" …" if len(flows) > 8 else "")
