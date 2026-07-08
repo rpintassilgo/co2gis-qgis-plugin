@@ -48,7 +48,8 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
 
     # The intro/help text now lives inside the "info & formulas" dialog (below) to save vertical
     # space — the tab is tight once the Network pickers are shown.
-    dialog.show_formulas_button = QPushButton("ⓘ  Show info & calculation formulas")
+    # Escape the ampersand ("&&") so Qt doesn't treat it as a mnemonic (which underlined the next letter).
+    dialog.show_formulas_button = QPushButton("ⓘ  Show info && calculation formulas")
     main_layout.addWidget(dialog.show_formulas_button)
 
     main_layout.addLayout(columns_layout)
