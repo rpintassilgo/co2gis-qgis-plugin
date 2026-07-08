@@ -112,7 +112,7 @@ def route_network_heuristic(
     combined_raster_path: str,
     sources: Sequence[Node],
     sinks: Sequence[Node],
-    output_dir: str,
+    output_path: str,
     memory: int = DEFAULT_RCOST_MEMORY_MB,
     log=lambda msg: None,
 ) -> dict:
@@ -121,13 +121,15 @@ def route_network_heuristic(
     Routes each source to its nearest sink (``assign_star`` → per-sink ``r.cost`` →
     per-source ``r.drain``), reads each route as a cell chain, then builds the network
     graph: overlapping cells sum their flow (trunks) and the network is split into
-    segments at the real junctions.
+    segments at the real junctions. The network is written to ``output_path`` (a GeoPackage).
 
     :returns: ``{"network_path", "segments", "edges", "routes"}`` — the network vector
         (per-segment ``flow`` + ``length``), the :class:`~graph.Segment` list, the
         assignment Edges, and per-edge ``(source_id, sink_id)``. Does NOT touch the project.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     edges = assign_star(sources, sinks)
     nodes_by_id = {n.id: n for n in list(sources) + list(sinks)}
     grouped = group_by_sink(edges)
@@ -163,10 +165,9 @@ def route_network_heuristic(
 
         log("Building the network graph (per-segment flow at the real junctions)...")
         segments = build_edges(chains)
-        network_path = os.path.join(output_dir, "network.gpkg")
-        _write_network(segments, gt, proj, network_path)
+        _write_network(segments, gt, proj, output_path)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → network.gpkg")
-    return {"network_path": network_path, "segments": segments, "edges": edges, "routes": routes}
+    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → {os.path.basename(output_path)}")
+    return {"network_path": output_path, "segments": segments, "edges": edges, "routes": routes}
