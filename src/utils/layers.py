@@ -59,6 +59,7 @@ DROPDOWN_REGISTRY = [
     ("networkSinksDropdown", "point", None),
     # Line-geometry vector dropdowns.
     ("pipelineVectorDropdown", "line", None),
+    ("priceNetworkVectorDropdown", "line", None),
     # Any-geometry vector dropdowns.
     ("vectorComboBox", "vector", None),
     ("vector2ComboBox", "vector", None),

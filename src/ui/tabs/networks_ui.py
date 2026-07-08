@@ -35,7 +35,7 @@ from ...core.networks.model import SINK, SOURCE
 from ...core.networks.trunks import route_network_heuristic
 from ...task_manager import run_task
 from ...utils import get_layer_path, layer_from_dropdown
-from ...widgets.browse_row import add_output_folder_row
+from ...widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
     from ...analysis_dialog import AnalysisDialog
@@ -83,17 +83,25 @@ def setup_network_page(dialog: "AnalysisDialog") -> QWidget:
     layout.addRow(QLabel("Sinks layer (points):"), dialog.networkSinksDropdown)
     layout.addRow(QLabel("Injection rate field (Mt/yr):"), dialog.networkCapacityField)
 
+    # Capture target is a MILP-only input (the optimizer picks which sources to connect to meet it).
+    # The heuristic connects every source, so the row is shown only when MILP is selected.
     dialog.networkCaptureTargetInput = QLineEdit()
-    dialog.networkCaptureTargetInput.setPlaceholderText("Mt/yr (not used at Level 1)")
+    dialog.networkCaptureTargetInput.setPlaceholderText("Mt/yr — minimum total CO₂ to capture")
     dialog.networkCaptureTargetInput.setToolTip(
-        "Reserved for the future MILP optimization; ignored by the Level-1 independent-star routing."
+        "Minimum total CO₂ the network must capture; the MILP picks which sources to connect to meet it "
+        "at least cost. Used by MILP optimization only."
     )
-    layout.addRow(QLabel("Capture target (Mt/yr):"), dialog.networkCaptureTargetInput)
+    dialog._networkCaptureRow = QWidget()
+    captureForm = QFormLayout(dialog._networkCaptureRow)
+    captureForm.setContentsMargins(0, 0, 0, 0)
+    captureForm.addRow(QLabel("Capture target (Mt/yr):"), dialog.networkCaptureTargetInput)
+    layout.addRow(dialog._networkCaptureRow)
+    dialog._networkCaptureRow.setVisible(False)  # Heuristic is the default → hidden until MILP is chosen
 
-    folderRow = add_output_folder_row(
-        dialog, "networkOutputFolder", "networkOutputBrowse", "Choose output folder for the network"
+    outputRow = add_output_path_row(
+        dialog, "networkOutputPath", "networkOutputBrowse", "gpkg", "Choose output path for the network vector"
     )
-    layout.addRow(folderRow)
+    layout.addRow(outputRow)
 
     dialog.network_button = QPushButton("Create Network (experimental)")
     layout.addRow(dialog.network_button)
@@ -114,6 +122,11 @@ def connect_network_signals(dialog: "AnalysisDialog"):
     _update_flow_field()
     _update_capacity_field()
 
+    # Capture target is only meaningful for MILP → reveal it only when MILP is selected (disabled for now).
+    dialog.networkMethodMilpRadio.toggled.connect(
+        lambda checked: dialog._networkCaptureRow.setVisible(dialog.networkMethodMilpRadio.isChecked())
+    )
+
     dialog.network_button.clicked.connect(
         lambda checked: run_task(
             dialog, "Create Network", work=_network_work, prepare=_network_prepare, publish=_network_publish
@@ -128,10 +141,10 @@ def _network_prepare(dialog: "AnalysisDialog") -> dict:
     sinks_layer = layer_from_dropdown(dialog.networkSinksDropdown)
     flow_field = dialog.networkFlowField.currentField()
     capacity_field = dialog.networkCapacityField.currentField()
-    output_dir = dialog.networkOutputFolder.text().strip()
+    output_path = dialog.networkOutputPath.text().strip()
 
-    if not all([combined_layer, sources_layer, sinks_layer, output_dir]):
-        raise ValueError("Combined raster, sources layer, sinks layer, and an output folder must all be selected.")
+    if not all([combined_layer, sources_layer, sinks_layer, output_path]):
+        raise ValueError("Combined raster, sources layer, sinks layer, and an output path must all be selected.")
     if not flow_field:
         raise ValueError("Select the sources 'flow' field.")
     if not capacity_field:
@@ -151,7 +164,7 @@ def _network_prepare(dialog: "AnalysisDialog") -> dict:
         "combined_path": get_layer_path(combined_layer),
         "sources": sources,
         "sinks": sinks,
-        "output_dir": output_dir,
+        "output_path": output_path,
         "memory": dialog.rcost_memory_mb,
         "log": log,
     }
@@ -163,7 +176,7 @@ def _network_work(params: dict) -> dict:
         params["combined_path"],
         params["sources"],
         params["sinks"],
-        params["output_dir"],
+        params["output_path"],
         memory=params["memory"],
         log=params["log"],
     )

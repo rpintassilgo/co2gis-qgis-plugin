@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from qgis.core import QgsGeometry
+from qgis.gui import QgsFieldComboBox
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
@@ -14,12 +15,20 @@ from qgis.PyQt.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ...constants import capex
-from ...core.capex import COST_NAMES, compute_capex, extract_cells, extract_points
+from ...core.capex import (
+    COST_NAMES,
+    compute_capex,
+    compute_network_capex,
+    extract_cells,
+    extract_network_values,
+    extract_points,
+)
 from ...task_manager import run_task
 from ...utils import get_layer_path, layer_from_dropdown, update_pipeline_length, update_resolution_field
 from ...widgets.browse_row import make_group_box
@@ -37,40 +46,10 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     columns_layout.addLayout(left_layout, 1)
     columns_layout.addLayout(right_layout, 1)
 
-    # Description block — scrollable, fixed max height
-    descriptionLabel = QLabel("""
-        <html>
-            <body>
-                <p style="text-align:justify; font-size:13px; color:lightgrey; line-height:1.6;">
-                    ⓘ This submenu estimates the total pipeline investment cost (<b>I<sub>total</sub></b>) based on the selected pipeline vector and cost rasters. <br><br>
-                    The pipeline <b>diameter (D)</b> is calculated once using the full pipeline length and the Darcy-Weisbach equation — it is constant along the entire pipeline. <br><br>
-                    The <b>segment length</b> is derived from the pressure budget — total pressure drop ÷ admissible pressure drop (150 km by default). <br><br>
-                    If the pipeline is <b>shorter than one segment</b>, a single segment cost <b>I<sub>p</sub></b> is calculated.
-                    If longer, the pipeline is split into <b>segments of that length</b>, each with its own <b>I<sub>p</sub></b>,
-                    and a <b>booster station (I<sub>B</sub>)</b> is added between each pair of consecutive segments. <br><br>
-                    <b>Precise mode</b> resamples all cost rasters to a common resolution and iterates over every GIS cell crossed by the pipeline —
-                    cost factor values are read from each cell, and
-                    <b>L<sub>cell</sub></b> is the exact pipeline length inside that cell, computed by geometric intersection. <br><br>
-                    <b>Fast mode</b> iterates over vector segments (vertex-to-vertex, i.e. the straight line between two consecutive vertices of the pipeline geometry) —
-                    5 equally-spaced positions are sampled along each segment on the original rasters (no resampling), and the <b>maximum value</b> found is used as the cost factor.
-                    <b>L<sub>seg</sub></b> is the full length of that segment.
-                </p>
-            </body>
-        </html>
-    """)
-    descriptionLabel.setWordWrap(True)
-
-    descriptionScrollArea = QScrollArea()
-    descriptionScrollArea.setWidget(descriptionLabel)
-    descriptionScrollArea.setWidgetResizable(True)
-    descriptionScrollArea.setMaximumHeight(160)
-    descriptionScrollArea.setMinimumHeight(60)
-    descriptionScrollArea.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-    descriptionScrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    descriptionScrollArea.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-    main_layout.addWidget(descriptionScrollArea)
-
-    dialog.show_formulas_button = QPushButton("Show Calculation Formulas")
+    # The intro/help text now lives inside the "info & formulas" dialog (below) to save vertical
+    # space — the tab is tight once the Network pickers are shown.
+    # Escape the ampersand ("&&") so Qt doesn't treat it as a mnemonic (which underlined the next letter).
+    dialog.show_formulas_button = QPushButton("ⓘ  Show info && calculation formulas")
     main_layout.addWidget(dialog.show_formulas_button)
 
     main_layout.addLayout(columns_layout)
@@ -80,18 +59,51 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     # Select Cost Rasters and Vector
     selectionLayout = QFormLayout()
     dialog.pipelineVectorDropdown = QComboBox()
+    dialog.priceNetworkVectorDropdown = QComboBox()
+    dialog.priceNetworkFlowField = QgsFieldComboBox()
     dialog.landUseCostsDropdown = QComboBox()
     dialog.slopeCostsDropdown = QComboBox()
     dialog.corridorsCostsDropdown = QComboBox()
     dialog.crossingsCostsDropdown = QComboBox()
     dialog.crossingsVectorDropdown = QComboBox()
-    selectionLayout.addRow(QLabel("Pipeline Vector:"), dialog.pipelineVectorDropdown)
+
+    # Single vs Network (Network experimental — gated by the Settings toggle). The two vector pickers
+    # live in a QStackedWidget: Single = one pipeline (one diameter); Network = a 2a network.gpkg, each
+    # segment sized for its own flow with a junction booster where flows merge.
+    dialog.priceModeSingleRadio = QRadioButton("Single pipeline")
+    dialog.priceModeNetworkRadio = QRadioButton("Network (per-segment flow)")
+    dialog.priceModeSingleRadio.setChecked(True)
+    dialog.priceModeButtonGroup = QButtonGroup()
+    dialog.priceModeButtonGroup.addButton(dialog.priceModeSingleRadio)
+    dialog.priceModeButtonGroup.addButton(dialog.priceModeNetworkRadio)
+    dialog._priceModeRow = QWidget()
+    priceModeLayout = QHBoxLayout(dialog._priceModeRow)
+    priceModeLayout.setContentsMargins(0, 0, 0, 0)
+    priceModeLayout.addWidget(dialog.priceModeSingleRadio)
+    priceModeLayout.addWidget(dialog.priceModeNetworkRadio)
+    priceModeLayout.addStretch()
+
+    # The vector picker's LABEL stays in the parent form (so it aligns with the cost-raster rows) while
+    # only the FIELD swaps with the mode via a stacked widget. The flow field itself lives in the Pipe
+    # Diameter box (it replaces the constant M there in Network mode).
+    dialog._priceVectorLabel = QLabel("Pipeline Vector:")
+    dialog._priceVectorStack = QStackedWidget()
+    dialog._priceVectorStack.addWidget(dialog.pipelineVectorDropdown)  # index 0 = Single
+    dialog._priceVectorStack.addWidget(dialog.priceNetworkVectorDropdown)  # index 1 = Network
+
+    selectionLayout.addRow(dialog._priceModeRow)
+    selectionLayout.addRow(dialog._priceVectorLabel, dialog._priceVectorStack)
     selectionLayout.addRow(QLabel("Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
     selectionLayout.addRow(QLabel("Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
     selectionLayout.addRow(QLabel("Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
     selectionLayout.addRow(QLabel("Crossings Costs Raster (F<sub>ci</sub>):"), dialog.crossingsCostsDropdown)
     selectionLayout.addRow(QLabel("Infrastructure Vector (for N):"), dialog.crossingsVectorDropdown)
     left_layout.addWidget(make_group_box("Select Cost Rasters and Vector", selectionLayout))
+
+    # Network mode is experimental — hide the mode row when off (Single only).
+    if not dialog.network_mode_experimental:
+        dialog._priceModeRow.setVisible(False)
+        dialog._priceVectorStack.setCurrentIndex(0)
 
     # Cost Rasters Resolutions (read-only)
     resolutionsLayout = QFormLayout()
@@ -138,8 +150,17 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.co2densityInput.setText(str(capex.CO2_DENSITY))
     dialog.pressureDropInput.setText("0.02")
     dialog.totalPressureDropInput.setText("3")
+
+    # Flow input swaps with the mode: Single = the constant CO₂ mass flow M (kg/s); Network = the
+    # per-segment flow field (Mt/yr). Only the FIELD is stacked; the LABEL stays in the parent form so it
+    # aligns with the other Pipe Diameter rows (its text is swapped on the mode toggle).
+    dialog._priceFlowLabel = QLabel("CO₂ Mass Flow Rate (M, kg/s):")
+    dialog._priceFlowInputStack = QStackedWidget()
+    dialog._priceFlowInputStack.addWidget(dialog.co2MassFlowRateInput)  # index 0 = Single (constant M)
+    dialog._priceFlowInputStack.addWidget(dialog.priceNetworkFlowField)  # index 1 = Network (flow field)
+
     dLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
-    dLayout.addRow(QLabel("CO₂ Mass Flow Rate (M, kg/s):"), dialog.co2MassFlowRateInput)
+    dLayout.addRow(dialog._priceFlowLabel, dialog._priceFlowInputStack)
     dLayout.addRow(QLabel("CO₂ Density (ρ, kg/m³):"), dialog.co2densityInput)
     dLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, MPa/km):"), dialog.pressureDropInput)
     dLayout.addRow(QLabel("Total Pressure Drop (Δp, MPa):"), dialog.totalPressureDropInput)
@@ -203,6 +224,26 @@ def connect_price_estimation_signals(dialog: "AnalysisDialog"):
     dialog.show_formulas_button.clicked.connect(lambda: open_formulas_dialog(dialog))
 
     dialog.pipelineVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
+
+    # Network mode: the radio swaps BOTH stacks together — the vector picker (Pipeline ↔ Network) and
+    # the flow input in the Pipe Diameter box (constant M ↔ per-segment flow field).
+    def _on_price_mode_toggled():
+        network = dialog.priceModeNetworkRadio.isChecked()
+        idx = 1 if network else 0
+        dialog._priceVectorStack.setCurrentIndex(idx)
+        dialog._priceFlowInputStack.setCurrentIndex(idx)
+        dialog._priceVectorLabel.setText("Network Vector:" if network else "Pipeline Vector:")
+        dialog._priceFlowLabel.setText("Flow field (Mt/yr):" if network else "CO₂ Mass Flow Rate (M, kg/s):")
+        update_pipeline_length(dialog)  # the length field follows the active (pipeline/network) vector
+
+    dialog.priceModeNetworkRadio.toggled.connect(lambda checked: _on_price_mode_toggled())
+
+    def _update_price_flow_field():
+        dialog.priceNetworkFlowField.setLayer(layer_from_dropdown(dialog.priceNetworkVectorDropdown))
+
+    dialog.priceNetworkVectorDropdown.currentIndexChanged.connect(_update_price_flow_field)
+    dialog.priceNetworkVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
+    _update_price_flow_field()
     dialog.landUseCostsDropdown.currentIndexChanged.connect(
         lambda: update_resolution_field(dialog, dialog.landUseCostsDropdown, dialog.landUseCostsResInput)
     )
@@ -244,11 +285,8 @@ def _price_prepare(dialog: "AnalysisDialog") -> dict:
     def log(msg):
         dialog.log_message(msg, "Price Estimation")
 
-    log("Calculating pipeline price...")
-
-    pipeline_layer = layer_from_dropdown(dialog.pipelineVectorDropdown)
-    if not pipeline_layer:
-        raise ValueError("Pipeline vector must be selected.")
+    network_mode = dialog.network_mode_experimental and dialog.priceModeNetworkRadio.isChecked()
+    log("Calculating network price..." if network_mode else "Calculating pipeline price...")
 
     cost_dropdowns = {
         "Land Use (Flu)": dialog.landUseCostsDropdown,
@@ -293,15 +331,25 @@ def _price_prepare(dialog: "AnalysisDialog") -> dict:
         for feat in crossings_layer.getFeatures():
             infra_geoms.append(QgsGeometry(feat.geometry()))
 
-    # Capture pipeline segments as plain coordinate pairs on the main thread.
-    segments = []
-    for feature in pipeline_layer.getFeatures():
-        geom = feature.geometry()
-        parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
-        for line in parts:
-            for i in range(len(line) - 1):
-                start, end = line[i], line[i + 1]
-                segments.append((start.x(), start.y(), end.x(), end.y()))
+    # Capture the route geometry as plain coordinate pairs on the main thread. Network mode reads the
+    # 2a network (each feature = a segment with its own flow + junction flag); Single = one pipeline.
+    edges = None
+    segments = None
+    if network_mode:
+        network_layer = layer_from_dropdown(dialog.priceNetworkVectorDropdown)
+        if not network_layer:
+            raise ValueError("Network vector must be selected.")
+        flow_field = dialog.priceNetworkFlowField.currentField()
+        if not flow_field:
+            raise ValueError("Select the network 'flow' field (Mt/yr).")
+        edges = _read_network_edges(network_layer, flow_field, log)
+        if not edges:
+            raise ValueError("The network vector has no usable segments with a flow value.")
+    else:
+        pipeline_layer = layer_from_dropdown(dialog.pipelineVectorDropdown)
+        if not pipeline_layer:
+            raise ValueError("Pipeline vector must be selected.")
+        segments = _polyline_segments(pipeline_layer)
 
     # Engineering inputs.
     admissible_MPa_km = float(dialog.pressureDropInput.text())  # Δp/L, MPa/km
@@ -321,19 +369,80 @@ def _price_prepare(dialog: "AnalysisDialog") -> dict:
     }
 
     return {
+        "network": network_mode,
         "mode": mode,
         "cost_specs": cost_specs,
         "cost_paths": cost_paths,
         "segments": segments,
+        "edges": edges,
         "infra_geoms": infra_geoms,
         "eng": eng,
         "log": log,
     }
 
 
+def _polyline_segments(layer):
+    """Flatten a line layer's features into ``(x1, y1, x2, y2)`` vertex-pair segments."""
+    segments = []
+    for feature in layer.getFeatures():
+        segments.extend(_polyline_segments_from_geom(feature.geometry()))
+    return segments
+
+
+def _read_network_edges(layer, flow_field, log):
+    """Read each network feature as a pipe: ``{"fid", "flow", "junction", "start", "end", "segments"}``.
+
+    ``fid`` is the feature id (what Identify shows on the map, so the CAPEX log cross-references it).
+    ``start``/``end`` are the (rounded) route endpoints (geometry ordered upstream→downstream) used to
+    reconstruct the junctions. ``junction`` comes from the 2a ``junction`` field (1 where flows merge);
+    absent → no junction boosters (a warning is logged, since a non-2a network won't carry the flag).
+    """
+    has_junction = layer.fields().indexOf("junction") >= 0
+    if not has_junction:
+        log("  ⚠️ No 'junction' field — junction boosters skipped (use a Level-2a network.gpkg for them).")
+
+    edges = []
+    for feature in layer.getFeatures():
+        flow = feature[flow_field]
+        if flow is None:
+            continue
+        segs = _polyline_segments_from_geom(feature.geometry())
+        if not segs:
+            continue
+        edges.append(
+            {
+                "fid": feature.id(),
+                "flow": float(flow),
+                "junction": bool(feature["junction"]) if has_junction else False,
+                "start": (round(segs[0][0], 3), round(segs[0][1], 3)),
+                "end": (round(segs[-1][2], 3), round(segs[-1][3], 3)),
+                "segments": segs,
+            }
+        )
+
+    n_junctions = sum(1 for e in edges if e["junction"])
+    log(f"  Network: {len(edges)} pipe(s), {n_junctions} junction(s)")
+    return edges
+
+
+def _polyline_segments_from_geom(geom):
+    """Vertex-pair segments of a single line geometry."""
+    parts = geom.asMultiPolyline() if geom.isMultipart() else [geom.asPolyline()]
+    return [
+        (line[i].x(), line[i].y(), line[i + 1].x(), line[i + 1].y()) for line in parts for i in range(len(line) - 1)
+    ]
+
+
 def _price_work(params: dict) -> dict:
-    """Background thread: sample cost factors along the route, then compute CAPEX."""
+    """Background thread: sample cost factors along the route(s), then compute CAPEX."""
     log = params["log"]
+
+    if params["network"]:
+        edges = extract_network_values(
+            params["edges"], params["cost_specs"], params["cost_paths"], params["infra_geoms"], params["mode"], log
+        )
+        return compute_network_capex(edges, params["eng"], log)
+
     if params["mode"] == "precise":
         values = extract_cells(params["cost_specs"], params["segments"], params["infra_geoms"], log)
     else:
@@ -380,6 +489,28 @@ class FormulaDialog(QDialog):
         grid_layout.setColumnStretch(0, 3)
         grid_layout.setColumnStretch(1, 2)
 
+        # --- Intro (moved here from the tab header to free vertical space) ---
+        intro_label = QLabel(
+            "<p style='font-size:13px; color:#dddddd; line-height:1.5;'>"
+            "ⓘ Estimates the total pipeline investment cost (<b>I<sub>total</sub></b>) from the selected "
+            "pipeline (or network) vector and cost rasters.<br><br>"
+            "<b>Single pipeline:</b> one <b>diameter (D)</b> for the whole route, from its total length.<br>"
+            "<b>Network:</b> each <b>pipe</b> (a spur or trunk edge of the network) is sized for "
+            "<b>its own flow</b>, so a trunk (merged spurs) gets a larger diameter than the spurs feeding it; "
+            "an extra <b>junction booster</b> is added where two pipes merge.<br><br>"
+            "<b>Segments &amp; boosters:</b> every pipe is split into <b>segments</b> of at most the "
+            "<b>booster spacing</b> — derived from the pressure budget (total ÷ admissible pressure drop; "
+            "150 km by default) — with a <b>spacing booster (I<sub>B</sub>)</b> between consecutive segments. "
+            "A pipe shorter than the spacing is a single segment (no spacing booster). In Single mode the whole "
+            "pipeline is one such pipe.<br><br>"
+            "<b>Sampling:</b> <b>Precise</b> resamples the cost rasters and iterates over every GIS cell "
+            "crossed (L<sub>cell</sub> = exact length inside each cell); <b>Fast</b> samples 5 points along "
+            "each straight vertex-to-vertex section of the vector (max value, L<sub>seg</sub> = section length)."
+            "</p>"
+        )
+        intro_label.setWordWrap(True)
+        grid_layout.addWidget(intro_label, 0, 0, 1, 2)
+
         # --- D ---
         D_formula_label = QLabel("""
             <html><body><table align="center" border="0" cellspacing="0" cellpadding="5">
@@ -405,8 +536,8 @@ class FormulaDialog(QDialog):
             "<b>Δp/L</b> = admissible pressure drop per unit length (Pa/m)"
         )
         D_explanation.setWordWrap(True)
-        grid_layout.addWidget(D_formula_label, 0, 0, Qt.AlignmentFlag.AlignCenter)
-        grid_layout.addWidget(D_explanation, 0, 1)
+        grid_layout.addWidget(D_formula_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
+        grid_layout.addWidget(D_explanation, 1, 1)
 
         # --- Ip ---
         Ip_formula_label = QLabel("""
@@ -432,8 +563,8 @@ class FormulaDialog(QDialog):
             "The summation iterates over all vector segments."
         )
         Ip_explanation.setWordWrap(True)
-        grid_layout.addWidget(Ip_formula_label, 1, 0, Qt.AlignmentFlag.AlignCenter)
-        grid_layout.addWidget(Ip_explanation, 1, 1)
+        grid_layout.addWidget(Ip_formula_label, 2, 0, Qt.AlignmentFlag.AlignCenter)
+        grid_layout.addWidget(Ip_explanation, 2, 1)
 
         # --- Sc ---
         Sc_formula_label = QLabel("""
@@ -458,8 +589,8 @@ class FormulaDialog(QDialog):
             "Result is in Watts (W)."
         )
         Sc_explanation.setWordWrap(True)
-        grid_layout.addWidget(Sc_formula_label, 2, 0, Qt.AlignmentFlag.AlignCenter)
-        grid_layout.addWidget(Sc_explanation, 2, 1)
+        grid_layout.addWidget(Sc_formula_label, 3, 0, Qt.AlignmentFlag.AlignCenter)
+        grid_layout.addWidget(Sc_explanation, 3, 1)
 
         # --- IB ---
         Ib_formula_label = QLabel("""
@@ -475,8 +606,8 @@ class FormulaDialog(QDialog):
             "Both constants originate from COMET TN6.4 (van den Broek et al., 2013) and are editable in the inputs panel."
         )
         Ib_explanation.setWordWrap(True)
-        grid_layout.addWidget(Ib_formula_label, 3, 0, Qt.AlignmentFlag.AlignCenter)
-        grid_layout.addWidget(Ib_explanation, 3, 1)
+        grid_layout.addWidget(Ib_formula_label, 4, 0, Qt.AlignmentFlag.AlignCenter)
+        grid_layout.addWidget(Ib_explanation, 4, 1)
 
         # --- Itotal ---
         Itotal_formula_label = QLabel("""
@@ -491,8 +622,8 @@ class FormulaDialog(QDialog):
             "For longer pipelines, one booster station is added after every full segment."
         )
         Itotal_explanation.setWordWrap(True)
-        grid_layout.addWidget(Itotal_formula_label, 4, 0, Qt.AlignmentFlag.AlignCenter)
-        grid_layout.addWidget(Itotal_explanation, 4, 1)
+        grid_layout.addWidget(Itotal_formula_label, 5, 0, Qt.AlignmentFlag.AlignCenter)
+        grid_layout.addWidget(Itotal_explanation, 5, 1)
 
         scroll_area = QScrollArea()
         scroll_area.setWidget(scroll_content)

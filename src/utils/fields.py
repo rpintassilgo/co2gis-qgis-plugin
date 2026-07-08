@@ -27,18 +27,22 @@ def update_resolution_field(dialog: "AnalysisDialog", combo_box: QComboBox, line
 
 
 def update_pipeline_length(dialog: "AnalysisDialog"):
-    """Calculate the total length of the selected pipeline vector and update the input field."""
-    dialog.log_message("Updating pipeline length...", "Price Estimation")
-    selected_index = dialog.pipelineVectorDropdown.currentIndex()
-    if selected_index == -1:
+    """Update the read-only length field with the total length of the ACTIVE route vector.
+
+    Single mode → the pipeline vector; Network mode (experimental) → the network vector, so the field
+    shows the total pipe built (the sum of all segments), not the single-mode pipeline's stale length.
+    """
+    network = dialog.network_mode_experimental and dialog.priceModeNetworkRadio.isChecked()
+    dropdown = dialog.priceNetworkVectorDropdown if network else dialog.pipelineVectorDropdown
+    label = "network" if network else "pipeline"
+
+    dialog.log_message(f"Updating {label} length...", "Price Estimation")
+    if dropdown.currentIndex() == -1:
         dialog.pipelineLengthInput.setText("")
-        dialog.log_message("No pipeline vector selected. Clearing length field.", "Price Estimation")
+        dialog.log_message(f"No {label} vector selected. Clearing length field.", "Price Estimation")
         return
 
-    layer_id = dialog.pipelineVectorDropdown.currentData()
-    dialog.log_message(f"Selected pipeline layer ID: {layer_id}", "Price Estimation")
-    layer = QgsProject.instance().mapLayer(layer_id)
-
+    layer = QgsProject.instance().mapLayer(dropdown.currentData())
     if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != QgsWkbTypes.LineGeometry:
         dialog.log_message(
             f"Selected layer '{layer.name() if layer else 'None'}' is not a valid line vector.", "Price Estimation"
@@ -46,8 +50,6 @@ def update_pipeline_length(dialog: "AnalysisDialog"):
         dialog.pipelineLengthInput.setText("")
         return
 
-    total_length = sum(f.geometry().length() for f in layer.getFeatures())
-    rounded_length = str(round(total_length, 2))
-
-    dialog.pipelineLengthInput.setText(rounded_length)
-    dialog.log_message(f"Entire pipeline length for '{layer.name()}' updated: {rounded_length} m", "Price Estimation")
+    total_length = round(sum(f.geometry().length() for f in layer.getFeatures()), 2)
+    dialog.pipelineLengthInput.setText(str(total_length))
+    dialog.log_message(f"Total {label} length for '{layer.name()}': {total_length} m", "Price Estimation")

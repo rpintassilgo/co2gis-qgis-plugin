@@ -77,7 +77,8 @@ def _orient_source_to_sink(cells: list, source_xy: tuple, gt) -> list:
 def _write_network(segments, gt, proj: str, output_path: str) -> str:
     """Write the network segments to a GeoPackage (one LineString per segment).
 
-    Each feature carries ``flow`` (Mt/yr through the segment) and ``length`` (map units).
+    Each feature carries ``flow`` (Mt/yr through the segment), ``length`` (map units), and
+    ``junction`` (1 if it starts at a junction — where Price Estimation adds a booster).
     """
     if os.path.exists(output_path):
         os.remove(output_path)
@@ -89,16 +90,18 @@ def _write_network(segments, gt, proj: str, output_path: str) -> str:
     layer = ds.CreateLayer("network", srs if proj else None, ogr.wkbLineString)
     layer.CreateField(ogr.FieldDefn("flow", ogr.OFTReal))
     layer.CreateField(ogr.FieldDefn("length", ogr.OFTReal))
+    layer.CreateField(ogr.FieldDefn("junction", ogr.OFTInteger))
     defn = layer.GetLayerDefn()
-    for cells, seg_flow in segments:
+    for seg in segments:
         line = ogr.Geometry(ogr.wkbLineString)
-        for cell in cells:
+        for cell in seg.cells:
             x, y = _cell_center(cell, gt)
             line.AddPoint_2D(x, y)
         feat = ogr.Feature(defn)
         feat.SetGeometry(line)
-        feat.SetField("flow", float(seg_flow))
+        feat.SetField("flow", float(seg.flow))
         feat.SetField("length", float(line.Length()))
+        feat.SetField("junction", 1 if seg.junction else 0)
         layer.CreateFeature(feat)
         feat = None
     ds = None
@@ -109,7 +112,7 @@ def route_network_heuristic(
     combined_raster_path: str,
     sources: Sequence[Node],
     sinks: Sequence[Node],
-    output_dir: str,
+    output_path: str,
     memory: int = DEFAULT_RCOST_MEMORY_MB,
     log=lambda msg: None,
 ) -> dict:
@@ -118,13 +121,15 @@ def route_network_heuristic(
     Routes each source to its nearest sink (``assign_star`` → per-sink ``r.cost`` →
     per-source ``r.drain``), reads each route as a cell chain, then builds the network
     graph: overlapping cells sum their flow (trunks) and the network is split into
-    segments at the real junctions.
+    segments at the real junctions. The network is written to ``output_path`` (a GeoPackage).
 
     :returns: ``{"network_path", "segments", "edges", "routes"}`` — the network vector
         (per-segment ``flow`` + ``length``), the :class:`~graph.Segment` list, the
         assignment Edges, and per-edge ``(source_id, sink_id)``. Does NOT touch the project.
     """
-    os.makedirs(output_dir, exist_ok=True)
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
     edges = assign_star(sources, sinks)
     nodes_by_id = {n.id: n for n in list(sources) + list(sinks)}
     grouped = group_by_sink(edges)
@@ -160,10 +165,9 @@ def route_network_heuristic(
 
         log("Building the network graph (per-segment flow at the real junctions)...")
         segments = build_edges(chains)
-        network_path = os.path.join(output_dir, "network.gpkg")
-        _write_network(segments, gt, proj, network_path)
+        _write_network(segments, gt, proj, output_path)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → network.gpkg")
-    return {"network_path": network_path, "segments": segments, "edges": edges, "routes": routes}
+    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → {os.path.basename(output_path)}")
+    return {"network_path": output_path, "segments": segments, "edges": edges, "routes": routes}
