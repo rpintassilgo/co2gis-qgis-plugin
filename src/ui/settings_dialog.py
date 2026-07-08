@@ -77,10 +77,6 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Settings")
         self.setMinimumWidth(360)
         self.setSizeGripEnabled(True)
-        self.setStyleSheet("""
-            QDialog { background-color: #2a2a2a; }
-            QLabel { color: white; }
-        """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)

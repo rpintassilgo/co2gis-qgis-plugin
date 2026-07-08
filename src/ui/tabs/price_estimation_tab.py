@@ -472,12 +472,7 @@ class FormulaDialog(QDialog):
         self.setMinimumSize(800, 500)
         self.resize(1000, 700)
         self.setSizeGripEnabled(True)
-        self.setStyleSheet("""
-            QDialog { background-color: #2a2a2a; }
-            QLabel { color: white; font-size: 13px; }
-            QScrollArea { background-color: #2a2a2a; border: none; }
-            QWidget#scrollContent { background-color: #2a2a2a; }
-        """)
+        self.setStyleSheet("QLabel { font-size: 13px; } QScrollArea { border: none; }")
 
         # Inner widget that holds the grid
         scroll_content = QWidget()
@@ -491,7 +486,7 @@ class FormulaDialog(QDialog):
 
         # --- Intro (moved here from the tab header to free vertical space) ---
         intro_label = QLabel(
-            "<p style='font-size:13px; color:#dddddd; line-height:1.5;'>"
+            "<p style='font-size:13px; line-height:1.5;'>"
             "ⓘ Estimates the total pipeline investment cost (<b>I<sub>total</sub></b>) from the selected "
             "pipeline (or network) vector and cost rasters.<br><br>"
             "<b>Single pipeline:</b> one <b>diameter (D)</b> for the whole route, from its total length.<br>"
@@ -521,7 +516,7 @@ class FormulaDialog(QDialog):
               <td>
                 <table align="center" border="0" cellspacing="0" cellpadding="0">
                   <tr><td style="text-align:center; font-size:20px; padding-bottom:4px;">8 ⋅ λ ⋅ M²</td></tr>
-                  <tr><td style="border-top: 2px solid white; text-align:center; font-size:20px; padding-top:4px;">π² ⋅ ρ ⋅ (Δp/L)</td></tr>
+                  <tr><td style="border-top: 2px solid #888; text-align:center; font-size:20px; padding-top:4px;">π² ⋅ ρ ⋅ (Δp/L)</td></tr>
                 </table>
               </td>
               <td style="font-size:48px; font-weight:bold;">)</td>
@@ -542,10 +537,10 @@ class FormulaDialog(QDialog):
         # --- Ip ---
         Ip_formula_label = QLabel("""
             <html><body><p align="center" style="font-size:20px; font-weight:bold; line-height:1.8;">
-            I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>c</sub> ⋅ F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 − 0.1N) + 0.1N ⋅ F<sub>ci</sub>] ⋅ <span style="color:#7ec8e3;">L</span> }
+            I<sub>p</sub> = B<sub>c</sub> ⋅ D ⋅ Σ { F<sub>c</sub> ⋅ F<sub>s</sub> ⋅ [F<sub>lu</sub> ⋅ (1 − 0.1N) + 0.1N ⋅ F<sub>ci</sub>] ⋅ <span style="color:#2a7fb8;">L</span> }
             </p>
-            <p align="center" style="font-size:16px; color:#aaaaaa;">
-            <span style="color:#7ec8e3;">L</span> = L<sub>cell</sub> (Precise mode) &nbsp;|&nbsp; L<sub>seg</sub> (Fast mode)
+            <p align="center" style="font-size:16px;">
+            <span style="color:#2a7fb8;">L</span> = L<sub>cell</sub> (Precise mode) &nbsp;|&nbsp; L<sub>seg</sub> (Fast mode)
             </p></body></html>""")
         Ip_explanation = QLabel(
             "<b>Pipeline Segment Cost (I<sub>p</sub>):</b><br><br>"
@@ -575,7 +570,7 @@ class FormulaDialog(QDialog):
               <td>
                 <table align="center" border="0" cellspacing="0" cellpadding="0">
                   <tr><td style="text-align:center; font-size:20px; padding-bottom:4px;">M ⋅ ΔP<sub>seg</sub></td></tr>
-                  <tr><td style="border-top: 2px solid white; text-align:center; font-size:20px; padding-top:4px;">ρ ⋅ B<sub>eff</sub></td></tr>
+                  <tr><td style="border-top: 2px solid #888; text-align:center; font-size:20px; padding-top:4px;">ρ ⋅ B<sub>eff</sub></td></tr>
                 </table>
               </td>
             </tr></table></body></html>""")

@@ -257,20 +257,8 @@ class CometValuesDialog(QDialog):
         self.setWindowTitle("COMET Project - Land Use Cost Factors")
         self.setMinimumSize(800, 510)
         self.setStyleSheet("""
-            QDialog { background-color: #2a2a2a; }
-            QTableWidget {
-                background-color: #3c3c3c;
-                color: white;
-                gridline-color: #5a5a5a;
-                font-size: 12px;
-            }
-            QHeaderView::section {
-                background-color: #4a4a4a;
-                color: white;
-                padding: 4px;
-                border: 1px solid #5a5a5a;
-                font-weight: bold;
-            }
+            QTableWidget { font-size: 12px; }
+            QHeaderView::section { padding: 4px; font-weight: bold; }
         """)
 
         layout = QVBoxLayout()
