@@ -9,6 +9,7 @@ from qgis.PyQt.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
+    QLabel,
     QLineEdit,
     QPushButton,
     QRadioButton,
@@ -146,7 +147,9 @@ class AnalysisDialog(QDialog):
         self.priceModeNetworkRadio: QRadioButton
         self.priceModeButtonGroup: QButtonGroup
         self._priceModeRow: QWidget
+        self._priceVectorLabel: QLabel
         self._priceVectorStack: QStackedWidget
+        self._priceFlowLabel: QLabel
         self._priceFlowInputStack: QStackedWidget
         self.priceNetworkVectorDropdown: QComboBox
         self.priceNetworkFlowField: QgsFieldComboBox

@@ -83,23 +83,16 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     priceModeLayout.addWidget(dialog.priceModeNetworkRadio)
     priceModeLayout.addStretch()
 
-    singlePage = QWidget()
-    singleForm = QFormLayout(singlePage)
-    singleForm.setContentsMargins(0, 0, 0, 0)
-    singleForm.addRow(QLabel("Pipeline Vector:"), dialog.pipelineVectorDropdown)
-
-    networkPage = QWidget()
-    networkForm = QFormLayout(networkPage)
-    networkForm.setContentsMargins(0, 0, 0, 0)
-    networkForm.addRow(QLabel("Network Vector:"), dialog.priceNetworkVectorDropdown)
-    # The flow field lives in the Pipe Diameter box (it replaces the constant M there in Network mode).
-
+    # The vector picker's LABEL stays in the parent form (so it aligns with the cost-raster rows) while
+    # only the FIELD swaps with the mode via a stacked widget. The flow field itself lives in the Pipe
+    # Diameter box (it replaces the constant M there in Network mode).
+    dialog._priceVectorLabel = QLabel("Pipeline Vector:")
     dialog._priceVectorStack = QStackedWidget()
-    dialog._priceVectorStack.addWidget(singlePage)  # index 0 = Single
-    dialog._priceVectorStack.addWidget(networkPage)  # index 1 = Network
+    dialog._priceVectorStack.addWidget(dialog.pipelineVectorDropdown)  # index 0 = Single
+    dialog._priceVectorStack.addWidget(dialog.priceNetworkVectorDropdown)  # index 1 = Network
 
     selectionLayout.addRow(dialog._priceModeRow)
-    selectionLayout.addRow(dialog._priceVectorStack)
+    selectionLayout.addRow(dialog._priceVectorLabel, dialog._priceVectorStack)
     selectionLayout.addRow(QLabel("Land Use Costs Raster (F<sub>lu</sub>):"), dialog.landUseCostsDropdown)
     selectionLayout.addRow(QLabel("Slope Costs Raster (F<sub>s</sub>):"), dialog.slopeCostsDropdown)
     selectionLayout.addRow(QLabel("Corridors Costs Raster (F<sub>c</sub>):"), dialog.corridorsCostsDropdown)
@@ -158,22 +151,16 @@ def setup_price_estimation_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     dialog.pressureDropInput.setText("0.02")
     dialog.totalPressureDropInput.setText("3")
 
-    # Flow input row swaps with the mode: Single = the constant CO₂ mass flow M (kg/s); Network = the
-    # per-segment flow field (Mt/yr) from the network vector, from which M is derived per segment.
-    singleMPage = QWidget()
-    singleMForm = QFormLayout(singleMPage)
-    singleMForm.setContentsMargins(0, 0, 0, 0)
-    singleMForm.addRow(QLabel("CO₂ Mass Flow Rate (M, kg/s):"), dialog.co2MassFlowRateInput)
-    networkMPage = QWidget()
-    networkMForm = QFormLayout(networkMPage)
-    networkMForm.setContentsMargins(0, 0, 0, 0)
-    networkMForm.addRow(QLabel("Flow field (M per segment, Mt/yr):"), dialog.priceNetworkFlowField)
+    # Flow input swaps with the mode: Single = the constant CO₂ mass flow M (kg/s); Network = the
+    # per-segment flow field (Mt/yr). Only the FIELD is stacked; the LABEL stays in the parent form so it
+    # aligns with the other Pipe Diameter rows (its text is swapped on the mode toggle).
+    dialog._priceFlowLabel = QLabel("CO₂ Mass Flow Rate (M, kg/s):")
     dialog._priceFlowInputStack = QStackedWidget()
-    dialog._priceFlowInputStack.addWidget(singleMPage)  # index 0 = Single (constant M)
-    dialog._priceFlowInputStack.addWidget(networkMPage)  # index 1 = Network (flow field)
+    dialog._priceFlowInputStack.addWidget(dialog.co2MassFlowRateInput)  # index 0 = Single (constant M)
+    dialog._priceFlowInputStack.addWidget(dialog.priceNetworkFlowField)  # index 1 = Network (flow field)
 
     dLayout.addRow(QLabel("Friction Factor (λ):"), dialog.frictionFactorInput)
-    dLayout.addRow(dialog._priceFlowInputStack)
+    dLayout.addRow(dialog._priceFlowLabel, dialog._priceFlowInputStack)
     dLayout.addRow(QLabel("CO₂ Density (ρ, kg/m³):"), dialog.co2densityInput)
     dLayout.addRow(QLabel("Admissible Pressure Drop (Δp/L, MPa/km):"), dialog.pressureDropInput)
     dLayout.addRow(QLabel("Total Pressure Drop (Δp, MPa):"), dialog.totalPressureDropInput)
@@ -241,9 +228,12 @@ def connect_price_estimation_signals(dialog: "AnalysisDialog"):
     # Network mode: the radio swaps BOTH stacks together — the vector picker (Pipeline ↔ Network) and
     # the flow input in the Pipe Diameter box (constant M ↔ per-segment flow field).
     def _on_price_mode_toggled():
-        idx = 1 if dialog.priceModeNetworkRadio.isChecked() else 0
+        network = dialog.priceModeNetworkRadio.isChecked()
+        idx = 1 if network else 0
         dialog._priceVectorStack.setCurrentIndex(idx)
         dialog._priceFlowInputStack.setCurrentIndex(idx)
+        dialog._priceVectorLabel.setText("Network Vector:" if network else "Pipeline Vector:")
+        dialog._priceFlowLabel.setText("Flow field (Mt/yr):" if network else "CO₂ Mass Flow Rate (M, kg/s):")
         update_pipeline_length(dialog)  # the length field follows the active (pipeline/network) vector
 
     dialog.priceModeNetworkRadio.toggled.connect(lambda checked: _on_price_mode_toggled())
