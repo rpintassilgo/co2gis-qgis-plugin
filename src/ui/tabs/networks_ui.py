@@ -16,7 +16,7 @@ merged network layer.
 import os
 from typing import TYPE_CHECKING
 
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsProject, QgsVectorLayer
 from qgis.gui import QgsFieldComboBox
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
@@ -170,24 +170,24 @@ def _network_work(params: dict) -> dict:
 
 
 def _network_publish(dialog: "AnalysisDialog", result: dict):
-    """Main thread: load the route geometry + the aggregated-flow raster (the trunks)."""
+    """Main thread: load the network vector (per-segment ``flow`` — the trunks)."""
     network_path = result["network_path"]
     layer = QgsVectorLayer(network_path, os.path.splitext(os.path.basename(network_path))[0], "ogr")
     if not layer.isValid():
         raise RuntimeError(f"Failed to load network vector: {network_path}")
     QgsProject.instance().addMapLayer(layer)
-    dialog.log_message(f"Network routes: {network_path}", "Network")
+    dialog.log_message(f"Network: {network_path}", "Network")
 
-    # The aggregated-flow raster is the trunks — higher value = more flow. Style it by value to see
-    # thin spurs thicken into trunks where paths merge.
-    flow_raster = result.get("flow_raster")
-    if flow_raster:
-        raster = QgsRasterLayer(flow_raster, "network flow (trunks)")
-        if raster.isValid():
-            QgsProject.instance().addMapLayer(raster)
-            dialog.log_message(f"Aggregated-flow raster (trunks): {flow_raster}", "Network")
-        else:
-            dialog.log_message(f"⚠️ Flow raster saved but failed to load: {flow_raster}", "Network")
-
+    # Each segment carries the flow it transports — trunks (merged spurs) carry the sum. Identify a
+    # segment or style by 'flow' (graduated width) to see spurs thicken into trunks at the junctions.
+    segments = result.get("segments", [])
+    dialog.log_message(f"  {len(segments)} segment(s); flows (Mt/yr): {_summarize_flows(segments)}", "Network")
     for edge in result["edges"]:
-        dialog.log_message(f"  {edge.source_id} → {edge.sink_id}: flow {edge.flow} Mt/yr", "Network")
+        dialog.log_message(f"  route {edge.source_id} → {edge.sink_id}: flow {edge.flow} Mt/yr", "Network")
+
+
+def _summarize_flows(segments) -> str:
+    """Short, sorted preview of the distinct segment flows (largest first)."""
+    flows = sorted({round(float(seg.flow), 3) for seg in segments}, reverse=True)
+    preview = ", ".join(f"{f:g}" for f in flows[:8])
+    return preview + (" …" if len(flows) > 8 else "")

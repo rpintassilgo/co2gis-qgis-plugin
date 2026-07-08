@@ -361,38 +361,3 @@ def run_r_drain_and_vectorize(
     # Cleanup
     shutil.rmtree(temp_dir, ignore_errors=True)
     return vector_output
-
-
-def run_r_drain_raster(cost_result: dict, start_coordinates: str, output_raster: str, log=lambda msg: None) -> str:
-    """Run only ``r.drain`` (no thin/vectorize) and write the path raster.
-
-    Traces the least-cost path from ``start_coordinates`` down the ``r.cost``
-    direction surface. Used by the network trunk heuristic, which needs each
-    source's path as a raster (to accumulate flow), not a vector.
-    """
-    d = os.path.dirname(output_raster)
-    if d and not os.path.exists(d):
-        os.makedirs(d, exist_ok=True)
-
-    accum_path = cost_result["output"]
-    direction_path = cost_result["outdir"]
-    accum_layer = QgsRasterLayer(accum_path, "temp_accum")
-    if not accum_layer.isValid():
-        raise RuntimeError(f"Cannot read accumulation raster: {accum_path}")
-    ext = accum_layer.extent()
-    region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
-
-    result = processing.run(
-        grass_alg_id("r.drain"),
-        {
-            "input": accum_path,
-            "direction": direction_path,
-            "start_coordinates": start_coordinates,
-            "output": output_raster,
-            "GRASS_REGION_PARAMETER": region,
-            "GRASS_REGION_CELLSIZE_PARAMETER": 0,
-        },
-    )
-    if not result or "output" not in result:
-        raise RuntimeError("r.drain failed to produce output")
-    return result["output"]

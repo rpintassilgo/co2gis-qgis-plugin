@@ -1,19 +1,17 @@
-"""Level-2 heuristic: merge the independent source→sink routes into shared trunks.
+"""Level-2 heuristic: shared trunks via a graph built from the r.drain paths.
 
-Reuses the Level-1 GRASS routing (one ``r.cost`` per sink, one ``r.drain`` per
-source) but, instead of stacking the route geometries, **accumulates flow**: each
-source's path raster is weighted by the source's flow and summed, so every cell
-carries the total flow crossing it. Where paths converge the flow rises → a trunk.
+Routes like Level 1 (``assign_star`` → one ``r.cost`` per sink → one ``r.drain`` per
+source), then reads each source's route as an ordered **chain of grid cells** and hands
+the chains to :func:`src.core.networks.graph.build_edges`. Overlaying the chains
+accumulates flow where they share the exact same cell (the real junction) and splits the
+network into **segments**, each written to ``network.gpkg`` with a per-segment ``flow``
+and ``length``. No raster/vector hybrid — the flow lives on the vector, split at the true
+merges. Qt-free / project-free like ``core/lcp.py``; the graph step is unit-tested.
 
-The aggregated-flow raster is the **source of truth** for flow — Price Estimation
-samples it per cell at 2b (like the COMET cost rasters). The routes are also
-vectorised into a plain geometry layer (for display and to walk); flow is
-intentionally NOT attached to the vector, because GRASS ``r.to.vect`` does not
-split a line where the raster value changes (it would fold a trunk's value into a
-spur), so per-segment flow is read from the raster, not a vector attribute.
-
-Qt-free / project-free like ``core/lcp.py``. The pure array step
-(:func:`accumulate_flow`) is unit-tested.
+Heuristic limitation: paths merge only on *exact* cell overlap, so two sources whose
+least-cost paths run one cell apart (parallel) stay as two segments until their cells
+actually coincide — the trunk then forms late. Per-segment flow stays correct; a future
+greedy corridor-discounting router (join later paths onto the built pipe) removes this.
 """
 
 from __future__ import annotations
@@ -23,83 +21,88 @@ import shutil
 import tempfile
 from typing import Sequence
 
-import numpy as np
-from osgeo import gdal
-from qgis import processing
+from osgeo import gdal, ogr, osr
 
 from ...constants.lcp import DEFAULT_RCOST_MEMORY_MB
-from ..lcp import grass_alg_id, run_r_cost, run_r_drain_raster
+from ..lcp import run_r_cost, run_r_drain_and_vectorize
+from .graph import build_edges
 from .model import Node, assign_star, group_by_sink
 from .routing import _coord, _slug
 
 
-def path_mask(array, nodata) -> np.ndarray:
-    """Boolean mask of the cells an ``r.drain`` output raster marks as the path.
-
-    Path cells hold a value; off-path cells are NoData (or NaN). Robust to r.drain's
-    exact on-path value — presence is what matters.
-    """
-    mask = ~np.isnan(array) if np.issubdtype(array.dtype, np.floating) else np.ones(array.shape, dtype=bool)
-    if nodata is not None:
-        mask &= array != nodata
-    return mask
+def _cell_of(x: float, y: float, gt) -> tuple:
+    """Grid ``(row, col)`` containing map point ``(x, y)`` for geotransform ``gt``."""
+    return (int((y - gt[3]) / gt[5]), int((x - gt[0]) / gt[1]))
 
 
-def accumulate_flow(shape, paths) -> np.ndarray:
-    """Sum flow-weighted path masks into an aggregated-flow array.
-
-    :param shape: ``(rows, cols)`` of the common grid.
-    :param paths: iterable of ``(mask, flow)`` — each ``mask`` a boolean array, each
-        ``flow`` the source's flow. A cell used by several sources gets their sum.
-    :returns: float32 array; cell value = total flow crossing it (0 off any path).
-    """
-    acc = np.zeros(shape, dtype=np.float32)
-    for mask, flow in paths:
-        acc[mask] += float(flow)
-    return acc
+def _cell_center(cell: tuple, gt) -> tuple:
+    """Map ``(x, y)`` at the centre of grid cell ``(row, col)``."""
+    row, col = cell
+    return (gt[0] + (col + 0.5) * gt[1], gt[3] + (row + 0.5) * gt[5])
 
 
-def _read_band(path):
-    """Return ``(array, nodata, geotransform, projection)`` for band 1 of a raster."""
-    ds = gdal.Open(path)
-    if ds is None:
-        raise RuntimeError(f"Could not open raster: {path}")
-    band = ds.GetRasterBand(1)
-    array = band.ReadAsArray()
-    nodata = band.GetNoDataValue()
-    geotrans = ds.GetGeoTransform()
-    proj = ds.GetProjection()
-    band = None
+def _read_route_cells(vector_path: str, gt) -> list:
+    """Ordered, de-duplicated grid cells of the polyline(s) in a route vector."""
+    ds = ogr.Open(vector_path)
+    cells = []
+    if ds is not None:
+        layer = ds.GetLayer()
+        for feat in layer:
+            geom = feat.GetGeometryRef()
+            if geom is None:
+                continue
+            # Flatten LineString / MultiLineString to a single point sequence.
+            parts = [geom.GetGeometryRef(i) for i in range(geom.GetGeometryCount())] or [geom]
+            for part in parts:
+                for i in range(part.GetPointCount()):
+                    x, y = part.GetPoint(i)[:2]
+                    cell = _cell_of(x, y, gt)
+                    if not cells or cells[-1] != cell:
+                        cells.append(cell)
     ds = None
-    return array, nodata, geotrans, proj
+    return cells
 
 
-def _write_raster(array, geotrans, proj, path, gdal_type):
-    """Write a single-band GeoTIFF (0 = off-path NoData)."""
-    height, width = array.shape
-    out = gdal.GetDriverByName("GTiff").Create(path, width, height, 1, gdal_type, options=["COMPRESS=LZW"])
-    out.SetGeoTransform(geotrans)
-    out.SetProjection(proj)
-    band = out.GetRasterBand(1)
-    band.WriteArray(array)
-    band.SetNoDataValue(0)
-    band.FlushCache()
-    band = None
-    out.FlushCache()
-    out = None
+def _orient_source_to_sink(cells: list, source_xy: tuple, gt) -> list:
+    """Order ``cells`` so ``cells[0]`` is the one nearest the source point."""
+    if len(cells) < 2:
+        return cells
+    sx, sy = source_xy
+    (fx, fy), (lx, ly) = _cell_center(cells[0], gt), _cell_center(cells[-1], gt)
+    d_first = (fx - sx) ** 2 + (fy - sy) ** 2
+    d_last = (lx - sx) ** 2 + (ly - sy) ** 2
+    return cells if d_first <= d_last else list(reversed(cells))
 
 
-def _vectorize_geometry(binary_raster: str, output_vector: str, tmp: str, log) -> str:
-    """Vectorise the network path (binary raster) into a plain line-geometry layer.
+def _write_network(segments, gt, proj: str, output_path: str) -> str:
+    """Write the network segments to a GeoPackage (one LineString per segment).
 
-    No flow attribute — flow is read from the aggregated-flow raster at 2b. r.thin
-    reduces the paths to 1-cell lines so r.to.vect can extract clean lines.
+    Each feature carries ``flow`` (Mt/yr through the segment) and ``length`` (map units).
     """
-    thin_out = os.path.join(tmp, "path_thin.tif")
-    processing.run(grass_alg_id("r.thin"), {"input": binary_raster, "output": thin_out, "iterations": 200})
-    processing.run(grass_alg_id("r.to.vect"), {"input": thin_out, "type": 0, "output": output_vector})
-    log("Vectorised the network geometry (flow stays in the raster).")
-    return output_vector
+    if os.path.exists(output_path):
+        os.remove(output_path)
+    driver = ogr.GetDriverByName("GPKG")
+    ds = driver.CreateDataSource(output_path)
+    srs = osr.SpatialReference()
+    if proj:
+        srs.ImportFromWkt(proj)
+    layer = ds.CreateLayer("network", srs if proj else None, ogr.wkbLineString)
+    layer.CreateField(ogr.FieldDefn("flow", ogr.OFTReal))
+    layer.CreateField(ogr.FieldDefn("length", ogr.OFTReal))
+    defn = layer.GetLayerDefn()
+    for cells, seg_flow in segments:
+        line = ogr.Geometry(ogr.wkbLineString)
+        for cell in cells:
+            x, y = _cell_center(cell, gt)
+            line.AddPoint_2D(x, y)
+        feat = ogr.Feature(defn)
+        feat.SetGeometry(line)
+        feat.SetField("flow", float(seg_flow))
+        feat.SetField("length", float(line.Length()))
+        layer.CreateFeature(feat)
+        feat = None
+    ds = None
+    return output_path
 
 
 def route_network_heuristic(
@@ -110,25 +113,32 @@ def route_network_heuristic(
     memory: int = DEFAULT_RCOST_MEMORY_MB,
     log=lambda msg: None,
 ) -> dict:
-    """Heuristic network design: nearest-sink routing + shared-trunk flow accumulation.
+    """Heuristic network design: nearest-sink routing + shared trunks via a graph.
 
-    Same routing as Level 1 (``assign_star`` → per-sink ``r.cost`` → per-source
-    ``r.drain``), plus a per-cell flow sum across each sink's source paths.
+    Routes each source to its nearest sink (``assign_star`` → per-sink ``r.cost`` →
+    per-source ``r.drain``), reads each route as a cell chain, then builds the network
+    graph: overlapping cells sum their flow (trunks) and the network is split into
+    segments at the real junctions.
 
-    :returns: ``{"network_path", "flow_raster", "edges", "routes"}`` — the network
-        geometry vector, the aggregated-flow raster (flow per cell; the source of
-        truth 2b samples), the Edges (``flow`` seeded), and per-edge
-        ``(source_id, sink_id)``. Does NOT touch the project.
+    :returns: ``{"network_path", "segments", "edges", "routes"}`` — the network vector
+        (per-segment ``flow`` + ``length``), the :class:`~graph.Segment` list, the
+        assignment Edges, and per-edge ``(source_id, sink_id)``. Does NOT touch the project.
     """
     os.makedirs(output_dir, exist_ok=True)
     edges = assign_star(sources, sinks)
     nodes_by_id = {n.id: n for n in list(sources) + list(sinks)}
     grouped = group_by_sink(edges)
 
+    ras = gdal.Open(combined_raster_path)
+    if ras is None:
+        raise RuntimeError(f"Could not open combined raster: {combined_raster_path}")
+    gt = ras.GetGeoTransform()
+    proj = ras.GetProjection()
+    ras = None
+
     tmp = tempfile.mkdtemp()
+    chains = []
     routes = []
-    acc = None
-    geotrans = proj = None
     try:
         for sink_id, sink_edges in grouped.items():
             sink = nodes_by_id[sink_id]
@@ -139,31 +149,21 @@ def route_network_heuristic(
 
             for edge in sink_edges:
                 source = nodes_by_id[edge.source_id]
-                drain_ras = os.path.join(tmp, f"drain_{_slug(edge.source_id)}.tif")
+                route_vec = os.path.join(tmp, f"route_{_slug(edge.source_id)}.gpkg")
                 log(f"  r.drain: {edge.source_id} → {sink_id} (flow {edge.flow})")
-                run_r_drain_raster(cost_result, _coord(source), drain_ras, log=log)
+                run_r_drain_and_vectorize(cost_result, _coord(source), route_vec, log=log)
 
-                array, nodata, gt, pr = _read_band(drain_ras)
-                if acc is None:
-                    acc = np.zeros(array.shape, dtype=np.float32)
-                    geotrans, proj = gt, pr
-                acc[path_mask(array, nodata)] += float(edge.flow)
+                cells = _orient_source_to_sink(_read_route_cells(route_vec, gt), (source.x, source.y), gt)
+                if len(cells) >= 2:
+                    chains.append((edge.flow, cells))
                 routes.append((edge.source_id, sink_id))
 
-        log("Writing aggregated-flow raster (the trunks — flow per cell)...")
-        flow_raster = os.path.join(output_dir, "network_flow.tif")
-        _write_raster(acc, geotrans, proj, flow_raster, gdal.GDT_Float32)
-
-        # Vectorise the path (binary) into plain geometry — flow stays in the raster above.
-        binary = (acc > 0).astype(np.int32)
-        binary_raster = os.path.join(tmp, "network_path.tif")
-        _write_raster(binary, geotrans, proj, binary_raster, gdal.GDT_Int32)
-
-        log("Vectorising network geometry...")
+        log("Building the network graph (per-segment flow at the real junctions)...")
+        segments = build_edges(chains)
         network_path = os.path.join(output_dir, "network.gpkg")
-        _vectorize_geometry(binary_raster, network_path, tmp, log)
+        _write_network(segments, gt, proj, network_path)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    log(f"✓ Heuristic network complete: {len(edges)} route(s) → trunks with per-segment flow in network.gpkg")
-    return {"network_path": network_path, "flow_raster": flow_raster, "edges": edges, "routes": routes}
+    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → network.gpkg")
+    return {"network_path": network_path, "segments": segments, "edges": edges, "routes": routes}
