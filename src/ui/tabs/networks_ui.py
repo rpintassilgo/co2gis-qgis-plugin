@@ -83,12 +83,20 @@ def setup_network_page(dialog: "AnalysisDialog") -> QWidget:
     layout.addRow(QLabel("Sinks layer (points):"), dialog.networkSinksDropdown)
     layout.addRow(QLabel("Injection rate field (Mt/yr):"), dialog.networkCapacityField)
 
+    # Capture target is a MILP-only input (the optimizer picks which sources to connect to meet it).
+    # The heuristic connects every source, so the row is shown only when MILP is selected.
     dialog.networkCaptureTargetInput = QLineEdit()
-    dialog.networkCaptureTargetInput.setPlaceholderText("Mt/yr (not used at Level 1)")
+    dialog.networkCaptureTargetInput.setPlaceholderText("Mt/yr — minimum total CO₂ to capture")
     dialog.networkCaptureTargetInput.setToolTip(
-        "Reserved for the future MILP optimization; ignored by the Level-1 independent-star routing."
+        "Minimum total CO₂ the network must capture; the MILP picks which sources to connect to meet it "
+        "at least cost. Used by MILP optimization only."
     )
-    layout.addRow(QLabel("Capture target (Mt/yr):"), dialog.networkCaptureTargetInput)
+    dialog._networkCaptureRow = QWidget()
+    captureForm = QFormLayout(dialog._networkCaptureRow)
+    captureForm.setContentsMargins(0, 0, 0, 0)
+    captureForm.addRow(QLabel("Capture target (Mt/yr):"), dialog.networkCaptureTargetInput)
+    layout.addRow(dialog._networkCaptureRow)
+    dialog._networkCaptureRow.setVisible(False)  # Heuristic is the default → hidden until MILP is chosen
 
     folderRow = add_output_folder_row(
         dialog, "networkOutputFolder", "networkOutputBrowse", "Choose output folder for the network"
@@ -113,6 +121,11 @@ def connect_network_signals(dialog: "AnalysisDialog"):
     dialog.networkSinksDropdown.currentIndexChanged.connect(_update_capacity_field)
     _update_flow_field()
     _update_capacity_field()
+
+    # Capture target is only meaningful for MILP → reveal it only when MILP is selected (disabled for now).
+    dialog.networkMethodMilpRadio.toggled.connect(
+        lambda checked: dialog._networkCaptureRow.setVisible(dialog.networkMethodMilpRadio.isChecked())
+    )
 
     dialog.network_button.clicked.connect(
         lambda checked: run_task(

@@ -135,6 +135,7 @@ class AnalysisDialog(QDialog):
         self.networkFlowField: QgsFieldComboBox
         self.networkCapacityField: QgsFieldComboBox
         self.networkCaptureTargetInput: QLineEdit
+        self._networkCaptureRow: QWidget
         self.networkOutputFolder: QLineEdit
         self.networkOutputBrowse: QPushButton
         self.network_button: QPushButton
