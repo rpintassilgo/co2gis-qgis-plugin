@@ -16,8 +16,9 @@ from __future__ import annotations
 from collections import defaultdict, namedtuple
 from typing import Iterable
 
-# One network segment: an ordered run of grid cells between two nodes, and the flow it carries.
-Segment = namedtuple("Segment", ["cells", "flow"])
+# One network segment: an ordered run of grid cells between two nodes, the flow it carries, and
+# whether it *starts* at a junction (≥2 upstream paths merge there) — where CAPEX adds a booster.
+Segment = namedtuple("Segment", ["cells", "flow", "junction"])
 
 
 def build_edges(chains: Iterable) -> list:
@@ -28,6 +29,7 @@ def build_edges(chains: Iterable) -> list:
     :returns: list of :class:`Segment`; a cell used by several chains carries the sum
         of their flows (the trunk), and each segment's ``flow`` is the flow it carries
         (``min`` of its cells' flows — the terminal junction cell holds the higher sum).
+        ``junction`` is True when the segment starts where ≥2 paths merge (a trunk).
     """
     flow = defaultdict(float)
     succ = {}  # cell -> its single downstream cell
@@ -58,5 +60,6 @@ def build_edges(chains: Iterable) -> list:
             if is_node(cur) or cur not in succ:
                 break
             cur = succ[cur]
-        segments.append(Segment(run, min(flow[c] for c in run)))
+        is_junction = start in preds and len(preds[start]) >= 2
+        segments.append(Segment(run, min(flow[c] for c in run), is_junction))
     return segments

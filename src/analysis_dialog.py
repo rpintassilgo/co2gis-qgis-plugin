@@ -139,6 +139,17 @@ class AnalysisDialog(QDialog):
         self.networkOutputBrowse: QPushButton
         self.network_button: QPushButton
 
+        # Price Estimation — Single/Network mode (Network experimental; the network vector carries a
+        # per-segment flow so each segment is sized for its own diameter). Single picker is shared.
+        self.priceModeSingleRadio: QRadioButton
+        self.priceModeNetworkRadio: QRadioButton
+        self.priceModeButtonGroup: QButtonGroup
+        self._priceModeRow: QWidget
+        self._priceVectorStack: QStackedWidget
+        self._priceFlowInputStack: QStackedWidget
+        self.priceNetworkVectorDropdown: QComboBox
+        self.priceNetworkFlowField: QgsFieldComboBox
+
         self.pipelineVectorDropdown: QComboBox
         self.landUseCostsDropdown: QComboBox
         self.slopeCostsDropdown: QComboBox

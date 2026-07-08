@@ -8,6 +8,11 @@ callback (bridged to the thread-safe ``dialog.log_message``).
 
 Stays consistent with the routing surface (``core.lcp``) by sharing
 :func:`~src.core.comet.comet_cell_cost` and :data:`~src.constants.comet.N_CAP`.
+
+Two CAPEX entry points share the same physics helpers (``_diameter`` / ``_booster_cost`` /
+``_walk_pressure_segments``): :func:`compute_capex` costs a single pipeline (one diameter),
+and :func:`compute_network_capex` costs a network — each segment sized for its own flow, plus
+a junction booster where flows merge.
 """
 
 import os
@@ -25,6 +30,9 @@ from .raster import resample_raster
 # Canonical COMET cost-factor slots, in formula order. ``extract_cells`` /
 # ``extract_points`` key their inputs by these names.
 COST_NAMES = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)"]
+
+# Continuous operation: 1 Mt/yr spread over a full year in seconds (8766 h).
+SECONDS_PER_YEAR = 31_557_600.0
 
 
 def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, grid_width, grid_height):
@@ -98,20 +106,13 @@ def get_raster_value_at_point(raster_layer, point):
     return None
 
 
-def extract_cells(cost_specs, segments, infra_geoms, log):
-    """
-    Precise extraction: resample the present cost rasters to a common grid, then
-    walk the pipeline cell-by-cell computing the exact length within each cell
-    (Lcell) and counting infrastructure crossings (N) per cell.
+def _resample_grid(cost_specs, log):
+    """Resample the present cost rasters to a common grid (intersection extent, first
+    raster's resolution/CRS). Returns ``(grid, temp_dir)`` — the caller removes ``temp_dir``.
 
-    :param cost_specs: dict ``name -> {"path", "crs_wkt", "extent", "res", "name"}``
-        for the PRESENT cost rasters only. ``name`` is one of :data:`COST_NAMES`;
-        ``extent`` is ``(xmin, xmax, ymin, ymax)``.
-    :param segments: list of ``(x1, y1, x2, y2)`` pipeline vertex pairs, captured
-        on the main thread.
-    :param infra_geoms: list of detached ``QgsGeometry`` for the infrastructure
-        (crossings) features; empty when no vector was selected.
-    :returns: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples, one per unique cell.
+    ``grid`` holds the resampled ``Flu/Fs/Fc/Fci`` arrays (missing → constant 1.0) and the
+    grid geometry (``width, height, cell_width, cell_height, origin_x, origin_y``). Resampling
+    once lets a whole network reuse one grid (:func:`_walk_cells` per segment).
     """
     log("Step 1: Resampling all cost rasters to common resolution...")
 
@@ -132,62 +133,70 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
     ref_spec = present[0][1]
     ref_resolution = ref_spec["res"]
     ref_crs_wkt = ref_spec["crs_wkt"]
-
     log(f"  Reference resolution: {ref_resolution:.2f}m from {ref_spec['name']}")
 
-    # Resample present rasters only.
     temp_dir = tempfile.mkdtemp()
     target_extent = f"{xmin},{xmax},{ymin},{ymax}"
     resampled_data = {}
 
     for name, spec in present:
         resampled_path = os.path.join(temp_dir, f"_price_est_{name.replace(' ', '_')}.tif")
-
         resampled_output = resample_raster(
-            spec["path"],
-            resampled_path,
-            ref_resolution,
-            target_crs=ref_crs_wkt,
-            target_extent=target_extent,
+            spec["path"], resampled_path, ref_resolution, target_crs=ref_crs_wkt, target_extent=target_extent
         )
-
         if resampled_output:
             ds = gdal.Open(resampled_output)
             data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-
-            # Store metadata from first raster
             if not resampled_data:
-                width = ds.RasterXSize
-                height = ds.RasterYSize
-                geotrans = ds.GetGeoTransform()
-                resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans}
-
+                resampled_data["_meta"] = {
+                    "width": ds.RasterXSize,
+                    "height": ds.RasterYSize,
+                    "geotrans": ds.GetGeoTransform(),
+                }
             resampled_data[name] = data
             ds = None
             log(f"  ✓ Resampled {name}")
         else:
             raise RuntimeError(f"Failed to resample {spec['name']}")
 
-    # Get dimensions
     meta = resampled_data["_meta"]
-    width, height = meta["width"], meta["height"]
-    geotrans = meta["geotrans"]
-    cell_width = abs(geotrans[1])
-    cell_height = abs(geotrans[5])
-    origin_x = geotrans[0]
-    origin_y = geotrans[3]
+    width, height, geotrans = meta["width"], meta["height"], meta["geotrans"]
 
-    log(f"  Resampled grid: {width}x{height} cells, cell size: {cell_width:.2f}m x {cell_height:.2f}m")
-
-    # Create arrays — missing rasters default to 1.0 (neutral)
+    # Missing rasters default to 1.0 (neutral).
     Flu = resampled_data.get("Land Use (Flu)", np.ones((height, width), dtype=np.float32))
     Fs = resampled_data.get("Slope (Fs)", np.ones((height, width), dtype=np.float32))
     Fc = resampled_data.get("Corridors (Fc)", np.ones((height, width), dtype=np.float32))
     Fci = resampled_data.get("Crossings (Fci)", np.ones((height, width), dtype=np.float32))
-
     for name in COST_NAMES:
         if name not in resampled_data:
             log(f"  ⚠️ {name}: Not selected — assuming constant 1.0 (neutral)")
+
+    grid = {
+        "Flu": Flu,
+        "Fs": Fs,
+        "Fc": Fc,
+        "Fci": Fci,
+        "width": width,
+        "height": height,
+        "cell_width": abs(geotrans[1]),
+        "cell_height": abs(geotrans[5]),
+        "origin_x": geotrans[0],
+        "origin_y": geotrans[3],
+    }
+    log(f"  Resampled grid: {width}x{height} cells, cell size: {grid['cell_width']:.2f}m x {grid['cell_height']:.2f}m")
+    return grid, temp_dir
+
+
+def _walk_cells(grid, segments, infra_geoms, log):
+    """Walk a pipeline over a resampled ``grid`` (from :func:`_resample_grid`) cell by cell,
+    computing the exact length within each cell (Lcell) and counting infrastructure crossings (N).
+
+    :returns: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples, one per unique cell.
+    """
+    Flu, Fs, Fc, Fci = grid["Flu"], grid["Fs"], grid["Fc"], grid["Fci"]
+    width, height = grid["width"], grid["height"]
+    cell_width, cell_height = grid["cell_width"], grid["cell_height"]
+    origin_x, origin_y = grid["origin_x"], grid["origin_y"]
 
     log("Step 2: Extracting pipeline segments and calculating cell intersections...")
 
@@ -197,43 +206,30 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
         log(f"  Loaded {len(infra_geoms)} infrastructure features for N calculation")
 
     # PRE-PASS: Quick count of total unique cells (fast, no heavy geometry operations)
-    log("  Counting total unique cells...")
     unique_cells_set = set()
     for x1, y1, x2, y2 in segments:
-        cells_touched = get_intersected_cells(
-            x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, width, height
+        unique_cells_set.update(
+            get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, width, height)
         )
-        unique_cells_set.update(cells_touched)
-
     total_unique_cells = len(unique_cells_set)
     log(f"  Found {total_unique_cells} unique cells to process")
 
-    # Dictionary to accumulate data per cell: {(row, col): {'Fc': val, 'Fs': val, ..., 'L': total_length, 'N': count}}
+    # Dictionary to accumulate data per cell: {(row, col): {Fc, Fs, Flu, Fci, L, N}}
     cell_data = {}
-
     total_segments = 0
     processed_cells = 0
 
-    # Throttle progress logging to ~every 5% of unique cells (at least every cell for short
-    # routes). Logging every single cell floods the thread-safe log queue on long, fine-grid
-    # routes and stutters the UI; the heavy per-cell computation below is unchanged.
+    # Throttle progress logging to ~every 5% of unique cells (at least every cell for short routes).
     log_interval = max(1, total_unique_cells // 20)
 
-    # Process pipeline segments
     for x1, y1, x2, y2 in segments:
         total_segments += 1
-
-        # Create segment geometry
         segment_geom = QgsGeometry.fromPolylineXY([QgsPointXY(x1, y1), QgsPointXY(x2, y2)])
-
-        # Get cells intersected by this segment
         cells_touched = get_intersected_cells(
             x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, width, height
         )
 
-        # For each cell touched by this segment
         for col, row in cells_touched:
-            # Create cell polygon
             cell_x_min = origin_x + col * cell_width
             cell_x_max = cell_x_min + cell_width
             cell_y_max = origin_y - row * cell_height
@@ -242,7 +238,6 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
             cell_rect = QgsRectangle(cell_x_min, cell_y_min, cell_x_max, cell_y_max)
             cell_polygon = QgsGeometry.fromRect(cell_rect)
 
-            # Calculate intersection length (Lcell)
             intersection = segment_geom.intersection(cell_polygon)
             if intersection.isEmpty():
                 continue
@@ -252,17 +247,13 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
             # Count infrastructure intersections within this cell (N)
             n_in_cell = 0
             for infra_geom in infra_geoms:
-                # Check if infrastructure intersects both the segment AND the cell
                 if segment_geom.intersects(infra_geom):
-                    # Further check if intersection happens within this specific cell
                     infra_in_cell = infra_geom.intersection(cell_polygon)
                     if not infra_in_cell.isEmpty() and segment_geom.intersects(infra_in_cell):
                         n_in_cell += 1
 
-            # Initialize cell data if first time
             cell_key = (row, col)
-            is_new_cell = cell_key not in cell_data
-            if is_new_cell:
+            if cell_key not in cell_data:
                 cell_data[cell_key] = {
                     "Fc": float(Fc[row, col]),
                     "Fs": float(Fs[row, col]),
@@ -272,35 +263,41 @@ def extract_cells(cost_specs, segments, infra_geoms, log):
                     "N": 0,
                 }
                 processed_cells += 1
-
-                # Report progress on a throttled cadence (every ~5%) plus a final 100% line.
                 if processed_cells % log_interval == 0 or processed_cells == total_unique_cells:
                     pct = processed_cells / total_unique_cells * 100
                     log(f"  Processing cells: {processed_cells}/{total_unique_cells} ({pct:.0f}%)")
 
-            # Accumulate length and N
             cell_data[cell_key]["L"] += length_in_cell
             cell_data[cell_key]["N"] += n_in_cell
 
     log(f"  Processed {total_segments} segments across {len(cell_data)} unique cells")
 
-    # Convert dictionary to list of tuples
+    # Convert dictionary to list of tuples. If no infrastructure vector was provided, N defaults
+    # to 1 (preserves Fci contribution); cap N (same as LCP).
     values = []
     for (_row, _col), data in cell_data.items():
-        # If no infrastructure vector was provided, N defaults to 1 (preserves Fci contribution)
-        # Cap N (same as LCP)
         n_capped = min(max(data["N"], 1 if not infra_geoms else 0), N_CAP)
         values.append((data["Fc"], data["Fs"], data["Flu"], data["Fci"], n_capped, data["L"]))
 
     log(f"  ✓ Extracted {len(values)} cell entries with total length: {sum(v[5] for v in values):.2f}m")
-
-    # Cleanup temp files
-    try:
-        shutil.rmtree(temp_dir)
-    except BaseException:
-        pass
-
     return values
+
+
+def extract_cells(cost_specs, segments, infra_geoms, log):
+    """Precise extraction for a single route: resample the present cost rasters to a common
+    grid (:func:`_resample_grid`), then walk the pipeline cell by cell (:func:`_walk_cells`).
+
+    :param cost_specs: dict ``name -> {"path", "crs_wkt", "extent", "res", "name"}`` for the
+        PRESENT cost rasters only (``name`` one of :data:`COST_NAMES`).
+    :param segments: list of ``(x1, y1, x2, y2)`` pipeline vertex pairs (main thread).
+    :param infra_geoms: detached ``QgsGeometry`` list for the crossings features (may be empty).
+    :returns: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples, one per unique cell.
+    """
+    grid, temp_dir = _resample_grid(cost_specs, log)
+    try:
+        return _walk_cells(grid, segments, infra_geoms, log)
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def extract_points(cost_paths, segments, crossings_geoms, log):
@@ -399,88 +396,120 @@ def extract_points(cost_paths, segments, crossings_geoms, log):
     return values
 
 
-def compute_capex(values, eng, log):
-    """
-    Compute the total pipeline investment cost (Itotal) from per-cell/segment cost
-    factors and the engineering inputs.
+def extract_network_values(edges, cost_specs, cost_paths, infra_geoms, mode, log):
+    """Sample the cost factors along each network edge's segments, filling ``edge["values"]``.
 
-    Diameter D is derived once (Darcy-Weisbach); the route is split into segments
-    by the pressure budget (booster spacing), each segment cost (Ip) is the COMET
-    summation, and a booster station (Ib) is inserted between consecutive segments.
+    Precise resamples the common grid ONCE (:func:`_resample_grid`) and walks every edge over it;
+    fast samples points per edge (:func:`extract_points`). Mutates and returns ``edges``.
 
-    :param values: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples.
-    :param eng: dict with ``λ, M, p, Δp_Ltotal, total_pressure_drop,
-        admissible_MPa_km, Bc, Beff, α, β``.
-    :returns: ``{"I_total": float}``.
+    :param edges: list of ``{"flow", "junction", "segments": [(x1,y1,x2,y2)…]}``.
+    :param mode: ``"precise"`` or ``"fast"``.
     """
-    λ = eng["λ"]
-    M = eng["M"]
-    p = eng["p"]
-    Δp_Ltotal = eng["Δp_Ltotal"]
-    total_pressure_drop = eng["total_pressure_drop"]
-    admissible_MPa_km = eng["admissible_MPa_km"]
+    if mode == "precise":
+        grid, temp_dir = _resample_grid(cost_specs, log)
+        try:
+            for i, edge in enumerate(edges, start=1):
+                log(f"Segment {i}/{len(edges)} (flow {edge['flow']:g} Mt/yr): sampling cells...")
+                edge["values"] = _walk_cells(grid, edge["segments"], infra_geoms, log)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+    else:
+        for i, edge in enumerate(edges, start=1):
+            log(f"Segment {i}/{len(edges)} (flow {edge['flow']:g} Mt/yr): sampling points...")
+            edge["values"] = extract_points(cost_paths, edge["segments"], infra_geoms, log)
+    return edges
+
+
+def mt_yr_to_kg_s(flow_mt_yr):
+    """Continuous mass flow: Mt/yr → kg/s (1 Mt/yr ≈ 31.69 kg/s, 10⁹ kg over 8766 h)."""
+    return flow_mt_yr * 1e9 / SECONDS_PER_YEAR
+
+
+def _diameter(M, eng):
+    """Darcy-Weisbach inner pipeline diameter (m) for mass flow ``M`` (kg/s)."""
+    return ((8 * eng["λ"] * M**2) / (np.pi**2 * eng["p"] * eng["Δp_Ltotal"])) ** (1 / 5)
+
+
+def _booster_cost(M, eng):
+    """Booster station cost Ib (€) for flow ``M`` (kg/s), recovering one segment's Δp.
+
+    One rule for spacing boosters and junction boosters: Sc = M·Δp/(ρ·Beff) with
+    Δp = ``total_pressure_drop`` (MPa → Pa); Ib = (α·Sc[MW] + β)·1e6.
+    """
+    ΔP = eng["total_pressure_drop"] * 1e6  # MPa → Pa
+    Sc_MW = (M * ΔP) / (eng["p"] * eng["Beff"]) / 1e6
+    return (eng["α"] * Sc_MW + eng["β"]) * 1e6
+
+
+def _walk_pressure_segments(values, D, M, eng, log, indent=""):
+    """Split ``values`` (per-cell COMET factors + Lcell) into pressure-budget segments,
+    costing each (Ip = Bc·D·Σ) and inserting a spacing booster between consecutive ones.
+
+    The final (possibly short) segment gets no trailing booster. Booster spacing is derived
+    from the pressure budget (``total_pressure_drop / admissible_MPa_km``), not hardcoded.
+
+    :returns: ``(segment_costs, booster_costs)`` — lists of € (one Ip per segment, one Ib per gap).
+    """
     Bc = eng["Bc"]
-    Beff = eng["Beff"]
-    α = eng["α"]
-    β = eng["β"]
-
-    # Max segment length is derived from the pressure budget:
-    # segment (km) = total pressure drop (MPa) / admissible pressure drop (MPa/km)
-    max_segment_length = (total_pressure_drop / admissible_MPa_km) * 1000  # km → m
-    log(
-        f"Max segment length (booster spacing): {max_segment_length / 1000:.2f} km "
-        f"(= {total_pressure_drop} MPa / {admissible_MPa_km} MPa/km)"
-    )
+    max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000  # km → m
 
     segment_costs = []
     booster_costs = []
-    segment_index = 0
-
-    current_segment_cells = []
-    current_segment_length = 0
-
-    # Calculate diameter D once for the entire pipeline using total length
-    D = ((8 * λ * M**2) / (np.pi**2 * p * Δp_Ltotal)) ** (1 / 5)
-    log(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm")
-    log("--------------------------------------------------")
+    current_cells = []
+    current_length = 0.0
+    seg_index = 0
+    last_index = len(values) - 1
 
     # Final cell detected by index, not a float-sum comparison (see #15).
-    last_index = len(values) - 1
     for i, (Fc, Fs, Flu, Fci, N, Lcell) in enumerate(values):
-        current_segment_cells.append((Fc, Fs, Flu, Fci, N, Lcell))
-        current_segment_length += Lcell
+        current_cells.append((Fc, Fs, Flu, Fci, N, Lcell))
+        current_length += Lcell
 
-        segment_complete = current_segment_length >= max_segment_length
-        final_segment = i == last_index
-
-        if segment_complete or final_segment:
-            L_segment = current_segment_length
-
+        if current_length >= max_segment_length or i == last_index:
             summation = sum(
                 comet_cell_cost(fc_i, fs_i, flu_i, fci_i, n_i) * cl_i
-                for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_segment_cells
+                for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_cells
             )
-
             Ip = Bc * D * summation
             segment_costs.append(Ip)
-            log(f"Segment {segment_index + 1}: Length = {L_segment:.2f} m, Cost (Ip) = {Ip:,.2f} €")
+            log(f"{indent}Segment {seg_index + 1}: Length = {current_length:.2f} m, Cost (Ip) = {Ip:,.2f} €")
 
-            if not final_segment:
-                # Booster stations are placed at the end of each full segment.
-                # Pressure drop over a full segment = Δp/L × segment length (= total_pressure_drop)
-                ΔP_booster_segment = Δp_Ltotal * max_segment_length  # Pa (pressure drop over one segment)
-                Sc_W = (M * ΔP_booster_segment) / (p * Beff)  # W (compressor power)
-                Sc_MW = Sc_W / 1e6  # converted to MW
-                Ib = (α * Sc_MW + β) * 1e6  # Convert M€ to €
+            if i != last_index:
+                Ib = _booster_cost(M, eng)
                 booster_costs.append(Ib)
-                log(
-                    f"Booster Station after {max_segment_length / 1000:.2f} km: "
-                    f"ΔP_segment = {ΔP_booster_segment / 1e6:.2f} MPa, Sc = {Sc_MW:.2f} MW, Cost (Ib) = {Ib:,.2f} €"
-                )
+                log(f"{indent}Booster after {max_segment_length / 1000:.2f} km: Cost (Ib) = {Ib:,.2f} €")
 
-            current_segment_cells = []
-            current_segment_length = 0
-            segment_index += 1
+            current_cells = []
+            current_length = 0.0
+            seg_index += 1
+
+    return segment_costs, booster_costs
+
+
+def compute_capex(values, eng, log):
+    """
+    Compute the total pipeline investment cost (Itotal) for a single pipeline.
+
+    Diameter D is derived once (Darcy-Weisbach) from ``eng["M"]``; the route is split
+    into segments by the pressure budget (booster spacing), each segment cost (Ip) is
+    the COMET summation, and a booster station (Ib) is inserted between consecutive segments.
+
+    :param values: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples.
+    :param eng: dict with ``λ, M, p, Δp_Ltotal, total_pressure_drop, admissible_MPa_km,
+        Bc, Beff, α, β``.
+    :returns: ``{"I_total": float}``.
+    """
+    M = eng["M"]
+    D = _diameter(M, eng)
+    max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000
+    log(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm")
+    log(
+        f"Max segment length (booster spacing): {max_segment_length / 1000:.2f} km "
+        f"(= {eng['total_pressure_drop']} MPa / {eng['admissible_MPa_km']} MPa/km)"
+    )
+    log("--------------------------------------------------")
+
+    segment_costs, booster_costs = _walk_pressure_segments(values, D, M, eng, log)
 
     I_total = sum(segment_costs) + sum(booster_costs)
     log("--------------------------------------------------")
@@ -489,3 +518,53 @@ def compute_capex(values, eng, log):
     log("--------------------------------------------------")
 
     return {"I_total": I_total}
+
+
+def compute_network_capex(edges, eng, log):
+    """
+    Compute the total investment cost (Itotal) for a pipeline NETWORK.
+
+    Each edge is sized for ITS OWN flow: M from the edge's flow (Mt/yr → kg/s), a
+    diameter D from that M, then pressure-budget segments + spacing boosters. Where flows
+    merge (``junction``) a full junction booster is added, sized with the merged downstream
+    M (option A — same rule as a spacing booster). ``eng["M"]`` is ignored.
+
+    :param edges: list of ``{"flow": Mt/yr, "junction": bool, "values": [(Fc,Fs,Flu,Fci,N,Lcell)…]}``.
+    :param eng: as in :func:`compute_capex`.
+    :returns: ``{"I_total", "n_junction_boosters"}``.
+    """
+    max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000
+    log(f"Network CAPEX: {len(edges)} segment(s); booster spacing {max_segment_length / 1000:.2f} km")
+    log("--------------------------------------------------")
+
+    total_pipe = 0.0
+    total_spacing = 0.0
+    total_junction = 0.0
+    n_junction = 0
+
+    for idx, edge in enumerate(edges, start=1):
+        flow = edge["flow"]
+        M = mt_yr_to_kg_s(flow)
+        D = _diameter(M, eng)
+        log(f"Segment {idx}: flow {flow:g} Mt/yr → M {M:.2f} kg/s, D {D * 1000:.1f} mm")
+
+        segment_costs, booster_costs = _walk_pressure_segments(edge["values"], D, M, eng, log, indent="  ")
+        total_pipe += sum(segment_costs)
+        total_spacing += sum(booster_costs)
+
+        if edge.get("junction"):
+            Ib = _booster_cost(M, eng)
+            total_junction += Ib
+            n_junction += 1
+            log(f"  Junction booster (merge): Cost (Ib) = {Ib:,.2f} €")
+
+    I_total = total_pipe + total_spacing + total_junction
+    log("--------------------------------------------------")
+    log(
+        f"Network: pipe {total_pipe:,.0f} € + spacing boosters {total_spacing:,.0f} € "
+        f"+ {n_junction} junction booster(s) {total_junction:,.0f} €"
+    )
+    log(f"Calculated Total Network Price (Itotal): {I_total:,.2f} €")
+    log("--------------------------------------------------")
+
+    return {"I_total": I_total, "n_junction_boosters": n_junction}

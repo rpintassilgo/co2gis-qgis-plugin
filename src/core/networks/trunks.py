@@ -77,7 +77,8 @@ def _orient_source_to_sink(cells: list, source_xy: tuple, gt) -> list:
 def _write_network(segments, gt, proj: str, output_path: str) -> str:
     """Write the network segments to a GeoPackage (one LineString per segment).
 
-    Each feature carries ``flow`` (Mt/yr through the segment) and ``length`` (map units).
+    Each feature carries ``flow`` (Mt/yr through the segment), ``length`` (map units), and
+    ``junction`` (1 if it starts at a junction — where Price Estimation adds a booster).
     """
     if os.path.exists(output_path):
         os.remove(output_path)
@@ -89,16 +90,18 @@ def _write_network(segments, gt, proj: str, output_path: str) -> str:
     layer = ds.CreateLayer("network", srs if proj else None, ogr.wkbLineString)
     layer.CreateField(ogr.FieldDefn("flow", ogr.OFTReal))
     layer.CreateField(ogr.FieldDefn("length", ogr.OFTReal))
+    layer.CreateField(ogr.FieldDefn("junction", ogr.OFTInteger))
     defn = layer.GetLayerDefn()
-    for cells, seg_flow in segments:
+    for seg in segments:
         line = ogr.Geometry(ogr.wkbLineString)
-        for cell in cells:
+        for cell in seg.cells:
             x, y = _cell_center(cell, gt)
             line.AddPoint_2D(x, y)
         feat = ogr.Feature(defn)
         feat.SetGeometry(line)
-        feat.SetField("flow", float(seg_flow))
+        feat.SetField("flow", float(seg.flow))
         feat.SetField("length", float(line.Length()))
+        feat.SetField("junction", 1 if seg.junction else 0)
         layer.CreateFeature(feat)
         feat = None
     ds = None

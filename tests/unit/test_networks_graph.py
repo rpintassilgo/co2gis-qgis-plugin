@@ -38,6 +38,16 @@ def test_spur_ends_at_the_junction():
     assert spur_a.cells[-1] == (1, 2)  # junction
 
 
+def test_trunk_is_flagged_as_junction_spurs_are_not():
+    a = (2.0, [(0, 0), (0, 1), (1, 2), (2, 2)])
+    b = (3.0, [(0, 4), (0, 3), (1, 2), (2, 2)])
+    segments = build_edges([a, b])
+    trunk = next(s for s in segments if round(s.flow, 3) == 5.0)
+    spurs = [s for s in segments if round(s.flow, 3) != 5.0]
+    assert trunk.junction is True  # starts where the two spurs merge
+    assert all(s.junction is False for s in spurs)
+
+
 def test_single_chain_is_one_segment():
     segments = build_edges([(4.0, [(0, 0), (0, 1), (0, 2)])])
     assert len(segments) == 1
