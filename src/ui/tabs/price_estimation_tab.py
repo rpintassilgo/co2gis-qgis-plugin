@@ -243,6 +243,7 @@ def connect_price_estimation_signals(dialog: "AnalysisDialog"):
         idx = 1 if dialog.priceModeNetworkRadio.isChecked() else 0
         dialog._priceVectorStack.setCurrentIndex(idx)
         dialog._priceFlowInputStack.setCurrentIndex(idx)
+        update_pipeline_length(dialog)  # the length field follows the active (pipeline/network) vector
 
     dialog.priceModeNetworkRadio.toggled.connect(lambda checked: _on_price_mode_toggled())
 
@@ -250,6 +251,7 @@ def connect_price_estimation_signals(dialog: "AnalysisDialog"):
         dialog.priceNetworkFlowField.setLayer(layer_from_dropdown(dialog.priceNetworkVectorDropdown))
 
     dialog.priceNetworkVectorDropdown.currentIndexChanged.connect(_update_price_flow_field)
+    dialog.priceNetworkVectorDropdown.currentIndexChanged.connect(lambda: update_pipeline_length(dialog))
     _update_price_flow_field()
     dialog.landUseCostsDropdown.currentIndexChanged.connect(
         lambda: update_resolution_field(dialog, dialog.landUseCostsDropdown, dialog.landUseCostsResInput)
