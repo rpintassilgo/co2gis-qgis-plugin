@@ -25,6 +25,7 @@ from qgis.core import QgsGeometry, QgsPointXY, QgsRaster, QgsRasterLayer, QgsRec
 
 from ..constants.comet import N_CAP
 from .comet import comet_cell_cost
+from .networks.graph import cluster_edges
 from .raster import resample_raster
 
 # Canonical COMET cost-factor slots, in formula order. ``extract_cells`` /
@@ -441,23 +442,24 @@ def _booster_cost(M, eng):
     return (eng["α"] * Sc_MW + eng["β"]) * 1e6
 
 
-def _walk_pressure_segments(values, D, M, eng, log, indent=""):
-    """Split ``values`` (per-cell COMET factors + Lcell) into pressure-budget segments,
-    costing each (Ip = Bc·D·Σ) and inserting a spacing booster between consecutive ones.
+def _walk_pressure_segments(values, D, M, eng):
+    """Split ``values`` (per-cell COMET factors + Lcell) into pressure-budget **segments**.
 
-    The final (possibly short) segment gets no trailing booster. Booster spacing is derived
-    from the pressure budget (``total_pressure_drop / admissible_MPa_km``), not hardcoded.
+    Each segment spans up to ``max_segment_length`` (the pressure budget,
+    ``total_pressure_drop / admissible_MPa_km``); a spacing booster sits between consecutive
+    segments (the final, possibly short, segment gets none). No logging — the callers format
+    the output (single vs network).
 
-    :returns: ``(segment_costs, booster_costs)`` — lists of € (one Ip per segment, one Ib per gap).
+    :returns: ``(segments, boosters)`` — ``segments`` a list of ``(length_m, Ip)`` and
+        ``boosters`` a list of Ib (€), one per gap.
     """
     Bc = eng["Bc"]
     max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000  # km → m
 
-    segment_costs = []
-    booster_costs = []
+    segments = []
+    boosters = []
     current_cells = []
     current_length = 0.0
-    seg_index = 0
     last_index = len(values) - 1
 
     # Final cell detected by index, not a float-sum comparison (see #15).
@@ -470,29 +472,22 @@ def _walk_pressure_segments(values, D, M, eng, log, indent=""):
                 comet_cell_cost(fc_i, fs_i, flu_i, fci_i, n_i) * cl_i
                 for fc_i, fs_i, flu_i, fci_i, n_i, cl_i in current_cells
             )
-            Ip = Bc * D * summation
-            segment_costs.append(Ip)
-            log(f"{indent}Segment {seg_index + 1}: Length = {current_length:.2f} m, Cost (Ip) = {Ip:,.2f} €")
-
+            segments.append((current_length, Bc * D * summation))
             if i != last_index:
-                Ib = _booster_cost(M, eng)
-                booster_costs.append(Ib)
-                log(f"{indent}Booster after {max_segment_length / 1000:.2f} km: Cost (Ib) = {Ib:,.2f} €")
-
+                boosters.append(_booster_cost(M, eng))
             current_cells = []
             current_length = 0.0
-            seg_index += 1
 
-    return segment_costs, booster_costs
+    return segments, boosters
 
 
 def compute_capex(values, eng, log):
     """
     Compute the total pipeline investment cost (Itotal) for a single pipeline.
 
-    Diameter D is derived once (Darcy-Weisbach) from ``eng["M"]``; the route is split
-    into segments by the pressure budget (booster spacing), each segment cost (Ip) is
-    the COMET summation, and a booster station (Ib) is inserted between consecutive segments.
+    Diameter D is derived once (Darcy-Weisbach) from ``eng["M"]``; the route is split into
+    **segments** by the pressure budget (booster spacing), each segment cost (Ip) is the COMET
+    summation, and a booster station (Ib) is inserted between consecutive segments.
 
     :param values: list of ``(Fc, Fs, Flu, Fci, N, Lcell)`` tuples.
     :param eng: dict with ``λ, M, p, Δp_Ltotal, total_pressure_drop, admissible_MPa_km,
@@ -502,18 +497,27 @@ def compute_capex(values, eng, log):
     M = eng["M"]
     D = _diameter(M, eng)
     max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000
-    log(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm")
+
+    segments, boosters = _walk_pressure_segments(values, D, M, eng)
+    pipe_cost = sum(Ip for _, Ip in segments)
+    spacing_cost = sum(boosters)
+    I_total = pipe_cost + spacing_cost
+
+    # Same table styling as the network log (monospace): a header, one row per pressure segment,
+    # boosters marked with ⊕, and the totals footer.
     log(
-        f"Max segment length (booster spacing): {max_segment_length / 1000:.2f} km "
-        f"(= {eng['total_pressure_drop']} MPa / {eng['admissible_MPa_km']} MPa/km)"
+        f"Single pipeline CAPEX — M {M:g} kg/s → D {D * 1000:.1f} mm · "
+        f"booster spacing {max_segment_length / 1000:.0f} km "
+        f"(= {eng['total_pressure_drop']:g} MPa ÷ {eng['admissible_MPa_km']:g} MPa/km) · {len(segments)} segment(s)"
     )
     log("--------------------------------------------------")
-
-    segment_costs, booster_costs = _walk_pressure_segments(values, D, M, eng, log)
-
-    I_total = sum(segment_costs) + sum(booster_costs)
+    for idx, (length, Ip) in enumerate(segments):
+        log(f"{idx + 1:>4}  {length / 1000:>8.2f} km   Ip {Ip / 1e6:>8.2f} M€")
+        if idx < len(boosters):
+            log(f"      ⊕ spacing booster: Ib {boosters[idx] / 1e6:.2f} M€")
     log("--------------------------------------------------")
-    log(f"Pipeline Diameter (D): {D:.4f} m = {D * 1000:.2f} mm")
+    if spacing_cost:
+        log(f"Total: pipe {pipe_cost:,.0f} € + spacing boosters {spacing_cost:,.0f} €")
     log(f"Calculated Total Pipeline Price (Itotal): {I_total:,.2f} €")
     log("--------------------------------------------------")
 
@@ -524,41 +528,77 @@ def compute_network_capex(edges, eng, log):
     """
     Compute the total investment cost (Itotal) for a pipeline NETWORK.
 
-    Each edge is sized for ITS OWN flow: M from the edge's flow (Mt/yr → kg/s), a
-    diameter D from that M, then pressure-budget segments + spacing boosters. Where flows
-    merge (``junction``) a full junction booster is added, sized with the merged downstream
-    M (option A — same rule as a spacing booster). ``eng["M"]`` is ignored.
+    Each **pipe** (a network edge — a spur or trunk) is sized for ITS OWN flow: M from the pipe's
+    flow (Mt/yr → kg/s), a diameter D from that M, then the pipe is split into pressure-budget
+    **segments** + spacing boosters (exactly like a single pipeline). Where flows merge
+    (``junction``) a full junction booster is added, sized with the merged downstream M (option A —
+    same rule as a spacing booster). ``eng["M"]`` is ignored.
+
+    Terminology matches single mode: a *pipe* is the network edge; a *segment* is a pressure piece
+    within it (only >1 when a pipe is longer than the booster spacing).
 
     :param edges: list of ``{"flow": Mt/yr, "junction": bool, "values": [(Fc,Fs,Flu,Fci,N,Lcell)…]}``.
     :param eng: as in :func:`compute_capex`.
     :returns: ``{"I_total", "n_junction_boosters"}``.
     """
     max_segment_length = (eng["total_pressure_drop"] / eng["admissible_MPa_km"]) * 1000
-    log(f"Network CAPEX: {len(edges)} segment(s); booster spacing {max_segment_length / 1000:.2f} km")
-    log("--------------------------------------------------")
 
+    # Pass 1 — cost every pipe (network edge) for its own flow; stash the results on the edge.
     total_pipe = 0.0
     total_spacing = 0.0
     total_junction = 0.0
     n_junction = 0
-
-    for idx, edge in enumerate(edges, start=1):
-        flow = edge["flow"]
-        M = mt_yr_to_kg_s(flow)
+    for edge in edges:
+        M = mt_yr_to_kg_s(edge["flow"])
         D = _diameter(M, eng)
-        log(f"Segment {idx}: flow {flow:g} Mt/yr → M {M:.2f} kg/s, D {D * 1000:.1f} mm")
-
-        segment_costs, booster_costs = _walk_pressure_segments(edge["values"], D, M, eng, log, indent="  ")
-        total_pipe += sum(segment_costs)
-        total_spacing += sum(booster_costs)
-
+        segments, boosters = _walk_pressure_segments(edge["values"], D, M, eng)
+        edge["_D"] = D
+        edge["_length"] = sum(seg_len for seg_len, _ in segments)
+        edge["_ip"] = sum(Ip for _, Ip in segments)
+        edge["_segments"] = segments
+        edge["_spacing"] = boosters
+        edge["_junction_booster"] = _booster_cost(M, eng) if edge.get("junction") else 0.0
+        total_pipe += edge["_ip"]
+        total_spacing += sum(boosters)
         if edge.get("junction"):
-            Ib = _booster_cost(M, eng)
-            total_junction += Ib
+            total_junction += edge["_junction_booster"]
             n_junction += 1
-            log(f"  Junction booster (merge): Cost (Ib) = {Ib:,.2f} €")
-
     I_total = total_pipe + total_spacing + total_junction
+
+    # Pass 2 — log as a tree: cluster the pipes (by shared endpoints) and, per junction, show which
+    # feeder pipes merge into which trunk (by fid, so the log cross-references the map).
+    log(
+        f"Network CAPEX — {len(edges)} pipe(s), {n_junction} junction(s) · "
+        f"booster spacing {max_segment_length / 1000:.0f} km "
+        f"(= {eng['total_pressure_drop']:g} MPa ÷ {eng['admissible_MPa_km']:g} MPa/km)"
+    )
+    log("--------------------------------------------------")
+    clusters = cluster_edges(edges)
+    multi = len(clusters) > 1
+    for ci, cluster in enumerate(clusters, start=1):
+        indent = ""
+        if multi:
+            log(f"Cluster {ci}:")
+            indent = "  "
+        for e in cluster["edges"]:
+            role = "trunk" if e.get("junction") else "spur"
+            log(
+                f"{indent}{str(e.get('fid', '?')):>4}  {role:<5}  {e['flow']:>4.1f} Mt/yr  "
+                f"{e['_D'] * 1000:>4.0f} mm  {e['_length'] / 1000:>6.2f} km  Ip {e['_ip'] / 1e6:>7.2f} M€"
+            )
+            if len(e["_segments"]) > 1:  # a pipe longer than the booster spacing splits into segments
+                for s, (seg_len, Ip) in enumerate(e["_segments"]):
+                    log(f"{indent}        segment {s + 1}: {seg_len / 1000:.2f} km, Ip {Ip / 1e6:.2f} M€")
+                    if s < len(e["_spacing"]):
+                        log(f"{indent}        + spacing booster: Ib {e['_spacing'][s] / 1e6:.2f} M€")
+        for j in cluster["junctions"]:
+            trunk, feeders = j["trunk"], j["feeders"]
+            fed = " + ".join(f"fid {f.get('fid', '?')} ({f['flow']:g})" for f in feeders) or "(feeders)"
+            log(
+                f"{indent}  ⊕ junction: {fed} → fid {trunk.get('fid', '?')} ({trunk['flow']:g})"
+                f"  ·  booster Ib {trunk['_junction_booster'] / 1e6:.2f} M€"
+            )
+
     log("--------------------------------------------------")
     log(
         f"Network: pipe {total_pipe:,.0f} € + spacing boosters {total_spacing:,.0f} € "

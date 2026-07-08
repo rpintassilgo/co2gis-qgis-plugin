@@ -390,10 +390,12 @@ def _polyline_segments(layer):
 
 
 def _read_network_edges(layer, flow_field, log):
-    """Read each network feature as an edge: ``{"flow", "junction", "segments"}``.
+    """Read each network feature as a pipe: ``{"fid", "flow", "junction", "start", "end", "segments"}``.
 
-    ``junction`` comes from the 2a ``junction`` field (1 where flows merge); absent → no junction
-    boosters (a warning is logged, since a non-2a network won't carry the flag).
+    ``fid`` is the feature id (what Identify shows on the map, so the CAPEX log cross-references it).
+    ``start``/``end`` are the (rounded) route endpoints (geometry ordered upstream→downstream) used to
+    reconstruct the junctions. ``junction`` comes from the 2a ``junction`` field (1 where flows merge);
+    absent → no junction boosters (a warning is logged, since a non-2a network won't carry the flag).
     """
     has_junction = layer.fields().indexOf("junction") >= 0
     if not has_junction:
@@ -404,13 +406,22 @@ def _read_network_edges(layer, flow_field, log):
         flow = feature[flow_field]
         if flow is None:
             continue
-        junction = bool(feature["junction"]) if has_junction else False
         segs = _polyline_segments_from_geom(feature.geometry())
-        if segs:
-            edges.append({"flow": float(flow), "junction": junction, "segments": segs})
+        if not segs:
+            continue
+        edges.append(
+            {
+                "fid": feature.id(),
+                "flow": float(flow),
+                "junction": bool(feature["junction"]) if has_junction else False,
+                "start": (round(segs[0][0], 3), round(segs[0][1], 3)),
+                "end": (round(segs[-1][2], 3), round(segs[-1][3], 3)),
+                "segments": segs,
+            }
+        )
 
     n_junctions = sum(1 for e in edges if e["junction"])
-    log(f"  Network: {len(edges)} segment(s), {n_junctions} junction(s)")
+    log(f"  Network: {len(edges)} pipe(s), {n_junctions} junction(s)")
     return edges
 
 
@@ -483,14 +494,18 @@ class FormulaDialog(QDialog):
             "<p style='font-size:13px; color:#dddddd; line-height:1.5;'>"
             "ⓘ Estimates the total pipeline investment cost (<b>I<sub>total</sub></b>) from the selected "
             "pipeline (or network) vector and cost rasters.<br><br>"
-            "<b>Single</b> sizes the whole pipeline with one <b>diameter (D)</b> from the full length. "
-            "<b>Network</b> sizes <b>each segment</b> for its own flow — trunks (merged spurs) get a larger "
-            "diameter, and a booster is added where flows merge (junction).<br><br>"
-            "The <b>segment length</b> (booster spacing) is derived from the pressure budget "
-            "(total ÷ admissible pressure drop; 150 km by default). "
-            "<b>Precise</b> resamples the cost rasters and iterates over every GIS cell crossed "
-            "(L<sub>cell</sub> = exact length inside each cell); <b>Fast</b> samples 5 points along each "
-            "vector segment on the original rasters (max value, L<sub>seg</sub> = segment length)."
+            "<b>Single pipeline:</b> one <b>diameter (D)</b> for the whole route, from its total length.<br>"
+            "<b>Network:</b> each <b>pipe</b> (a spur or trunk edge of the network) is sized for "
+            "<b>its own flow</b>, so a trunk (merged spurs) gets a larger diameter than the spurs feeding it; "
+            "an extra <b>junction booster</b> is added where two pipes merge.<br><br>"
+            "<b>Segments &amp; boosters:</b> every pipe is split into <b>segments</b> of at most the "
+            "<b>booster spacing</b> — derived from the pressure budget (total ÷ admissible pressure drop; "
+            "150 km by default) — with a <b>spacing booster (I<sub>B</sub>)</b> between consecutive segments. "
+            "A pipe shorter than the spacing is a single segment (no spacing booster). In Single mode the whole "
+            "pipeline is one such pipe.<br><br>"
+            "<b>Sampling:</b> <b>Precise</b> resamples the cost rasters and iterates over every GIS cell "
+            "crossed (L<sub>cell</sub> = exact length inside each cell); <b>Fast</b> samples 5 points along "
+            "each straight vertex-to-vertex section of the vector (max value, L<sub>seg</sub> = section length)."
             "</p>"
         )
         intro_label.setWordWrap(True)

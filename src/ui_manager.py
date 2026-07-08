@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtGui import QFont
 from qgis.PyQt.QtWidgets import (
     QComboBox,
     QDialog,
@@ -118,6 +119,11 @@ def setup_ui(dialog: "AnalysisDialog"):
     # --- Log panel ---
     dialog.log_output = QTextEdit()
     dialog.log_output.setReadOnly(True)
+    # Monospace so aligned/tabular log output (e.g. the network CAPEX table) lines up. setFamilies
+    # gives a cross-platform fallback chain (macOS / Windows / Linux).
+    dialog._mono_font = QFont()
+    dialog._mono_font.setFamilies(["Menlo", "Consolas", "DejaVu Sans Mono", "Courier New", "monospace"])
+    dialog.log_output.setFont(dialog._mono_font)
 
     # Bottom bar: Clear Logs + Pop Out button
     log_buttons_layout = QHBoxLayout()
@@ -171,6 +177,7 @@ def setup_ui(dialog: "AnalysisDialog"):
             # Mirror: share the same QTextEdit document so both views stay in sync
             popout_view = QTextEdit()
             popout_view.setReadOnly(True)
+            popout_view.setFont(dialog._mono_font)
             popout_view.setDocument(dialog.log_output.document())
             win_layout.addWidget(popout_view)
 

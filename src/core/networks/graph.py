@@ -63,3 +63,53 @@ def build_edges(chains: Iterable) -> list:
         is_junction = start in preds and len(preds[start]) >= 2
         segments.append(Segment(run, min(flow[c] for c in run), is_junction))
     return segments
+
+
+def cluster_edges(edges):
+    """Group network edges into clusters and identify each cluster's junctions — for a clear log.
+
+    A **cluster** is a connected component (edges that share an endpoint); it is one source→sink tree.
+    A **junction** is a trunk edge (``junction`` True) with the feeder edges whose downstream end meets
+    the trunk's upstream start.
+
+    :param edges: dicts with at least ``fid``, ``flow``, ``junction`` and — for grouping — ``start`` /
+        ``end`` endpoint tuples (geometry ordered upstream→downstream). Edges without endpoints each
+        form their own singleton cluster (no grouping), so the function is safe for endpoint-less input.
+    :returns: list of clusters ``{"edges": [...sorted by flow...], "junctions": [{"trunk", "feeders"}]}``,
+        ordered by the cluster's smallest ``fid``.
+    """
+    n = len(edges)
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    # Union edges that share an endpoint (skip missing endpoints → those stay singletons).
+    point_edges = defaultdict(list)
+    for i, e in enumerate(edges):
+        for key in ("start", "end"):
+            if e.get(key) is not None:
+                point_edges[e[key]].append(i)
+    for members in point_edges.values():
+        for j in members[1:]:
+            parent[find(j)] = find(members[0])
+
+    groups = defaultdict(list)
+    for i in range(n):
+        groups[find(i)].append(edges[i])
+
+    clusters = []
+    for members in groups.values():
+        cl_edges = sorted(members, key=lambda e: e["flow"])
+        junctions = [
+            {"trunk": e, "feeders": [f for f in cl_edges if f is not e and f.get("end") == e.get("start")]}
+            for e in cl_edges
+            if e.get("junction")
+        ]
+        clusters.append({"edges": cl_edges, "junctions": junctions})
+
+    clusters.sort(key=lambda c: min(e.get("fid", 0) for e in c["edges"]))
+    return clusters
