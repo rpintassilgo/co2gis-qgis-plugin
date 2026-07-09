@@ -17,8 +17,10 @@ jobs:
 
       - name: Install dev dependencies
         # No QGIS needed: the unit suite exercises the pure domain math in
-        # src/core (QGIS/GDAL are stubbed in tests/conftest.py).
-        run: pip install ruff pytest numpy
+        # src/core (QGIS/GDAL are stubbed in tests/conftest.py). pulp + highspy are the
+        # optional Level-3 MILP solver — installed here so the MILP tests run in CI (they
+        # skip gracefully where the solver is absent).
+        run: pip install ruff pytest numpy pulp highspy
 
       - name: Lint (ruff)
         run: ruff check .
