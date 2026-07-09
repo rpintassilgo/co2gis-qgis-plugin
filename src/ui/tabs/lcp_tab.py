@@ -49,7 +49,7 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     combinedCostsLayout.addRow(combinedFileLayout)
     dialog.combine_button = QPushButton("Create Combined Raster")
     combinedCostsLayout.addRow(dialog.combine_button)
-    layout.addWidget(make_group_box("Create Combined Costs Raster", combinedCostsLayout))
+    layout.addRow(make_group_box("Create Combined Costs Raster", combinedCostsLayout))
 
     # ── Routing: one "Routing" group box holding the Single/Network mode selector, the shared
     # combined-raster picker, and a stack whose page swaps with the mode. Widgets are always built
@@ -83,7 +83,7 @@ def setup_lcp_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     routingLayout.addRow(dialog._routingStack)
 
     routing_title = "Routing" if dialog.network_mode_experimental else "Create Least Cost Path"
-    layout.addWidget(make_group_box(routing_title, routingLayout))
+    layout.addRow(make_group_box(routing_title, routingLayout))
 
     if not dialog.network_mode_experimental:
         dialog._routingModeRow.setVisible(False)

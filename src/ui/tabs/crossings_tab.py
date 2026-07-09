@@ -45,7 +45,7 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.runCreateRasterFromCrossingButton = QPushButton("Create Crossings Costs Raster")
     crossingsCostsLayout.addRow(dialog.runCreateRasterFromCrossingButton)
 
-    layout.addWidget(make_group_box("Create Crossings Costs Raster", crossingsCostsLayout))
+    layout.addRow(make_group_box("Create Crossings Costs Raster", crossingsCostsLayout))
 
     # ============================================================
     # Section 2: Create Number of Crossings Raster (N)
@@ -66,7 +66,7 @@ def setup_crossings_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.runCreateNRasterButton = QPushButton("Create Number of Crossings Raster")
     nRasterLayout.addRow(dialog.runCreateNRasterButton)
 
-    layout.addWidget(make_group_box("Create Number of Crossings Raster (N)", nRasterLayout))
+    layout.addRow(make_group_box("Create Number of Crossings Raster (N)", nRasterLayout))
 
 
 def connect_crossings_signals(dialog: "AnalysisDialog"):

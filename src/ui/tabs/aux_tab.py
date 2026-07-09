@@ -32,7 +32,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     infoCombineText = QLabel(
         "ⓘ Combine vectors functionality is useful to combine roads and railroads vectors for crossings to calculate crossings cost raster in Corridors and Crossings tab later."
     )
-    infoCombineText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoCombineText.setStyleSheet("font-size: 11px;")
     infoCombineText.setWordWrap(True)
     combineVectorsLayout.addRow(infoCombineText)
     dialog.vectorComboBox = QComboBox()
@@ -54,7 +54,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     infoResampleText = QLabel(
         "ⓘ For accurate GIS analysis, use a raster with a projected CRS (meters) instead of a geographic CRS (degrees), as degrees are not uniform in distance across different latitudes."
     )
-    infoResampleText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoResampleText.setStyleSheet("font-size: 11px;")
     infoResampleText.setWordWrap(True)
     resampleLayout.addRow(infoResampleText)
     dialog.resampleRasterComboBox = QComboBox()
@@ -81,7 +81,7 @@ def setup_aux_tab(dialog: "AnalysisDialog", layout: QVBoxLayout):
     infoClipText = QLabel(
         "ⓘ This functionality clips rasters based on a two-point vector layer (like a rectangle between points). It's useful to reduce raster sizes for faster processing. For example, when calculating a new LCP, you can clip DEM and land use rasters to make computations lighter."
     )
-    infoClipText.setStyleSheet("color: lightgrey; font-size: 11px;")
+    infoClipText.setStyleSheet("font-size: 11px;")
     infoClipText.setWordWrap(True)
     clipLayout.addRow(infoClipText)
     dialog.clipPointVectorComboBox = QComboBox()

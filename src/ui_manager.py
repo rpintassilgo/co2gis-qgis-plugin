@@ -35,21 +35,12 @@ def setup_ui(dialog: "AnalysisDialog"):
     dialog.resize(1200, 820)
     dialog.setSizeGripEnabled(True)
     dialog.setStyleSheet("""
-        QLabel, QComboBox, QPushButton, QGroupBox::title, QHeaderView::section {
-            color: white;
-        }
-        QPushButton#populateCometButton:disabled {
-            color: #808080;
-        }
-        QPushButton#populateCometButton {
-            color: white;
-        }
         QSplitter::handle {
-            background-color: #555555;
+            background-color: #888888;
             height: 4px;
         }
         QSplitter::handle:hover {
-            background-color: #888888;
+            background-color: #aaaaaa;
         }
     """)
 
@@ -64,7 +55,7 @@ def setup_ui(dialog: "AnalysisDialog"):
     dialog.settings_button.clicked.connect(lambda: open_settings_dialog(dialog))
     settings_corner = QWidget()
     settings_corner_layout = QHBoxLayout(settings_corner)
-    settings_corner_layout.setContentsMargins(0, 0, 0, 6)
+    settings_corner_layout.setContentsMargins(0, 3, 0, 3)
     settings_corner_layout.addWidget(dialog.settings_button)
     dialog.tabs.setCornerWidget(settings_corner, Qt.Corner.TopRightCorner)
 
@@ -168,9 +159,6 @@ def setup_ui(dialog: "AnalysisDialog"):
             win.setMinimumSize(600, 300)
             win.resize(800, 400)
             win.setSizeGripEnabled(True)
-            win.setStyleSheet(
-                "QDialog { background-color: #2a2a2a; } QTextEdit { color: white; background-color: #1e1e1e; }"
-            )
             win_layout = QVBoxLayout(win)
             win_layout.setContentsMargins(6, 6, 6, 6)
 

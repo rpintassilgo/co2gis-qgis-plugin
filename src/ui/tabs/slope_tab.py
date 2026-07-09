@@ -41,7 +41,7 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.create_slope_button = QPushButton("Create Slope Raster from DEM")
     createSlopeLayout.addRow(dialog.create_slope_button)
 
-    layout.addWidget(make_group_box("Create Slope from DEM", createSlopeLayout))
+    layout.addRow(make_group_box("Create Slope from DEM", createSlopeLayout))
 
     slopeCostsLayout = QFormLayout()
 
@@ -73,7 +73,7 @@ def setup_slope_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.create_slope_costs_button = QPushButton("Create Slope Costs Raster")
     slopeCostsLayout.addRow(dialog.create_slope_costs_button)
 
-    layout.addWidget(make_group_box("Create Slope Costs", slopeCostsLayout))
+    layout.addRow(make_group_box("Create Slope Costs", slopeCostsLayout))
 
     setup_slope_cost_table_logic(dialog)
 
