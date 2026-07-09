@@ -7,7 +7,7 @@ deps); ``class_capacity`` is a plain formula and always runs.
 import pytest
 
 from src.core.networks.candidate_graph import JUNCTION, CandidateArc
-from src.core.networks.milp import HAS_SOLVER, class_capacity, solve_network_milp
+from src.core.networks.milp import HAS_SOLVER, SelectedArc, class_capacity, junction_flags, solve_network_milp
 from src.core.networks.model import SINK, SOURCE, Node
 
 needs_solver = pytest.mark.skipif(not HAS_SOLVER, reason="PuLP/HiGHS not installed")
@@ -56,6 +56,18 @@ def test_class_capacity_grows_with_diameter():
     eng = _eng()
     assert class_capacity(0.5, eng) > class_capacity(0.2, eng)
     assert class_capacity(0.2, eng) > 0
+
+
+def test_junction_flags_mark_the_trunk_from_a_merge():
+    # A→J and B→J both feed J; the J→K arc starts where they merge → a junction (trunk).
+    selected = [
+        SelectedArc("A", "J", 0.4, 2.0),
+        SelectedArc("B", "J", 0.4, 3.0),
+        SelectedArc("J", "K", 0.5, 5.0),
+    ]
+    flags = junction_flags(selected)
+    assert flags[("J", "K")] is True
+    assert flags[("A", "J")] is False and flags[("B", "J")] is False
 
 
 @needs_solver

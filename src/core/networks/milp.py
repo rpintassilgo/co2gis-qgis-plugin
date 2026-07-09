@@ -14,7 +14,7 @@ synthetic graphs. Per-arc *flow*, *diameter* and *selection* are MILP **outputs*
 from __future__ import annotations
 
 import math
-from collections import defaultdict, namedtuple
+from collections import Counter, defaultdict, namedtuple
 from typing import Sequence
 
 from ..capex import SECONDS_PER_YEAR, _booster_cost, mt_yr_to_kg_s
@@ -132,10 +132,24 @@ def solve_network_milp(nodes: Sequence, arcs: Sequence, target: float, eng: dict
     for a in arcs:
         for di, (diameter, _cap) in enumerate(classes):
             if (build[(a.u_id, a.v_id, di)].value() or 0) > 0.5:
-                carried = (flow[(a.u_id, a.v_id)].value() or 0) + (flow[(a.v_id, a.u_id)].value() or 0)
-                selected.append(SelectedArc(a.u_id, a.v_id, diameter, carried))
+                f_uv = flow[(a.u_id, a.v_id)].value() or 0
+                f_vu = flow[(a.v_id, a.u_id)].value() or 0
+                # Orient the arc along the flow (upstream → downstream) so junctions can be read.
+                up, down = (a.u_id, a.v_id) if f_uv >= f_vu else (a.v_id, a.u_id)
+                selected.append(SelectedArc(up, down, diameter, f_uv + f_vu))
     log(f"✓ MILP: {len(selected)} link(s) built, total cost {pulp.value(prob.objective):,.0f} €.")
     return selected
+
+
+def junction_flags(selected: Sequence) -> dict:
+    """Which oriented arcs start at a **junction** (≥2 arcs feed their upstream node → a trunk).
+
+    :param selected: :class:`SelectedArc` list oriented upstream→downstream (from
+        :func:`solve_network_milp`).
+    :returns: ``{(u_id, v_id): bool}`` — True where the arc's upstream node is a merge point.
+    """
+    in_degree = Counter(arc.v_id for arc in selected)  # nodes that are a downstream endpoint
+    return {(arc.u_id, arc.v_id): in_degree[arc.u_id] >= 2 for arc in selected}
 
 
 def _pulp_highs_solver():
