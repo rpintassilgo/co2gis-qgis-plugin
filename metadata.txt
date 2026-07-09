@@ -8,7 +8,7 @@ name=CO2GIS
 qgisMinimumVersion=3.16
 qgisMaximumVersion=4.99
 description=CO2 transport pipeline routing and CAPEX estimation for CCS infrastructure planning.
-version=0.3.0
+version=0.4.0
 author=Rodrigo Pintassilgo
 email=co2gis.support@gmail.com
 
@@ -22,7 +22,8 @@ repository=https://github.com/rpintassilgo/co2gis-qgis-plugin
 
 hasProcessingProvider=no
 
-changelog=0.3.0 - Added: configurable GRASS r.cost memory budget (new Settings dialog); optional r.cost/r.drain diagnostic rasters in the LCP tab. Fixed: crash when reloading/unloading during a running task; Crossings buttons scheduling the task twice. Changed: throttled precise-mode progress logging and aligned fast-mode logging. Internal: unit test suite + CI, tag-triggered release pipeline.
+changelog=0.4.0 - Added: experimental Network mode (opt-in via Settings) — route many CO2 sources to many sinks as shared trunks, size each pipe for its own aggregated flow, and add a booster station at each junction; the least-cost-path and Price Estimation logs now render as aligned tables. Fixed: the dialog is legible in QGIS light mode (it follows the active palette in both light and dark themes); group boxes and the corner Settings button now align correctly. Changed: reorganised the cost-factor and tab modules into core/factors and ui/tabs subpackages. Internal: added network-graph and network-CAPEX unit tests.
+    0.3.0 - Added: configurable GRASS r.cost memory budget (new Settings dialog); optional r.cost/r.drain diagnostic rasters in the LCP tab. Fixed: crash when reloading/unloading during a running task; Crossings buttons scheduling the task twice. Changed: throttled precise-mode progress logging and aligned fast-mode logging. Internal: unit test suite + CI, tag-triggered release pipeline.
     0.2.1 - Packaging: exclude dev-only config (.pre-commit-config.yaml, pyproject.toml) from the published plugin ZIP.
     0.2.0 - QGIS 4 / Qt6 support; fixes: worker-thread crashes, false success on errors, price estimation returning 0; internal refactor (centralized COMET model, core/UI separation, DRY); added Ruff + pre-commit.
     0.1.0 - Initial release: COMET multi-criteria cost surface, GRASS-based LCP routing, CAPEX estimation with precise and fast modes.
