@@ -55,7 +55,7 @@ def setup_ui(dialog: "AnalysisDialog"):
     dialog.settings_button.clicked.connect(lambda: open_settings_dialog(dialog))
     settings_corner = QWidget()
     settings_corner_layout = QHBoxLayout(settings_corner)
-    settings_corner_layout.setContentsMargins(0, 0, 0, 6)
+    settings_corner_layout.setContentsMargins(0, 3, 0, 3)
     settings_corner_layout.addWidget(dialog.settings_button)
     dialog.tabs.setCornerWidget(settings_corner, Qt.Corner.TopRightCorner)
 
