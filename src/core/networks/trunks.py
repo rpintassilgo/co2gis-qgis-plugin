@@ -1,12 +1,15 @@
-"""Level-2 heuristic: shared trunks via a graph built from the r.drain paths.
+"""Network routing → geometry: the Level-2 heuristic and the Level-3 MILP.
 
-Routes like Level 1 (``assign_star`` → one ``r.cost`` per sink → one ``r.drain`` per
-source), then reads each source's route as an ordered **chain of grid cells** and hands
-the chains to :func:`src.core.networks.graph.build_edges`. Overlaying the chains
-accumulates flow where they share the exact same cell (the real junction) and splits the
-network into **segments**, each written to ``network.gpkg`` with a per-segment ``flow``
-and ``length``. No raster/vector hybrid — the flow lives on the vector, split at the true
-merges. Qt-free / project-free like ``core/lcp.py``; the graph step is unit-tested.
+**Level 2** (:func:`route_network_heuristic`) routes like Level 1 (``assign_star`` → one
+``r.cost`` per sink → one ``r.drain`` per source), reads each route as an ordered **chain of
+grid cells**, and hands the chains to :func:`~src.core.networks.graph.build_edges`: overlapping
+cells accumulate flow (the real junction) and split the network into segments.
+
+**Level 3** (:func:`route_network_milp`) instead builds a candidate graph, solves the
+fixed-charge MILP (:mod:`~src.core.networks.milp`), and ``r.drain``\\s only the **selected** links.
+
+Both write ``network.gpkg`` with a per-segment ``flow`` + ``junction`` (priced by Price
+Estimation). Qt-free / project-free like ``core/lcp.py``; the pure graph/MILP steps are unit-tested.
 
 Heuristic limitation: paths merge only on *exact* cell overlap, so two sources whose
 least-cost paths run one cell apart (parallel) stay as two segments until their cells
@@ -25,7 +28,9 @@ from osgeo import gdal, ogr, osr
 
 from ...constants.lcp import DEFAULT_RCOST_MEMORY_MB
 from ..lcp import run_r_cost, run_r_drain_and_vectorize
-from .graph import build_edges
+from .candidate_graph import build_candidate_graph
+from .graph import Segment, build_edges
+from .milp import junction_flags, solve_network_milp
 from .model import Node, assign_star, group_by_sink
 from .routing import _coord, _slug
 
@@ -171,3 +176,63 @@ def route_network_heuristic(
 
     log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → {os.path.basename(output_path)}")
     return {"network_path": output_path, "segments": segments, "edges": edges, "routes": routes}
+
+
+def route_network_milp(
+    combined_raster_path: str,
+    sources: Sequence[Node],
+    sinks: Sequence[Node],
+    target: float,
+    output_path: str,
+    spacing: float,
+    eng: dict,
+    k: int = 6,
+    memory: int = DEFAULT_RCOST_MEMORY_MB,
+    log=lambda msg: None,
+) -> dict:
+    """MILP network design: candidate graph → fixed-charge MILP → r.drain the selected links.
+
+    Builds the candidate graph (:func:`~candidate_graph.build_candidate_graph`), solves the
+    trunk-network MILP (:func:`~milp.solve_network_milp` — which links to build, at which pipe size,
+    to meet the ``target`` (Mt/yr) within the sinks' injection rates), then ``r.drain``\\s only the
+    selected links and writes them to ``output_path`` with per-segment ``flow`` + ``junction`` — the
+    same format the Level-2 heuristic produces, so Price Estimation prices it the same way.
+
+    :returns: ``{"network_path", "segments", "selected"}``. Does NOT touch the project.
+    """
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    ras = gdal.Open(combined_raster_path)
+    if ras is None:
+        raise RuntimeError(f"Could not open combined raster: {combined_raster_path}")
+    gt, proj = ras.GetGeoTransform(), ras.GetProjection()
+    ras = None
+
+    nodes, arcs = build_candidate_graph(combined_raster_path, sources, sinks, spacing, k, memory=memory, log=log)
+    selected = solve_network_milp(nodes, arcs, target, eng, log=log)
+    flags = junction_flags(selected)
+    node_by_id = {n.id: n for n in nodes}
+
+    tmp = tempfile.mkdtemp()
+    segments = []
+    try:
+        for arc in selected:
+            up, down = node_by_id[arc.u_id], node_by_id[arc.v_id]
+            log(f"  r.drain: {arc.u_id} → {arc.v_id} (flow {arc.flow:g} Mt/yr, D {arc.diameter * 1000:.0f} mm)")
+            cost_out = os.path.join(tmp, f"cost_{_slug(arc.u_id)}.tif")
+            dir_out = os.path.join(tmp, f"dir_{_slug(arc.u_id)}.tif")
+            cost_result = run_r_cost(combined_raster_path, _coord(up), cost_out, dir_out, memory=memory)
+            route_vec = os.path.join(tmp, f"arc_{_slug(arc.u_id)}_{_slug(arc.v_id)}.gpkg")
+            run_r_drain_and_vectorize(cost_result, _coord(down), route_vec, log=log)
+
+            cells = _orient_source_to_sink(_read_route_cells(route_vec, gt), (up.x, up.y), gt)
+            if len(cells) >= 2:
+                segments.append(Segment(cells, arc.flow, flags[(arc.u_id, arc.v_id)]))
+        _write_network(segments, gt, proj, output_path)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    log(f"✓ MILP network: {len(segments)} link(s) → {os.path.basename(output_path)}")
+    return {"network_path": output_path, "segments": segments, "selected": selected}
