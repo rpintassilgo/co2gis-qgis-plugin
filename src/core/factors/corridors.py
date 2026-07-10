@@ -150,7 +150,7 @@ def create_corridor_cost_raster_with_buffers(
     for temp_file in [temp_lu_path, temp_corridor_mask, temp_buffered_corridors]:
         try:
             os.remove(temp_file)
-        except BaseException:
+        except OSError:
             pass
 
     log("Corridor cost raster created successfully")
