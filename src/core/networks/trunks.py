@@ -212,7 +212,7 @@ def route_network_milp(
 
     nodes, arcs = build_candidate_graph(combined_raster_path, sources, sinks, spacing, k, memory=memory, log=log)
     selected = solve_network_milp(nodes, arcs, target, eng, log=log)
-    flags = junction_flags(selected)
+    flags = junction_flags(selected, [s.id for s in sources], [s.id for s in sinks])
     node_by_id = {n.id: n for n in nodes}
 
     tmp = tempfile.mkdtemp()

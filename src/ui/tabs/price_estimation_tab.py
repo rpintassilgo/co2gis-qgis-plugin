@@ -32,6 +32,7 @@ from ...core.capex import (
 from ...task_manager import run_task
 from ...utils import get_layer_path, layer_from_dropdown, update_pipeline_length, update_resolution_field
 from ...widgets.browse_row import make_group_box
+from ..engineering_inputs import read_engineering_inputs
 
 if TYPE_CHECKING:
     from ...analysis_dialog import AnalysisDialog
@@ -351,22 +352,8 @@ def _price_prepare(dialog: "AnalysisDialog") -> dict:
             raise ValueError("Pipeline vector must be selected.")
         segments = _polyline_segments(pipeline_layer)
 
-    # Engineering inputs.
-    admissible_MPa_km = float(dialog.pressureDropInput.text())  # Δp/L, MPa/km
-    if admissible_MPa_km <= 0:
-        raise ValueError("Admissible Pressure Drop must be greater than zero.")
-    eng = {
-        "λ": float(dialog.frictionFactorInput.text()),
-        "M": float(dialog.co2MassFlowRateInput.text()),
-        "p": float(dialog.co2densityInput.text()),
-        "Δp_Ltotal": admissible_MPa_km * 1000,  # MPa/km → Pa/m (pressure drop per meter)
-        "total_pressure_drop": float(dialog.totalPressureDropInput.text()),  # MPa (max drop per segment)
-        "admissible_MPa_km": admissible_MPa_km,
-        "Bc": float(dialog.standardizedCostFactorInput.text()),
-        "Beff": float(dialog.boosterEfficiencyInput.text()),
-        "α": float(dialog.boosterVariableCostInput.text()),  # M€/MW (COMET default: capex.BOOSTER_VARIABLE_COST)
-        "β": float(dialog.boosterFixedCostInput.text()),  # M€ fixed cost (COMET default: capex.BOOSTER_FIXED_COST)
-    }
+    # Engineering inputs (shared with the Level-3 MILP — one source of truth).
+    eng = read_engineering_inputs(dialog)
 
     return {
         "network": network_mode,
