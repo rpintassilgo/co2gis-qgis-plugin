@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 from typing import TYPE_CHECKING
 
@@ -266,32 +267,32 @@ def _lcp_work(params: dict) -> dict:
     """
     log = params["log"]
     temp_dir = tempfile.mkdtemp()
-    cost_output_path = params["cost_output"] or os.path.join(temp_dir, "cost_surface.tif")
-    direction_output_path = params["direction_output"] or os.path.join(temp_dir, "direction_surface.tif")
+    try:
+        cost_output_path = params["cost_output"] or os.path.join(temp_dir, "cost_surface.tif")
+        direction_output_path = params["direction_output"] or os.path.join(temp_dir, "direction_surface.tif")
 
-    log("Running r.cost to compute cost surface...")
-    log(f"Cost raster: {params['combined_path']}")
-    log(f"Start point: {params['origin']}")
-    log(f"r.cost memory budget: {params['memory']} MB")
-    cost_result = run_r_cost(
-        params["combined_path"], params["origin"], cost_output_path, direction_output_path, memory=params["memory"]
-    )
-    log("r.cost completed successfully.")
+        log("Running r.cost to compute cost surface...")
+        log(f"Cost raster: {params['combined_path']}")
+        log(f"Start point: {params['origin']}")
+        log(f"r.cost memory budget: {params['memory']} MB")
+        cost_result = run_r_cost(
+            params["combined_path"], params["origin"], cost_output_path, direction_output_path, memory=params["memory"]
+        )
+        log("r.cost completed successfully.")
 
-    log(f"Destination point: {params['dest']}")
-    vector_output = run_r_drain_and_vectorize(
-        cost_result, params["dest"], params["vector_output"], drain_output=params["drain_output"], log=log
-    )
+        log(f"Destination point: {params['dest']}")
+        vector_output = run_r_drain_and_vectorize(
+            cost_result, params["dest"], params["vector_output"], drain_output=params["drain_output"], log=log
+        )
 
-    import shutil
-
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    return {
-        "vector_output": vector_output,
-        "cost_output": params["cost_output"],
-        "direction_output": params["direction_output"],
-        "drain_output": params["drain_output"],
-    }
+        return {
+            "vector_output": vector_output,
+            "cost_output": params["cost_output"],
+            "direction_output": params["direction_output"],
+            "drain_output": params["drain_output"],
+        }
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def _lcp_publish(dialog: "AnalysisDialog", result: dict):
