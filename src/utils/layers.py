@@ -83,6 +83,7 @@ DROPDOWN_REGISTRY = [
     ("crossingRefRasterComboBox", "raster", None),
     ("nCrossingRefRasterComboBox", "raster", None),
     ("corridorRefRasterComboBox", "raster", None),
+    ("corridorLandUseComboBox", "raster", None),
     # Point-geometry vector dropdowns.
     ("clipPointVectorComboBox", "point", None),
     ("networkSourcesDropdown", "point", None),
