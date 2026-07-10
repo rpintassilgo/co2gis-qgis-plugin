@@ -580,8 +580,12 @@ def compute_network_capex(edges, eng, log):
         if multi:
             log(f"Cluster {ci}:")
             indent = "  "
+        # "trunk" = the highest-flow pipe(s) of the cluster, "spur" = a feeder — a topology role read
+        # from the flow, so it's correct for both methods (the MILP flags the source→source feeder as a
+        # junction, not the trunk, so the flag itself can't label the role).
+        max_flow = max((e["flow"] for e in cluster["edges"]), default=0.0)
         for e in cluster["edges"]:
-            role = "trunk" if e.get("junction") else "spur"
+            role = "trunk" if e["flow"] >= max_flow - 1e-9 else "spur"
             log(
                 f"{indent}{str(e.get('fid', '?')):>4}  {role:<5}  {e['flow']:>4.1f} Mt/yr  "
                 f"{e['_D'] * 1000:>4.0f} mm  {e['_length'] / 1000:>6.2f} km  Ip {e['_ip'] / 1e6:>7.2f} M€"
@@ -592,12 +596,13 @@ def compute_network_capex(edges, eng, log):
                     if s < len(e["_spacing"]):
                         log(f"{indent}        + spacing booster: Ib {e['_spacing'][s] / 1e6:.2f} M€")
         for j in cluster["junctions"]:
-            trunk, feeders = j["trunk"], j["feeders"]
-            fed = " + ".join(f"fid {f.get('fid', '?')} ({f['flow']:g})" for f in feeders) or "(feeders)"
-            log(
-                f"{indent}  ⊕ junction: {fed} → fid {trunk.get('fid', '?')} ({trunk['flow']:g})"
-                f"  ·  booster Ib {trunk['_junction_booster'] / 1e6:.2f} M€"
-            )
+            pipe, feeders = j["trunk"], j["feeders"]
+            fid, flow, ib = pipe.get("fid", "?"), pipe["flow"], pipe["_junction_booster"] / 1e6
+            # Where the heuristic knows which pipes merge, name them ("fed by …"); the MILP puts the
+            # booster on a hub-to-hub link with no separate feeders, so just name the pipe.
+            fed = " + ".join(f"fid {f.get('fid', '?')} ({f['flow']:g})" for f in feeders)
+            detail = f": fed by {fed}" if fed else ""
+            log(f"{indent}  ⊕ junction booster on fid {fid} ({flow:g} Mt/yr){detail}  ·  Ib {ib:.2f} M€")
 
     log("--------------------------------------------------")
     log(
