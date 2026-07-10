@@ -286,9 +286,9 @@ def _network_publish(dialog: "AnalysisDialog", result: dict):
             dialog.log_message(
                 f"  link {arc.u_id} → {arc.v_id}: flow {arc.flow:g} Mt/yr, D {arc.diameter * 1000:.0f} mm", "Network"
             )
-    else:  # heuristic: log each source→sink route
-        for edge in result["edges"]:
-            dialog.log_message(f"  route {edge.source_id} → {edge.sink_id}: flow {edge.flow} Mt/yr", "Network")
+    else:  # heuristic (greedy tree): the sources gathered into the network
+        routes = result.get("routes", [])
+        dialog.log_message(f"  {len(routes)} source(s) gathered into the tree", "Network")
 
 
 def _summarize_flows(segments) -> str:

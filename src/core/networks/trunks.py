@@ -24,14 +24,15 @@ import shutil
 import tempfile
 from typing import Sequence
 
+import numpy as np
 from osgeo import gdal, ogr, osr
 
 from ...constants.lcp import DEFAULT_RCOST_MEMORY_MB
 from ..lcp import run_r_cost, run_r_drain_and_vectorize
 from .candidate_graph import build_candidate_graph
-from .graph import Segment, build_edges
+from .graph import Segment, build_edges, greedy_tree_chains
 from .milp import junction_flags, solve_network_milp
-from .model import Node, assign_star, group_by_sink
+from .model import Node
 from .routing import _coord, _slug
 
 
@@ -79,6 +80,24 @@ def _orient_source_to_sink(cells: list, source_xy: tuple, gt) -> list:
     return cells if d_first <= d_last else list(reversed(cells))
 
 
+def _write_start_raster(cells, shape, gt, proj: str, path: str) -> str:
+    """Rasterize the current network cells as an r.cost start raster (1 = start, 0 = null)."""
+    rows, cols = shape
+    arr = np.zeros((rows, cols), dtype=np.uint8)
+    for r, c in cells:
+        if 0 <= r < rows and 0 <= c < cols:
+            arr[r, c] = 1
+    ds = gdal.GetDriverByName("GTiff").Create(path, cols, rows, 1, gdal.GDT_Byte)
+    ds.SetGeoTransform(gt)
+    if proj:
+        ds.SetProjection(proj)
+    band = ds.GetRasterBand(1)
+    band.WriteArray(arr)
+    band.SetNoDataValue(0)
+    ds = None
+    return path
+
+
 def _write_network(segments, gt, proj: str, output_path: str) -> str:
     """Write the network segments to a GeoPackage (one LineString per segment).
 
@@ -121,61 +140,71 @@ def route_network_heuristic(
     memory: int = DEFAULT_RCOST_MEMORY_MB,
     log=lambda msg: None,
 ) -> dict:
-    """Heuristic network design: nearest-sink routing + shared trunks via a graph.
+    """Heuristic network design: a greedy least-cost tree (Prim on the cost surface, issue #71).
 
-    Routes each source to its nearest sink (``assign_star`` → per-sink ``r.cost`` →
-    per-source ``r.drain``), reads each route as a cell chain, then builds the network
-    graph: overlapping cells sum their flow (trunks) and the network is split into
-    segments at the real junctions. The network is written to ``output_path`` (a GeoPackage).
+    Seeds the network with the sink cells, then adds sources one at a time (largest flow first): each
+    ``r.cost`` accumulation starts from the **whole network built so far** (multi-origin), and the
+    source's ``r.drain`` ties it into the **nearest existing network cell** — a built pipe (forming a
+    shared trunk / a source→source gathering line) or a sink. Full source→sink chains are then rebuilt
+    (:func:`~graph.greedy_tree_chains`) and handed to :func:`~graph.build_edges` for per-segment flow.
+    The network is written to ``output_path`` (a GeoPackage). Unlike routing each source independently,
+    later paths join the corridor already built instead of running parallel and merging late.
 
-    :returns: ``{"network_path", "segments", "edges", "routes"}`` — the network vector
-        (per-segment ``flow`` + ``length``), the :class:`~graph.Segment` list, the
-        assignment Edges, and per-edge ``(source_id, sink_id)``. Does NOT touch the project.
+    :returns: ``{"network_path", "segments", "routes"}`` — the network vector (per-segment ``flow`` +
+        ``length``), the :class:`~graph.Segment` list, and the gathered source ids. Does NOT touch the
+        project.
     """
     out_dir = os.path.dirname(output_path)
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
-    edges = assign_star(sources, sinks)
-    nodes_by_id = {n.id: n for n in list(sources) + list(sinks)}
-    grouped = group_by_sink(edges)
 
     ras = gdal.Open(combined_raster_path)
     if ras is None:
         raise RuntimeError(f"Could not open combined raster: {combined_raster_path}")
     gt = ras.GetGeoTransform()
     proj = ras.GetProjection()
+    shape = (ras.RasterYSize, ras.RasterXSize)
     ras = None
 
+    # Seed the network with the sink cells; grow it one source at a time (largest flow first, so the
+    # trunk to a sink is laid before the small spurs that snap onto it).
+    seed_cells = [_cell_of(sink.x, sink.y, gt) for sink in sinks]
+    network_cells = set(seed_cells)
+    ordered = sorted(sources, key=lambda s: s.flow, reverse=True)
+
     tmp = tempfile.mkdtemp()
-    chains = []
+    steps = []
     routes = []
     try:
-        for sink_id, sink_edges in grouped.items():
-            sink = nodes_by_id[sink_id]
-            log(f"r.cost accumulation from sink '{sink_id}' ({len(sink_edges)} source(s))...")
-            cost_out = os.path.join(tmp, f"cost_{_slug(sink_id)}.tif")
-            dir_out = os.path.join(tmp, f"dir_{_slug(sink_id)}.tif")
-            cost_result = run_r_cost(combined_raster_path, _coord(sink), cost_out, dir_out, memory=memory)
+        for i, source in enumerate(ordered, start=1):
+            log(
+                f"r.cost from the network ({len(network_cells)} cell(s)) → tie in source '{source.id}' "
+                f"({i}/{len(ordered)}, flow {source.flow:g})..."
+            )
+            start_ras = _write_start_raster(network_cells, shape, gt, proj, os.path.join(tmp, f"net_{i}.tif"))
+            cost_out = os.path.join(tmp, f"cost_{_slug(source.id)}.tif")
+            dir_out = os.path.join(tmp, f"dir_{_slug(source.id)}.tif")
+            cost_result = run_r_cost(
+                combined_raster_path, None, cost_out, dir_out, memory=memory, start_raster=start_ras
+            )
 
-            for edge in sink_edges:
-                source = nodes_by_id[edge.source_id]
-                route_vec = os.path.join(tmp, f"route_{_slug(edge.source_id)}.gpkg")
-                log(f"  r.drain: {edge.source_id} → {sink_id} (flow {edge.flow})")
-                run_r_drain_and_vectorize(cost_result, _coord(source), route_vec, log=log)
+            route_vec = os.path.join(tmp, f"route_{_slug(source.id)}.gpkg")
+            run_r_drain_and_vectorize(cost_result, _coord(source), route_vec, log=log)
+            cells = _orient_source_to_sink(_read_route_cells(route_vec, gt), (source.x, source.y), gt)
+            if len(cells) >= 2:
+                steps.append((source.flow, cells))
+                network_cells.update(cells)
+            routes.append(source.id)
 
-                cells = _orient_source_to_sink(_read_route_cells(route_vec, gt), (source.x, source.y), gt)
-                if len(cells) >= 2:
-                    chains.append((edge.flow, cells))
-                routes.append((edge.source_id, sink_id))
-
-        log("Building the network graph (per-segment flow at the real junctions)...")
+        log("Building the network graph (full chains → per-segment flow at the real junctions)...")
+        chains = greedy_tree_chains(steps, seed_cells)
         segments = build_edges(chains)
         _write_network(segments, gt, proj, output_path)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    log(f"✓ Network graph: {len(segments)} segment(s) from {len(edges)} route(s) → {os.path.basename(output_path)}")
-    return {"network_path": output_path, "segments": segments, "edges": edges, "routes": routes}
+    log(f"✓ Network tree: {len(segments)} segment(s) from {len(routes)} source(s) → {os.path.basename(output_path)}")
+    return {"network_path": output_path, "segments": segments, "routes": routes}
 
 
 def route_network_milp(

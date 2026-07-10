@@ -216,9 +216,14 @@ def run_r_cost(
     cost_output: str,
     direction_output: str,
     memory: int = DEFAULT_RCOST_MEMORY_MB,
+    start_raster: str = None,
 ) -> dict:
     """
-    Runs the r.cost GRASS algorithm using start coordinates.
+    Runs the r.cost GRASS algorithm.
+
+    The origin is either ``start_coordinates`` (a GRASS ``"x,y"`` string — the single-point case) or,
+    when ``start_raster`` is given, every non-null cell of that raster (multi-origin — used by the
+    greedy network tree, where accumulation starts from the whole already-built network).
 
     ``memory`` is the RAM budget (MB) handed to r.cost; larger values speed up big rasters
     but must fit in available memory. Callers pass the user-configured value; the default
@@ -237,10 +242,9 @@ def run_r_cost(
     ext = rlayer.extent()
     region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
 
-    # 3) Build parameters for r.cost - use start_points for the origin
+    # 3) Build parameters for r.cost — origin is a start raster (multi-cell) or start coordinates.
     params = {
         "input": input_raster,
-        "start_coordinates": start_coordinates,  # Use start_points for r.cost
         "-n": True,  # Use Knight's move
         "max_cost": 0,  # no maximum cost
         "memory": memory,  # RAM budget (MB) for large rasters; set via the Settings dialog
@@ -249,6 +253,10 @@ def run_r_cost(
         "GRASS_REGION_PARAMETER": region,
         "GRASS_REGION_CELLSIZE_PARAMETER": 0,
     }
+    if start_raster:
+        params["start_raster"] = start_raster
+    else:
+        params["start_coordinates"] = start_coordinates
 
     # 4) Run r.cost to generate cost accumulation and direction surfaces
     result = processing.run(grass_alg_id("r.cost"), params)
