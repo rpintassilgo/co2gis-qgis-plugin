@@ -8,7 +8,13 @@ implementations; the public names are re-exported here so existing
 from .dropdowns import make_searchable_dropdown
 from .fields import update_pipeline_length, update_resolution_field
 from .io import select_output_file, select_output_folder
-from .layers import DROPDOWN_REGISTRY, get_layer_path, layer_from_dropdown, populate_layer_dropdowns
+from .layers import (
+    DROPDOWN_REGISTRY,
+    get_layer_path,
+    layer_from_dropdown,
+    load_raster_result,
+    populate_layer_dropdowns,
+)
 from .symbology import apply_symbology
 
 __all__ = [
@@ -16,6 +22,7 @@ __all__ = [
     "apply_symbology",
     "get_layer_path",
     "layer_from_dropdown",
+    "load_raster_result",
     "make_searchable_dropdown",
     "populate_layer_dropdowns",
     "select_output_file",

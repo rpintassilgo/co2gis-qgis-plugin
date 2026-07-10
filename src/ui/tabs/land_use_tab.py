@@ -1,4 +1,3 @@
-import os
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -19,7 +18,7 @@ from qgis.PyQt.QtWidgets import (
 from ...constants.land_use import COMET_LAND_USE_COSTS
 from ...core.factors.land_use import create_land_use_cost_raster
 from ...task_manager import run_task
-from ...utils import get_layer_path, layer_from_dropdown
+from ...utils import get_layer_path, layer_from_dropdown, load_raster_result
 from ...widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
@@ -112,12 +111,13 @@ def _land_use_work(params: dict) -> str:
 
 def _land_use_publish(dialog: "AnalysisDialog", output_path: str):
     """Main thread: load the created cost raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if not new_layer.isValid():
-        raise RuntimeError("Failed to load the created Land Use Costs raster.")
-    QgsProject.instance().addMapLayer(new_layer)
-    dialog.log_message(f"Land Use Costs Raster created successfully at: {output_path}", "Land Use")
+    load_raster_result(
+        dialog,
+        output_path,
+        "Land Use",
+        f"Land Use Costs Raster created successfully at: {output_path}",
+        error="Failed to load the created Land Use Costs raster.",
+    )
 
 
 def get_land_use_costs(dialog: "AnalysisDialog"):

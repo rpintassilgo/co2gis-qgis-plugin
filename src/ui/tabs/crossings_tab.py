@@ -1,12 +1,11 @@
-import os
 from typing import TYPE_CHECKING
 
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsRasterLayer, QgsVectorLayer
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel, QLineEdit, QPushButton
 
 from ...core.factors.crossings import create_crossings_cost_raster, create_n_crossings_raster
 from ...task_manager import run_task
-from ...utils import get_layer_path, layer_from_dropdown
+from ...utils import get_layer_path, layer_from_dropdown, load_raster_result
 from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -134,13 +133,7 @@ def _crossings_cost_work(params: dict) -> str:
 
 def _crossings_cost_publish(dialog: "AnalysisDialog", output_raster: str):
     """Main thread: load the cost raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_raster))[0]
-    new_layer = QgsRasterLayer(output_raster, layer_name)
-    if not new_layer.isValid():
-        raise RuntimeError("Failed to load the resulting raster layer.")
-
-    QgsProject.instance().addMapLayer(new_layer)
-    dialog.log_message(f"Raster created at {output_raster}", "Crossings")
+    load_raster_result(dialog, output_raster, "Crossings", f"Raster created at {output_raster}")
 
 
 # ── Create Number of Crossings Raster (N) ─────────────────────────────────────
@@ -191,11 +184,11 @@ def _n_raster_publish(dialog: "AnalysisDialog", result: dict):
     output_path = result["output_path"]
     max_count = result["max_count"]
 
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if not new_layer.isValid():
-        raise RuntimeError("Failed to load the resulting N raster layer.")
-
-    QgsProject.instance().addMapLayer(new_layer)
-    dialog.log_message(f"✓ N Raster created successfully at: {output_path}", "Crossings")
+    load_raster_result(
+        dialog,
+        output_path,
+        "Crossings",
+        f"✓ N Raster created successfully at: {output_path}",
+        error="Failed to load the resulting N raster layer.",
+    )
     dialog.log_message(f"  Value range: 0 to {max_count} crossings per cell", "Crossings")

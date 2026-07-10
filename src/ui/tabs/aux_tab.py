@@ -1,7 +1,7 @@
 import os
 from typing import TYPE_CHECKING
 
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import QgsProject, QgsVectorLayer
 from qgis.PyQt.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import (
 from ...core.aux import clip_raster_to_vector, combine_vectors
 from ...core.raster import resample_raster
 from ...task_manager import run_task
-from ...utils import apply_symbology, get_layer_path, layer_from_dropdown, update_resolution_field
+from ...utils import apply_symbology, get_layer_path, layer_from_dropdown, load_raster_result, update_resolution_field
 from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -212,11 +212,7 @@ def _resample_work(params: dict) -> str:
 
 def _resample_publish(dialog: "AnalysisDialog", output_path: str):
     """Main thread: load the resampled raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    resampled_layer = QgsRasterLayer(output_path, layer_name)
-    if not resampled_layer.isValid():
-        raise RuntimeError("Failed to load resampled raster.")
-    QgsProject.instance().addMapLayer(resampled_layer)
+    load_raster_result(dialog, output_path, error="Failed to load resampled raster.")
 
 
 # ── Clip raster ───────────────────────────────────────────────────────────────
@@ -278,11 +274,7 @@ def _clip_work(params: dict) -> dict:
 def _clip_publish(dialog: "AnalysisDialog", result: dict):
     """Main thread: load the clipped raster and copy symbology if requested."""
     output_path = result["output_path"]
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    clipped_layer = QgsRasterLayer(output_path, layer_name)
-    if not clipped_layer.isValid():
-        raise RuntimeError("Failed to load clipped raster.")
-    QgsProject.instance().addMapLayer(clipped_layer)
+    clipped_layer = load_raster_result(dialog, output_path, error="Failed to load clipped raster.")
 
     if result["copy_symbology"]:
         dialog.log_message("Copying symbology from original raster...", "Aux")

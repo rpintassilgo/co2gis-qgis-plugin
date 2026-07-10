@@ -20,7 +20,7 @@ from qgis.core import QgsRasterLayer
 from ..constants.comet import COST_FLOOR, N_CAP
 from ..constants.lcp import DEFAULT_RCOST_MEMORY_MB
 from .comet import comet_cell_cost
-from .raster import resample_raster
+from .raster import resample_present_to_common_grid
 
 # Canonical COMET factor slots, in formula order.
 FACTOR_NAMES = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)", "N (count)"]
@@ -73,75 +73,14 @@ def combine_rasters_with_comet_formula(slots: dict, output_path: str, target_crs
     if not present:
         raise ValueError("At least one cost raster must be provided!")
 
-    # Calculate common extent (intersection of all present extents).
-    log("Step 1: Calculating common extent...")
-    extents = [meta["extent"] for _, meta in present]
-    xmin = max(e[0] for e in extents)
-    xmax = min(e[1] for e in extents)
-    ymin = max(e[2] for e in extents)
-    ymax = min(e[3] for e in extents)
-    if xmin >= xmax or ymin >= ymax:
-        raise ValueError("No common extent found - rasters do not overlap!")
-
-    # First present layer is the resolution reference.
-    ref_meta = present[0][1]
-    ref_resolution = ref_meta["res"]
-    log(f"Using resolution: {ref_resolution:.2f}m from {ref_meta['name']}")
-
-    # Resample all present layers to the common grid.
-    log("Step 2: Resampling rasters...")
-    resampled_data = {}
-    target_extent = f"{xmin},{xmax},{ymin},{ymax}"
-    total_layers = len(present)
-
-    # Resample into a private temp dir (not the user's output folder) so a mid-loop
-    # failure never leaves _resampled_*.tif scaffolding behind — the finally cleans it up.
+    # Resample every present raster onto the shared grid (intersection extent, first raster's
+    # resolution), reprojected to the project CRS. Into a private temp dir (not the user's output
+    # folder) so a mid-loop failure never leaves _resampled_*.tif scaffolding behind — the finally
+    # cleans it up.
+    log("Step 1: Resampling rasters to a common grid...")
     temp_dir = tempfile.mkdtemp()
     try:
-        for current_layer, (name, meta) in enumerate(present, start=1):
-            log(f"  Resampling {current_layer}/{total_layers}: {name}...")
-
-            resampled_path = os.path.join(temp_dir, f"_resampled_{name.replace(' ', '_')}.tif")
-
-            resampled_output = resample_raster(
-                meta["path"],
-                resampled_path,
-                ref_resolution,
-                target_crs=target_crs_wkt,
-                target_extent=target_extent,
-            )
-
-            if resampled_output:
-                ds = gdal.Open(resampled_output)
-                if ds is None:
-                    raise RuntimeError(f"Failed to open resampled raster for {name}")
-
-                band = ds.GetRasterBand(1)
-                data = band.ReadAsArray().astype(np.float32)
-
-                # Get dimensions from first raster
-                if not resampled_data:
-                    width = ds.RasterXSize
-                    height = ds.RasterYSize
-                    geotrans = ds.GetGeoTransform()
-                    proj = ds.GetProjection()
-                    resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans, "proj": proj}
-                    log(f"  Target grid: {width}x{height} pixels ({width * height:,} total cells)")
-
-                resampled_data[name] = data
-
-                # Properly close GDAL dataset
-                band = None
-                ds = None
-
-                # Clean up temp file
-                try:
-                    if os.path.exists(resampled_output):
-                        os.remove(resampled_output)
-                except OSError as cleanup_error:
-                    log(f"  ⚠️ Could not delete temp file: {cleanup_error}")
-            else:
-                raise RuntimeError(f"Failed to resample {name}")
+        resampled_data = resample_present_to_common_grid(present, target_crs_wkt, temp_dir, "_resampled_", log)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 

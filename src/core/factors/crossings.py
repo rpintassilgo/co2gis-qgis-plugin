@@ -13,6 +13,8 @@ from osgeo import gdal
 from qgis import processing
 from qgis.core import QgsVectorLayer
 
+from ..raster import get_intersected_cells
+
 
 def create_crossings_cost_raster(
     crossing_path: str,
@@ -215,63 +217,3 @@ def create_n_crossings_raster(
     out_ds = None
 
     return {"output_path": output_path, "max_count": int(max_count)}
-
-
-def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, grid_width, grid_height):
-    """
-    Get all raster cells intersected by a line segment using a rasterization algorithm.
-
-    Parameters:
-        x1, y1, x2, y2: Line segment endpoints in map coordinates
-        origin_x, origin_y: Top-left corner of raster (origin_y is top)
-        cell_width, cell_height: Cell dimensions
-        grid_width, grid_height: Raster dimensions in cells
-
-    Returns:
-        List of (col, row) tuples
-    """
-    cells = set()
-
-    # Convert endpoints to cell coordinates
-    col1 = int((x1 - origin_x) / cell_width)
-    row1 = int((origin_y - y1) / cell_height)
-    col2 = int((x2 - origin_x) / cell_width)
-    row2 = int((origin_y - y2) / cell_height)
-
-    # Bresenham's line algorithm (adapted for cells)
-    dx = abs(col2 - col1)
-    dy = abs(row2 - row1)
-
-    col = col1
-    row = row1
-
-    col_inc = 1 if col2 > col1 else -1
-    row_inc = 1 if row2 > row1 else -1
-
-    # Add cells along the line
-    if dx > dy:
-        error = dx / 2
-        while col != col2:
-            if 0 <= col < grid_width and 0 <= row < grid_height:
-                cells.add((col, row))
-            error -= dy
-            if error < 0:
-                row += row_inc
-                error += dx
-            col += col_inc
-    else:
-        error = dy / 2
-        while row != row2:
-            if 0 <= col < grid_width and 0 <= row < grid_height:
-                cells.add((col, row))
-            error -= dx
-            if error < 0:
-                col += col_inc
-                error += dy
-            row += row_inc
-
-    # Add final cell
-    if 0 <= col2 < grid_width and 0 <= row2 < grid_height:
-        cells.add((col2, row2))
-
-    return list(cells)
