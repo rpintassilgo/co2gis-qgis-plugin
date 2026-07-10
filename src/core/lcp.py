@@ -94,50 +94,56 @@ def combine_rasters_with_comet_formula(slots: dict, output_path: str, target_crs
     target_extent = f"{xmin},{xmax},{ymin},{ymax}"
     total_layers = len(present)
 
-    for current_layer, (name, meta) in enumerate(present, start=1):
-        log(f"  Resampling {current_layer}/{total_layers}: {name}...")
+    # Resample into a private temp dir (not the user's output folder) so a mid-loop
+    # failure never leaves _resampled_*.tif scaffolding behind — the finally cleans it up.
+    temp_dir = tempfile.mkdtemp()
+    try:
+        for current_layer, (name, meta) in enumerate(present, start=1):
+            log(f"  Resampling {current_layer}/{total_layers}: {name}...")
 
-        resampled_path = os.path.join(os.path.dirname(output_path), f"_resampled_{name.replace(' ', '_')}.tif")
+            resampled_path = os.path.join(temp_dir, f"_resampled_{name.replace(' ', '_')}.tif")
 
-        resampled_output = resample_raster(
-            meta["path"],
-            resampled_path,
-            ref_resolution,
-            target_crs=target_crs_wkt,
-            target_extent=target_extent,
-        )
+            resampled_output = resample_raster(
+                meta["path"],
+                resampled_path,
+                ref_resolution,
+                target_crs=target_crs_wkt,
+                target_extent=target_extent,
+            )
 
-        if resampled_output:
-            ds = gdal.Open(resampled_output)
-            if ds is None:
-                raise RuntimeError(f"Failed to open resampled raster for {name}")
+            if resampled_output:
+                ds = gdal.Open(resampled_output)
+                if ds is None:
+                    raise RuntimeError(f"Failed to open resampled raster for {name}")
 
-            band = ds.GetRasterBand(1)
-            data = band.ReadAsArray().astype(np.float32)
+                band = ds.GetRasterBand(1)
+                data = band.ReadAsArray().astype(np.float32)
 
-            # Get dimensions from first raster
-            if not resampled_data:
-                width = ds.RasterXSize
-                height = ds.RasterYSize
-                geotrans = ds.GetGeoTransform()
-                proj = ds.GetProjection()
-                resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans, "proj": proj}
-                log(f"  Target grid: {width}x{height} pixels ({width * height:,} total cells)")
+                # Get dimensions from first raster
+                if not resampled_data:
+                    width = ds.RasterXSize
+                    height = ds.RasterYSize
+                    geotrans = ds.GetGeoTransform()
+                    proj = ds.GetProjection()
+                    resampled_data["_meta"] = {"width": width, "height": height, "geotrans": geotrans, "proj": proj}
+                    log(f"  Target grid: {width}x{height} pixels ({width * height:,} total cells)")
 
-            resampled_data[name] = data
+                resampled_data[name] = data
 
-            # Properly close GDAL dataset
-            band = None
-            ds = None
+                # Properly close GDAL dataset
+                band = None
+                ds = None
 
-            # Clean up temp file
-            try:
-                if os.path.exists(resampled_output):
-                    os.remove(resampled_output)
-            except Exception as cleanup_error:
-                log(f"  ⚠️ Could not delete temp file: {cleanup_error}")
-        else:
-            raise RuntimeError(f"Failed to resample {name}")
+                # Clean up temp file
+                try:
+                    if os.path.exists(resampled_output):
+                        os.remove(resampled_output)
+                except OSError as cleanup_error:
+                    log(f"  ⚠️ Could not delete temp file: {cleanup_error}")
+            else:
+                raise RuntimeError(f"Failed to resample {name}")
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
 
     # Get dimensions
     meta = resampled_data["_meta"]
@@ -287,85 +293,84 @@ def run_r_drain_and_vectorize(
             os.makedirs(d, exist_ok=True)
 
     temp_dir = tempfile.mkdtemp()
+    try:
+        # r.drain needs the accumulation raster (cost_result['output']) and start from DESTINATION.
+        # It traces the steepest descent (lowest cost) to the source encoded by r.cost.
+        accum_path = cost_result["output"]
+        direction_path = cost_result["outdir"]
 
-    # r.drain needs the accumulation raster (cost_result['output']) and start from DESTINATION.
-    # It traces the steepest descent (lowest cost) to the source encoded by r.cost.
-    accum_path = cost_result["output"]
-    direction_path = cost_result["outdir"]
+        if not os.path.exists(accum_path):
+            raise RuntimeError(f"Cost accumulation raster not found: {accum_path}")
+        if not os.path.exists(direction_path):
+            raise RuntimeError(f"Direction raster not found: {direction_path}")
 
-    if not os.path.exists(accum_path):
-        raise RuntimeError(f"Cost accumulation raster not found: {accum_path}")
-    if not os.path.exists(direction_path):
-        raise RuntimeError(f"Direction raster not found: {direction_path}")
+        # r.drain → raster path, then r.to.vect lines to GPKG. The raw drain raster is persisted to
+        # ``drain_output`` when given (so it survives temp cleanup), else kept in temp and discarded.
+        drain_out = drain_output or os.path.join(temp_dir, "drain_path.tif")
+        thin_out = os.path.join(temp_dir, "drain_thin.tif")
 
-    # r.drain → raster path, then r.to.vect lines to GPKG. The raw drain raster is persisted to
-    # ``drain_output`` when given (so it survives temp cleanup), else kept in temp and discarded.
-    drain_out = drain_output or os.path.join(temp_dir, "drain_path.tif")
-    thin_out = os.path.join(temp_dir, "drain_thin.tif")
+        # Get the region from the accumulation raster to use in r.drain
+        accum_layer = QgsRasterLayer(accum_path, "temp_accum")
+        if not accum_layer.isValid():
+            raise RuntimeError(f"Cannot read accumulation raster: {accum_path}")
 
-    # Get the region from the accumulation raster to use in r.drain
-    accum_layer = QgsRasterLayer(accum_path, "temp_accum")
-    if not accum_layer.isValid():
-        raise RuntimeError(f"Cannot read accumulation raster: {accum_path}")
+        ext = accum_layer.extent()
+        region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
 
-    ext = accum_layer.extent()
-    region = f"{ext.xMinimum()},{ext.xMaximum()},{ext.yMinimum()},{ext.yMaximum()}"
+        log("Running r.drain to extract least cost path...")
 
-    log("Running r.drain to extract least cost path...")
+        # Run r.drain from destination to trace back to origin
+        # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
+        # CRITICAL 2: Must set GRASS_REGION to avoid "North must be larger than South" error
+        drain_result = processing.run(
+            grass_alg_id("r.drain"),
+            {
+                "input": accum_path,
+                "direction": direction_path,
+                "start_coordinates": dest_coord,
+                "output": drain_out,
+                "GRASS_REGION_PARAMETER": region,
+                "GRASS_REGION_CELLSIZE_PARAMETER": 0,
+            },
+        )
 
-    # Run r.drain from destination to trace back to origin
-    # CRITICAL: Must pass direction raster from r.cost to follow the cost path correctly
-    # CRITICAL 2: Must set GRASS_REGION to avoid "North must be larger than South" error
-    drain_result = processing.run(
-        grass_alg_id("r.drain"),
-        {
-            "input": accum_path,
-            "direction": direction_path,
-            "start_coordinates": dest_coord,
-            "output": drain_out,
-            "GRASS_REGION_PARAMETER": region,
-            "GRASS_REGION_CELLSIZE_PARAMETER": 0,
-        },
-    )
+        if not drain_result or "output" not in drain_result:
+            raise RuntimeError("r.drain failed to produce output")
 
-    if not drain_result or "output" not in drain_result:
-        raise RuntimeError("r.drain failed to produce output")
+        drain_path = drain_result["output"]
 
-    drain_path = drain_result["output"]
+        log(f"r.drain output: {drain_path}")
+        log("Running r.thin to prepare for vectorization...")
 
-    log(f"r.drain output: {drain_path}")
-    log("Running r.thin to prepare for vectorization...")
+        # Thin the raster path to avoid "crowded cell" errors in r.to.vect
+        thin_result = processing.run(
+            grass_alg_id("r.thin"),
+            {
+                "input": drain_path,
+                "output": thin_out,
+                "iterations": 200,  # Sufficient iterations to thin properly
+            },
+        )
 
-    # Thin the raster path to avoid "crowded cell" errors in r.to.vect
-    thin_result = processing.run(
-        grass_alg_id("r.thin"),
-        {
-            "input": drain_path,
-            "output": thin_out,
-            "iterations": 200,  # Sufficient iterations to thin properly
-        },
-    )
+        if not thin_result or "output" not in thin_result:
+            raise RuntimeError("r.thin failed to produce output")
 
-    if not thin_result or "output" not in thin_result:
-        raise RuntimeError("r.thin failed to produce output")
+        thin_path = thin_result["output"]
 
-    thin_path = thin_result["output"]
+        log(f"r.thin output: {thin_path}")
+        log("Converting to vector...")
 
-    log(f"r.thin output: {thin_path}")
-    log("Converting to vector...")
+        # Convert thinned raster path to vector lines
+        processing.run(
+            grass_alg_id("r.to.vect"),
+            {
+                "input": thin_path,
+                "type": 0,  # line
+                "output": vector_output,
+            },
+        )
 
-    # Convert thinned raster path to vector lines
-    processing.run(
-        grass_alg_id("r.to.vect"),
-        {
-            "input": thin_path,
-            "type": 0,  # line
-            "output": vector_output,
-        },
-    )
-
-    log("✓ LCP created successfully using: r.drain → r.thin → r.to.vect")
-
-    # Cleanup
-    shutil.rmtree(temp_dir, ignore_errors=True)
-    return vector_output
+        log("✓ LCP created successfully using: r.drain → r.thin → r.to.vect")
+        return vector_output
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
