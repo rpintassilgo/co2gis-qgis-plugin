@@ -62,19 +62,12 @@ def setup_corridors_tab(dialog: "AnalysisDialog", layout: QFormLayout):
     dialog.runCreateRasterFromCorridorButton = QPushButton("Create Corridors Costs Raster")
     layout.addRow(dialog.runCreateRasterFromCorridorButton)
 
-    # Populate land-use combo
-    for lyr in QgsProject.instance().mapLayers().values():
-        if isinstance(lyr, QgsRasterLayer):
-            dialog.corridorLandUseComboBox.addItem(lyr.name(), lyr.id())
     dialog.corridorLandUseComboBox.currentIndexChanged.connect(
         lambda: populate_corridor_land_use_table(dialog, dialog.corridorLandUseComboBox.currentData())
     )
-    if dialog.corridorLandUseComboBox.count() > 0:
-        populate_corridor_land_use_table(dialog, dialog.corridorLandUseComboBox.currentData())
 
 
 def populate_corridor_land_use_table(dialog, layer_id):
-    from qgis.core import QgsProject, QgsRasterLayer
     from qgis.PyQt.QtWidgets import QTableWidgetItem
 
     dialog.corridorLandUseTable.setRowCount(0)
