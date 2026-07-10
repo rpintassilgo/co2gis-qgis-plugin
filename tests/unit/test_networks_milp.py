@@ -58,16 +58,20 @@ def test_class_capacity_grows_with_diameter():
     assert class_capacity(0.2, eng) > 0
 
 
-def test_junction_flags_mark_the_trunk_from_a_merge():
-    # A→J and B→J both feed J; the J→K arc starts where they merge → a junction (trunk).
+def test_junction_flags_mark_source_to_source_and_sink_to_sink_links():
+    # Roadmap rule: an extra booster where a pipe connects two source hubs (a gathering tie-in) or two
+    # sink hubs. Pipes touching a Steiner junction node are not flagged.
     selected = [
-        SelectedArc("A", "J", 0.4, 2.0),
-        SelectedArc("B", "J", 0.4, 3.0),
-        SelectedArc("J", "K", 0.5, 5.0),
+        SelectedArc("S0", "S1", 0.4, 2.5),  # source → source  → booster
+        SelectedArc("S1", "J17", 0.5, 4.3),  # source → junction → no
+        SelectedArc("J17", "K0", 0.5, 4.3),  # junction → sink   → no
+        SelectedArc("K0", "K1", 0.4, 1.0),  # sink → sink       → booster
     ]
-    flags = junction_flags(selected)
-    assert flags[("J", "K")] is True
-    assert flags[("A", "J")] is False and flags[("B", "J")] is False
+    flags = junction_flags(selected, source_ids=["S0", "S1"], sink_ids=["K0", "K1"])
+    assert flags[("S0", "S1")] is True
+    assert flags[("K0", "K1")] is True
+    assert flags[("S1", "J17")] is False
+    assert flags[("J17", "K0")] is False
 
 
 @needs_solver

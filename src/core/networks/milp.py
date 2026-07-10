@@ -14,22 +14,51 @@ synthetic graphs. Per-arc *flow*, *diameter* and *selection* are MILP **outputs*
 from __future__ import annotations
 
 import math
-from collections import Counter, defaultdict, namedtuple
+from collections import defaultdict, namedtuple
 from typing import Sequence
 
 from ..capex import SECONDS_PER_YEAR, _booster_cost, mt_yr_to_kg_s
 from .model import SINK, SOURCE
 
 try:
-    import highspy  # noqa: F401  (HiGHS backend for PuLP)
-    import pulp
+    import pulp  # the modeller
 
-    HAS_SOLVER = True
+    HAS_PULP = True
 except ImportError:  # pragma: no cover - depends on the environment
-    HAS_SOLVER = False
+    HAS_PULP = False
+
+try:
+    import highspy  # noqa: F401  (the HiGHS solver backend for PuLP)
+
+    HAS_HIGHS = True
+except ImportError:  # pragma: no cover - depends on the environment
+    HAS_HIGHS = False
+
+# The MILP needs BOTH the modeller (PuLP) and the solver (HiGHS) — either missing disables it.
+HAS_SOLVER = HAS_PULP and HAS_HIGHS
+
+
+def missing_solver_packages() -> list:
+    """The optional pip packages the MILP needs but that aren't importable (``[]`` when ready).
+
+    Used by the UI to say *which* dependency is missing in the disabled-radio tooltip.
+    """
+    missing = []
+    if not HAS_PULP:
+        missing.append("pulp")
+    if not HAS_HIGHS:
+        missing.append("highspy")
+    return missing
+
 
 # Standard inner pipe diameters (m). Domain input — confirm against the case study.
 DIAMETER_CLASSES = (0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0)
+
+# Below this a "built" arc carries no real flow (Mt/yr). A near-zero-cost arc — e.g. a junction that
+# lands in the same raster cell as a sink, so r.cost reads ~0 between them — is free to build, so the
+# solver may leave it selected at an arbitrary diameter with no flow. Such arcs aren't part of the
+# network (flow conservation gives them nothing) and are dropped from the solution.
+MIN_ARC_FLOW = 1e-6
 
 # One selected pipe: the undirected link, its chosen diameter (m), and the flow it carries (Mt/yr).
 SelectedArc = namedtuple("SelectedArc", ["u_id", "v_id", "diameter", "flow"])
@@ -134,22 +163,34 @@ def solve_network_milp(nodes: Sequence, arcs: Sequence, target: float, eng: dict
             if (build[(a.u_id, a.v_id, di)].value() or 0) > 0.5:
                 f_uv = flow[(a.u_id, a.v_id)].value() or 0
                 f_vu = flow[(a.v_id, a.u_id)].value() or 0
+                total_flow = f_uv + f_vu
+                if total_flow <= MIN_ARC_FLOW:  # built-but-unused free arc — not part of the network
+                    continue
                 # Orient the arc along the flow (upstream → downstream) so junctions can be read.
                 up, down = (a.u_id, a.v_id) if f_uv >= f_vu else (a.v_id, a.u_id)
-                selected.append(SelectedArc(up, down, diameter, f_uv + f_vu))
+                selected.append(SelectedArc(up, down, diameter, total_flow))
     log(f"✓ MILP: {len(selected)} link(s) built, total cost {pulp.value(prob.objective):,.0f} €.")
     return selected
 
 
-def junction_flags(selected: Sequence) -> dict:
-    """Which oriented arcs start at a **junction** (≥2 arcs feed their upstream node → a trunk).
+def junction_flags(selected: Sequence, source_ids: Sequence = (), sink_ids: Sequence = ()) -> dict:
+    """Which arcs get an extra **junction booster** — the reference roadmap's hub-connection rule.
 
-    :param selected: :class:`SelectedArc` list oriented upstream→downstream (from
-        :func:`solve_network_milp`).
-    :returns: ``{(u_id, v_id): bool}`` — True where the arc's upstream node is a merge point.
+    The COMET/roadmap cost model adds one booster station beyond the 150-km spacing rule *"because
+    pipelines can also connect two source hubs, and two sink hubs"* — a source→source (gathering) or
+    sink→sink pipe re-pressurises where the two flows tie in. So an arc is flagged iff **both** its
+    endpoints are the same hub type. Arcs touching a Steiner junction node aren't flagged (the roadmap
+    routes hub-to-hub; pressure on those is handled by the spacing rule).
+
+    :param selected: :class:`SelectedArc` list (from :func:`solve_network_milp`).
+    :param source_ids, sink_ids: the source / sink node ids (junction nodes are neither).
+    :returns: ``{(u_id, v_id): bool}`` — True where the pipe connects two hubs of the same type.
     """
-    in_degree = Counter(arc.v_id for arc in selected)  # nodes that are a downstream endpoint
-    return {(arc.u_id, arc.v_id): in_degree[arc.u_id] >= 2 for arc in selected}
+    sources, sinks = set(source_ids), set(sink_ids)
+    return {
+        (arc.u_id, arc.v_id): (arc.u_id in sources and arc.v_id in sources) or (arc.u_id in sinks and arc.v_id in sinks)
+        for arc in selected
+    }
 
 
 def _pulp_highs_solver():
