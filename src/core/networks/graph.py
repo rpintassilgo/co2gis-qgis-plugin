@@ -65,6 +65,54 @@ def build_edges(chains: Iterable) -> list:
     return segments
 
 
+def greedy_tree_chains(steps: Iterable, seed_cells: Iterable) -> list:
+    """Assemble full source→sink chains from greedy least-cost tree growth (issue #71).
+
+    The greedy router grows the network one source at a time: each step ties a source into the network
+    as it stood then. ``cells`` is that source's r.drain path with ``cells[0]`` the source and later
+    cells leading to the **nearest already-present network cell** (a seed sink, or a cell added by an
+    earlier step). This accumulates parent pointers (cell → next cell toward a seed) and then rebuilds
+    each source's **full** path down to a seed, so :func:`build_edges` sees the shared trunk (the
+    overlapping cells) and sums flow correctly — the tie-in path alone stops at the junction.
+
+    :param steps: ordered iterable of ``(flow, cells)`` — the tie-in paths, in build order.
+    :param seed_cells: the initial network cells (the sinks) — roots of the tree.
+    :returns: list of ``(flow, full_cells)`` with ``full_cells`` from the source down to a seed.
+    """
+    network = set(seed_cells)
+    parent = dict.fromkeys(seed_cells)  # seed cells are roots (parent None)
+    sources = []
+    for src_flow, cells in steps:
+        cells = list(cells)
+        if not cells:
+            continue
+        join = next((i for i, c in enumerate(cells) if c in network), None)
+        if join is None:
+            # The tie-in cell didn't land exactly on a network cell (raster rounding) — reconnect the
+            # path's end to the nearest existing network cell so the source still reaches a seed.
+            nearest = min(network, key=lambda nc: (nc[0] - cells[-1][0]) ** 2 + (nc[1] - cells[-1][1]) ** 2)
+            for a, b in zip(cells, cells[1:]):
+                parent.setdefault(a, b)
+                network.add(a)
+            parent.setdefault(cells[-1], nearest)
+            network.add(cells[-1])
+        else:
+            for a, b in zip(cells[:join], cells[1 : join + 1]):
+                parent.setdefault(a, b)  # keep a cell's first (earlier) route toward the seed
+                network.add(a)
+        sources.append((src_flow, cells[0]))
+
+    chains = []
+    for src_flow, cell in sources:
+        full, seen = [], set()
+        while cell is not None and cell not in seen:
+            seen.add(cell)
+            full.append(cell)
+            cell = parent.get(cell)
+        chains.append((src_flow, full))
+    return chains
+
+
 def cluster_edges(edges):
     """Group network edges into clusters and identify each cluster's junctions — for a clear log.
 

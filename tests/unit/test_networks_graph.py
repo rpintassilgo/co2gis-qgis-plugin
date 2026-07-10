@@ -5,7 +5,7 @@ flow accumulates where chains share a cell (the trunk), and the network splits i
 segments at the real junctions.
 """
 
-from src.core.networks.graph import build_edges, cluster_edges
+from src.core.networks.graph import build_edges, cluster_edges, greedy_tree_chains
 
 
 def _flows(segments):
@@ -69,6 +69,35 @@ def test_three_chains_stack_their_flows():
 def test_empty_chains_give_no_segments():
     assert build_edges([]) == []
     assert build_edges([(2.0, [])]) == []
+
+
+def test_greedy_tree_chains_rebuilds_full_paths_and_forms_a_trunk():
+    # Sink at (0,0). A ties straight in; B is routed later and ties into A's trunk mid-way at (0,2),
+    # so B's tie-in path stops there — greedy_tree_chains must extend it down to the sink.
+    seed = [(0, 0)]
+    steps = [
+        (2.0, [(0, 3), (0, 2), (0, 1), (0, 0)]),  # A → sink
+        (3.0, [(0, 5), (0, 4), (1, 3), (0, 2)]),  # B → ties into A's trunk at (0,2)
+    ]
+    chains = greedy_tree_chains(steps, seed)
+    lengths = sorted(len(cells) for _flow, cells in chains)
+    assert lengths == [4, 6]  # A: 4 cells; B extended (0,5)(0,4)(1,3)(0,2)(0,1)(0,0) = 6
+    segments = build_edges(chains)
+    assert max(s.flow for s in segments) == 5.0  # the shared trunk carries 2+3
+    assert any(s.junction for s in segments)  # a junction forms where B meets A
+
+
+def test_greedy_tree_chains_reconnects_a_tie_in_that_misses_by_a_cell():
+    # B's path ends at (0,3), one cell short of A's trunk (which occupies (0,2)…). It must reconnect
+    # to the nearest network cell instead of becoming a second, sink-less root.
+    seed = [(0, 0)]
+    steps = [
+        (2.0, [(0, 2), (0, 1), (0, 0)]),  # A → sink, occupies (0,2),(0,1),(0,0)
+        (3.0, [(0, 5), (0, 4), (0, 3)]),  # B ends at (0,3) — not on the network
+    ]
+    chains = greedy_tree_chains(steps, seed)
+    b = next(cells for _flow, cells in chains if cells[0] == (0, 5))
+    assert b[-1] == (0, 0)  # B still reaches the sink after reconnecting to the nearest cell
 
 
 def test_cluster_edges_groups_and_finds_junction_feeders():
