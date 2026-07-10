@@ -15,18 +15,16 @@ and :func:`compute_network_capex` costs a network — each segment sized for its
 a junction booster where flows merge.
 """
 
-import os
 import shutil
 import tempfile
 
 import numpy as np
-from osgeo import gdal
 from qgis.core import QgsGeometry, QgsPointXY, QgsRaster, QgsRasterLayer, QgsRectangle
 
 from ..constants.comet import N_CAP
 from .comet import comet_cell_cost
 from .networks.graph import cluster_edges
-from .raster import resample_raster
+from .raster import get_intersected_cells, resample_present_to_common_grid
 
 # Canonical COMET cost-factor slots, in formula order. ``extract_cells`` /
 # ``extract_points`` key their inputs by these names.
@@ -34,66 +32,6 @@ COST_NAMES = ["Land Use (Flu)", "Slope (Fs)", "Corridors (Fc)", "Crossings (Fci)
 
 # Continuous operation: 1 Mt/yr spread over a full year in seconds (8766 h).
 SECONDS_PER_YEAR = 31_557_600.0
-
-
-def get_intersected_cells(x1, y1, x2, y2, origin_x, origin_y, cell_width, cell_height, grid_width, grid_height):
-    """
-    Get all raster cells intersected by a line segment using a rasterization algorithm.
-
-    Parameters:
-        x1, y1, x2, y2: Line segment endpoints in map coordinates
-        origin_x, origin_y: Top-left corner of raster (origin_y is top)
-        cell_width, cell_height: Cell dimensions
-        grid_width, grid_height: Raster dimensions in cells
-
-    Returns:
-        List of (col, row) tuples
-    """
-    cells = set()
-
-    # Convert endpoints to cell coordinates
-    col1 = int((x1 - origin_x) / cell_width)
-    row1 = int((origin_y - y1) / cell_height)
-    col2 = int((x2 - origin_x) / cell_width)
-    row2 = int((origin_y - y2) / cell_height)
-
-    # Bresenham's line algorithm (adapted for cells)
-    dx = abs(col2 - col1)
-    dy = abs(row2 - row1)
-
-    col = col1
-    row = row1
-
-    col_inc = 1 if col2 > col1 else -1
-    row_inc = 1 if row2 > row1 else -1
-
-    # Add cells along the line
-    if dx > dy:
-        error = dx / 2
-        while col != col2:
-            if 0 <= col < grid_width and 0 <= row < grid_height:
-                cells.add((col, row))
-            error -= dy
-            if error < 0:
-                row += row_inc
-                error += dx
-            col += col_inc
-    else:
-        error = dy / 2
-        while row != row2:
-            if 0 <= col < grid_width and 0 <= row < grid_height:
-                cells.add((col, row))
-            error -= dx
-            if error < 0:
-                col += col_inc
-                error += dy
-            row += row_inc
-
-    # Add final cell
-    if 0 <= col2 < grid_width and 0 <= row2 < grid_height:
-        cells.add((col2, row2))
-
-    return list(cells)
 
 
 def get_raster_value_at_point(raster_layer, point):
@@ -121,44 +59,10 @@ def _resample_grid(cost_specs, log):
     if not present:
         raise ValueError("At least one cost raster must be provided.")
 
-    # Calculate common extent (intersection of all present extents).
-    extents = [spec["extent"] for _, spec in present]
-    xmin = max(e[0] for e in extents)
-    xmax = min(e[1] for e in extents)
-    ymin = max(e[2] for e in extents)
-    ymax = min(e[3] for e in extents)
-    if xmin >= xmax or ymin >= ymax:
-        raise ValueError("No common extent found - cost rasters do not overlap!")
-
-    # First present raster is the resolution / CRS reference.
-    ref_spec = present[0][1]
-    ref_resolution = ref_spec["res"]
-    ref_crs_wkt = ref_spec["crs_wkt"]
-    log(f"  Reference resolution: {ref_resolution:.2f}m from {ref_spec['name']}")
-
+    # Resample every present raster onto the shared grid (intersection extent, first raster's
+    # resolution/CRS). The reference CRS is the first present raster's own CRS.
     temp_dir = tempfile.mkdtemp()
-    target_extent = f"{xmin},{xmax},{ymin},{ymax}"
-    resampled_data = {}
-
-    for name, spec in present:
-        resampled_path = os.path.join(temp_dir, f"_price_est_{name.replace(' ', '_')}.tif")
-        resampled_output = resample_raster(
-            spec["path"], resampled_path, ref_resolution, target_crs=ref_crs_wkt, target_extent=target_extent
-        )
-        if resampled_output:
-            ds = gdal.Open(resampled_output)
-            data = ds.GetRasterBand(1).ReadAsArray().astype(np.float32)
-            if not resampled_data:
-                resampled_data["_meta"] = {
-                    "width": ds.RasterXSize,
-                    "height": ds.RasterYSize,
-                    "geotrans": ds.GetGeoTransform(),
-                }
-            resampled_data[name] = data
-            ds = None
-            log(f"  ✓ Resampled {name}")
-        else:
-            raise RuntimeError(f"Failed to resample {spec['name']}")
+    resampled_data = resample_present_to_common_grid(present, present[0][1]["crs_wkt"], temp_dir, "_price_est_", log)
 
     meta = resampled_data["_meta"]
     width, height, geotrans = meta["width"], meta["height"], meta["geotrans"]

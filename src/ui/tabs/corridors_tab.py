@@ -1,4 +1,3 @@
-import os
 from typing import TYPE_CHECKING
 
 from qgis.core import QgsProject, QgsRasterLayer
@@ -16,7 +15,7 @@ from qgis.PyQt.QtWidgets import (
 
 from ...core.factors.corridors import create_corridor_cost_raster_with_buffers
 from ...task_manager import run_task
-from ...utils import get_layer_path, layer_from_dropdown
+from ...utils import get_layer_path, layer_from_dropdown, load_raster_result
 from ...widgets.browse_row import add_output_path_row
 
 if TYPE_CHECKING:
@@ -181,10 +180,4 @@ def _corridors_work(params: dict) -> str:
 
 def _corridors_publish(dialog: "AnalysisDialog", output_path: str):
     """Main thread: load the resulting corridor cost raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if not new_layer.isValid():
-        raise RuntimeError("Failed to load the resulting raster layer.")
-
-    QgsProject.instance().addMapLayer(new_layer)
-    dialog.log_message(f"Corridors cost raster created at: {output_path}", "Corridors")
+    load_raster_result(dialog, output_path, "Corridors", f"Corridors cost raster created at: {output_path}")

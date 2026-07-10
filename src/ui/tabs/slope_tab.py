@@ -1,7 +1,5 @@
-import os
 from typing import TYPE_CHECKING
 
-from qgis.core import QgsProject, QgsRasterLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (
     QCheckBox,
@@ -19,7 +17,7 @@ from qgis.PyQt.QtWidgets import (
 from ...constants.slope import COMET_SLOPE_INTERVALS
 from ...core.factors.slope import create_slope_costs_from_slope, create_slope_layer_from_dem
 from ...task_manager import run_task
-from ...utils import get_layer_path, layer_from_dropdown
+from ...utils import get_layer_path, layer_from_dropdown, load_raster_result
 from ...widgets.browse_row import add_output_path_row, make_group_box
 
 if TYPE_CHECKING:
@@ -124,12 +122,13 @@ def _slope_work(params: dict) -> str:
 
 def _slope_publish(dialog: "AnalysisDialog", output_path: str):
     """Main thread: load the slope raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    slope_layer = QgsRasterLayer(output_path, layer_name)
-    if not slope_layer.isValid():
-        raise RuntimeError("Failed to load created slope layer.")
-    QgsProject.instance().addMapLayer(slope_layer)
-    dialog.log_message(f"Slope Raster created at: {output_path}", "Slope")
+    load_raster_result(
+        dialog,
+        output_path,
+        "Slope",
+        f"Slope Raster created at: {output_path}",
+        error="Failed to load created slope layer.",
+    )
 
 
 # ── Create slope costs raster ─────────────────────────────────────────────────
@@ -166,12 +165,13 @@ def _slope_costs_work(params: dict) -> str:
 
 def _slope_costs_publish(dialog: "AnalysisDialog", output_path: str):
     """Main thread: load the slope costs raster into the project."""
-    layer_name = os.path.splitext(os.path.basename(output_path))[0]
-    new_layer = QgsRasterLayer(output_path, layer_name)
-    if not new_layer.isValid():
-        raise RuntimeError("Failed to load the created Slope Costs raster.")
-    QgsProject.instance().addMapLayer(new_layer)
-    dialog.log_message(f"Slope Costs Raster created successfully at: {output_path}", "Slope")
+    load_raster_result(
+        dialog,
+        output_path,
+        "Slope",
+        f"Slope Costs Raster created successfully at: {output_path}",
+        error="Failed to load the created Slope Costs raster.",
+    )
 
 
 def get_slope_cost_intervals(dialog: "AnalysisDialog"):

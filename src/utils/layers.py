@@ -20,6 +20,36 @@ def layer_from_dropdown(combo: QComboBox):
     return QgsProject.instance().mapLayer(combo.currentData())
 
 
+def load_raster_result(
+    dialog: "AnalysisDialog",
+    path: str,
+    tab: str = None,
+    msg: str = None,
+    *,
+    error: str = "Failed to load the resulting raster layer.",
+):
+    """Load a written raster into the project and (optionally) log a message.
+
+    Replaces the ``splitext(basename(path))`` → ``QgsRasterLayer`` → ``isValid``
+    guard → ``addMapLayer`` → ``log`` sequence copy-pasted across every tab's
+    ``_*_publish``. Runs on the main thread (publish phase).
+
+    :param path: the written raster path; its basename (sans extension) is the layer name.
+    :param tab: log tab name; only used when ``msg`` is given.
+    :param msg: optional success message logged via ``dialog.log_message(msg, tab)``.
+    :param error: ``RuntimeError`` message raised when the layer fails to load.
+    :returns: the loaded :class:`QgsRasterLayer` (so callers can copy symbology, etc.).
+    """
+    layer_name = os.path.splitext(os.path.basename(path))[0]
+    layer = QgsRasterLayer(path, layer_name)
+    if not layer.isValid():
+        raise RuntimeError(error)
+    QgsProject.instance().addMapLayer(layer)
+    if msg:
+        dialog.log_message(msg, tab)
+    return layer
+
+
 # Data-driven registry of every layer-selection dropdown.
 #
 # Each entry maps a dropdown attribute on the dialog to:
