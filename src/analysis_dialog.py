@@ -197,10 +197,13 @@ class AnalysisDialog(QDialog):
         # Make all dropdowns searchable
         self._make_all_dropdowns_searchable()
 
-        # Populate dropdowns, and keep them in sync as layers are added.
+        # Populate dropdowns, and keep them in sync as layers are added or removed.
         # Connect a bound method (not a lambda) so it can be disconnected in cleanup().
+        # layersRemoved (not layersWillBeRemoved) fires *after* removal, so the refresh
+        # sees the updated project.
         populate_layer_dropdowns(self)
-        QgsProject.instance().layersAdded.connect(self._on_layers_added)
+        QgsProject.instance().layersAdded.connect(self._on_layers_changed)
+        QgsProject.instance().layersRemoved.connect(self._on_layers_changed)
 
         # Manually trigger updates for Price Estimation tab after population
         update_pipeline_length(self)
@@ -230,16 +233,17 @@ class AnalysisDialog(QDialog):
         connect_corridors_signals(self)
         self.clear_log_button.clicked.connect(self.clear_logs)
 
-    def _on_layers_added(self):
-        """Slot for QgsProject.layersAdded — refresh the layer dropdowns."""
+    def _on_layers_changed(self):
+        """Slot for QgsProject.layersAdded / layersRemoved — refresh the layer dropdowns."""
         populate_layer_dropdowns(self)
 
     def cleanup(self):
         """Disconnect global signals before the dialog is disposed (plugin unload)."""
-        try:
-            QgsProject.instance().layersAdded.disconnect(self._on_layers_added)
-        except (TypeError, RuntimeError):
-            pass  # already disconnected / nothing connected
+        for signal in (QgsProject.instance().layersAdded, QgsProject.instance().layersRemoved):
+            try:
+                signal.disconnect(self._on_layers_changed)
+            except (TypeError, RuntimeError):
+                pass  # already disconnected / nothing connected
 
     def _log_output_alive(self) -> bool:
         """True only if the log widget exists and its C++ object is not deleted.
