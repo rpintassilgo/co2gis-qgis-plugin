@@ -22,7 +22,7 @@ def update_resolution_field(dialog: "AnalysisDialog", combo_box: QComboBox, line
         resolution_x = raster_layer.rasterUnitsPerPixelX()
         resolution_y = raster_layer.rasterUnitsPerPixelY()
         avg_resolution = round((resolution_x + resolution_y) / 2, 2)
-        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceMeters else "°"
+        unit = "m" if crs.mapUnits() == QgsUnitTypes.DistanceUnit.DistanceMeters else "°"
         line_edit.setText(f"~{avg_resolution} {unit}")
 
 
@@ -43,7 +43,7 @@ def update_pipeline_length(dialog: "AnalysisDialog"):
         return
 
     layer = QgsProject.instance().mapLayer(dropdown.currentData())
-    if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != QgsWkbTypes.LineGeometry:
+    if not isinstance(layer, QgsVectorLayer) or layer.geometryType() != QgsWkbTypes.GeometryType.LineGeometry:
         dialog.log_message(
             f"Selected layer '{layer.name() if layer else 'None'}' is not a valid line vector.", "Price Estimation"
         )
