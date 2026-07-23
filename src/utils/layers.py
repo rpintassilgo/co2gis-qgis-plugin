@@ -108,9 +108,9 @@ def _layer_kinds(layer: QgsMapLayer) -> set:
     if isinstance(layer, QgsVectorLayer):
         kinds = {"vector"}
         geometry_type = layer.geometryType()
-        if geometry_type == QgsWkbTypes.PointGeometry:
+        if geometry_type == QgsWkbTypes.GeometryType.PointGeometry:
             kinds.add("point")
-        elif geometry_type == QgsWkbTypes.LineGeometry:
+        elif geometry_type == QgsWkbTypes.GeometryType.LineGeometry:
             kinds.add("line")
         return kinds
     return set()
@@ -148,9 +148,9 @@ def get_layer_path(layer: QgsMapLayer):
 
     uri = data_provider.dataSourceUri()
 
-    if layer.type() == QgsMapLayer.RasterLayer:
+    if layer.type() == QgsMapLayer.LayerType.RasterLayer:
         return uri
-    if layer.type() == QgsMapLayer.VectorLayer:
+    if layer.type() == QgsMapLayer.LayerType.VectorLayer:
         path = uri.split("|")[0]
         return os.path.abspath(path)
 

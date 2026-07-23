@@ -22,7 +22,7 @@ class Task(QgsTask):
     """Runs ``work(params)`` off the UI thread, then ``publish`` on the main thread."""
 
     def __init__(self, dialog: "AnalysisDialog", name: str, work: Callable, params, publish: Optional[Callable]):
-        super().__init__(f"Running {name}", QgsTask.CanCancel)
+        super().__init__(f"Running {name}", QgsTask.Flag.CanCancel)
         self.dialog = dialog
         self.name = name
         self._work = work
@@ -96,14 +96,14 @@ def cancel_tasks_for_dialog(dialog: "AnalysisDialog") -> None:
     for task_key, task in list(_running_tasks.items()):
         if task.dialog is not dialog:
             continue
-        if task.status() in (QgsTask.Running, QgsTask.Queued):
+        if task.status() in (QgsTask.TaskStatus.Running, QgsTask.TaskStatus.Queued):
             task.cancel()
         _running_tasks.pop(task_key, None)
 
 
 def _is_running(task_key: str) -> bool:
     existing = _running_tasks.get(task_key)
-    if existing is not None and existing.status() in (QgsTask.Running, QgsTask.Queued):
+    if existing is not None and existing.status() in (QgsTask.TaskStatus.Running, QgsTask.TaskStatus.Queued):
         return True
     _running_tasks.pop(task_key, None)
     return False

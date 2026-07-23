@@ -39,7 +39,7 @@ def get_raster_value_at_point(raster_layer, point):
     if not raster_layer:
         return None
     provider = raster_layer.dataProvider()
-    ident = provider.identify(point, QgsRaster.IdentifyFormatValue)
+    ident = provider.identify(point, QgsRaster.IdentifyFormat.IdentifyFormatValue)
     if ident.isValid() and ident.results():
         return list(ident.results().values())[0]
     return None
